@@ -458,8 +458,9 @@ export class AttendancePipeline implements TaskHandler {
           continue;
         }
         for (const [n, oid] of resolved) idToName.set(oid, n);
-        const tag = noAt ? resolved.map(([n]) => n).join('、') : resolved.map(([, o]) => `<@${o}>`).join(' ');
-        siteMentions.push(`- ${site}（${count} 人未在线）：${tag}`);
+        // 不 @ 时连姓名也不展示，只保留站点与人数
+        const tag = noAt ? '' : resolved.map(([, o]) => `<@${o}>`).join(' ');
+        siteMentions.push(`- ${site}（${count} 人未在线）${tag ? `：${tag}` : ''}`);
         ctx.log(`  [@] ${site}（${count} 人未在线）→ ${resolved.map(([n]) => n).join('、')}`);
       }
       if (missingNames.size) {
