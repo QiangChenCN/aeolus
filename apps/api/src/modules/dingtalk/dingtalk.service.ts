@@ -593,6 +593,23 @@ export class DingtalkService {
     );
   }
 
+  /**
+   * 私发单聊（以当前 dws 账号身份，与群发一致）。text 为 Markdown，
+   * 公网图片需写成 ![标题](url) 才内联展示。
+   */
+  async sendDm(p: {
+    openDingTalkId: string;
+    text: string;
+    title?: string;
+    dryRun?: boolean;
+  }): Promise<Record<string, any>> {
+    if (!p.openDingTalkId) throw new Error('缺少 openDingTalkId');
+    if (!p.text) throw new Error('缺少 text');
+    const args = ['chat', 'message', 'send', '--open-dingtalk-id', p.openDingTalkId, '--content', p.text];
+    if (p.title) args.push('--title', p.title);
+    return this.run(args, { yes: true, dryRun: p.dryRun });
+  }
+
   // ---------------------------------------------------------- dws CLI 配置（WebUI 设置）
   /** 合并 dws.env 覆盖项后的 env（注入到每次 spawn，使设置生效）。 */
   private dwsEnv(): NodeJS.ProcessEnv {

@@ -112,7 +112,7 @@
       "id": "appeal_reminder",
       "name": "不满意单申诉提醒",
       "group": "unsat",
-      "desc": "拉违规 CSV → 筛非超时待申诉 → 渲染图片 → 发群并按站点 @ 站长",
+      "desc": "拉违规 CSV → 筛非超时待申诉 → 渲染图片 → 发群并按站点 @ 站长 → 按站点拆分私发负责人",
       "params": [
         {
           "flag": "--no-send",
@@ -127,6 +127,12 @@
           "default": false
         },
         {
+          "flag": "--no-dm",
+          "label": "不私发负责人",
+          "type": "switch",
+          "default": false
+        },
+        {
           "flag": "--markdown",
           "label": "单条 Markdown（不渲染图）",
           "type": "switch",
@@ -137,7 +143,7 @@
           "label": "目标群",
           "type": "group",
           "default": "",
-          "placeholder": "留空用默认群（站点日常管理通知群）"
+          "placeholder": "留空用默认群（德佑-不满意&电联整改群）"
         },
         {
           "flag": "--begin",
@@ -162,7 +168,7 @@
         "apps/api/runtime/jobs/appeal/out/violations.csv",
         "apps/api/runtime/jobs/appeal/out/violation_detail.png"
       ],
-      "confirm": "将向钉钉群发送违规申诉明细并 @ 对应站长，这是真实的群消息。确认继续？",
+      "confirm": "将向钉钉群发送违规申诉明细并 @ 对应站长，且按站点拆分私发各站点负责人（单聊）。这是真实消息。确认继续？",
       "nodes": [
         {
           "id": "download",
@@ -186,8 +192,8 @@
         },
         {
           "id": "send",
-          "name": "发送钉钉群",
-          "desc": "组装消息 + @ 对应站长（--no-send 只预览不真发）"
+          "name": "发送群消息并私发负责人",
+          "desc": "发群 @ 站长 + 按站点拆分私发各负责人（--no-dm 只发群不私发）"
         }
       ]
     },

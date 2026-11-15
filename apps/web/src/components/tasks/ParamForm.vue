@@ -49,9 +49,9 @@ const props = defineProps({
   task: { type: Object, required: true },
   form: { type: Object, required: true },
   params: { type: Array, default: () => [] },
-  /** label 布局：'top'（默认，label 在输入框上方）或 'left'（label 与输入框同行）。 */
-  labelPosition: { type: String, default: 'top' },
-  labelWidth: { type: String, default: '' },
+  /** label 布局：默认 'left'（label 与输入框同行）；'top' 为 label 在输入框上方。 */
+  labelPosition: { type: String, default: 'left' },
+  labelWidth: { type: String, default: 'auto' },
 });
 
 const tasks = useTasksStore();

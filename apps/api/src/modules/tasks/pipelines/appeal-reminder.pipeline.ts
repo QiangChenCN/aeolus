@@ -10,7 +10,7 @@ import { ReportRenderService } from '../../render/report-render.service';
 import { MinioService } from '../../media/minio.service';
 import { DingtalkService } from '../../dingtalk/dingtalk.service';
 import { StationManagersService } from '../../notify/station-managers.service';
-import { PRODUCTION_GROUP_NAME, teamToStation } from '../../notify/notify-config';
+import { APPEAL_GROUP_NAME, teamToStation } from '../../notify/notify-config';
 import { csvToRecords } from '../../../common/csv';
 
 const APPEAL_COLS = [
@@ -120,13 +120,64 @@ export class AppealReminderPipeline implements TaskHandler {
     return rows;
   }
 
-  private async collectAt(rows: Record<string, string>[]): Promise<{ ids: string[]; missing: string[] }> {
+  private async collectAt(rows: Record<string, string>[]): Promise<{
+    ids: string[];
+    missing: string[];
+    /** [姓名, openDingTalkId]，供按站点私发负责人用。 */
+    resolved: [string, string][];
+  }> {
     const names = new Set<string>();
     for (const r of rows) {
       for (const m of this.stationManagers.managersForTeam(r['站点'])) names.add(m);
     }
     const { resolved, missing } = await this.stationManagers.resolveNamesAuto(names);
-    return { ids: resolved.map(([, oid]) => oid), missing: [...missing].sort() };
+    return { ids: resolved.map(([, oid]) => oid), missing: [...missing].sort(), resolved };
+  }
+
+  /** 按负责人拆分明细：openDingTalkId → { 姓名, 站点 → 该站点待申诉行 }。 */
+  private splitByManager(
+    rows: Record<string, string>[],
+    resolved: [string, string][],
+  ): Map<string, { name: string; stations: Map<string, Record<string, string>[]> }> {
+    const nameToOid = new Map(resolved);
+    const out = new Map<string, { name: string; stations: Map<string, Record<string, string>[]> }>();
+    for (const r of rows) {
+      for (const m of this.stationManagers.managersForTeam(r['站点'])) {
+        const oid = nameToOid.get(m);
+        if (!oid) continue;
+        let t = out.get(oid);
+        if (!t) {
+          t = { name: m, stations: new Map() };
+          out.set(oid, t);
+        }
+        let list = t.stations.get(r['站点']);
+        if (!list) {
+          list = [];
+          t.stations.set(r['站点'], list);
+        }
+        list.push(r);
+      }
+    }
+    return out;
+  }
+
+  /** 站点私发 Markdown：每个名下站点一个小节。 */
+  private buildDmText(
+    dateStr: string,
+    name: string,
+    stations: Map<string, Record<string, string>[]>,
+  ): string {
+    const total = [...stations.values()].reduce((n, l) => n + l.length, 0);
+    const parts = [
+      `## 不满意单申诉提醒（${name}）`,
+      `**统计日期：** ${dateStr}　**您名下站点非超时 · 待申诉 共 ${total} 条**`,
+      '',
+    ];
+    for (const [station, list] of stations) {
+      parts.push(`### ${station}（${list.length} 条）`, this.buildMarkdownTable(list), '');
+    }
+    parts.push('请及时登录风神处理申诉，避免逾期影响考核。');
+    return parts.join('\n');
   }
 
   private buildMarkdownTable(rows: Record<string, string>[]): string {
@@ -141,6 +192,7 @@ export class AppealReminderPipeline implements TaskHandler {
     const noSend = Boolean(a['--no-send']);
     const markdown = Boolean(a['--markdown']);
     const noAt = Boolean(a['--no-at']);
+    const noDm = Boolean(a['--no-dm']);
     const groupId = String(a['--group'] ?? '');
 
     const state: {
@@ -195,13 +247,13 @@ export class AppealReminderPipeline implements TaskHandler {
       }
     });
 
-    p.stage('send', '发送钉钉群', async () => {
+    p.stage('send', '发送钉钉群并私发负责人', async () => {
       const rows = state.rows!;
-      const { ids, missing } = await this.collectAt(rows);
+      const { ids, missing, resolved } = await this.collectAt(rows);
       if (missing.length && !noAt) {
         ctx.log(`[warn] 以下站长未解析到 openDingTalkId，已跳过 @：${missing.join('、')}`);
       }
-      const gid = groupId || PRODUCTION_GROUP_NAME;
+      const gid = groupId || APPEAL_GROUP_NAME;
       ctx.log(`目标群: ${gid}；将 @ 站长 openid: ${noAt ? '（--no-at，不 @）' : ids.join(',')}`);
       if (noSend) {
         ctx.log(`(--no-send) 未实际发送。图片预览: ${state.imgPath || '（未渲染）'}`);
@@ -235,6 +287,32 @@ export class AppealReminderPipeline implements TaskHandler {
         ctx.log(`说明文字发送: ${JSON.stringify(out2).slice(0, 300)}`);
       }
       ctx.log('发送完成。');
+
+      // ── 按站点拆分私发负责人（--no-dm 可关）──
+      if (!noDm) {
+        const targets = this.splitByManager(rows, resolved);
+        if (!targets.size) {
+          ctx.log('[warn] 没有可私发的负责人（站点负责人映射为空或 openDingTalkId 均未解析），跳过私发');
+        } else {
+          let dmOk = 0;
+          let dmFail = 0;
+          for (const [oid, t] of targets) {
+            const cnt = [...t.stations.values()].reduce((n, l) => n + l.length, 0);
+            try {
+              const text = this.buildDmText(state.dateStr!, t.name, t.stations);
+              await this.dingtalk.sendDm({ openDingTalkId: oid, text });
+              dmOk++;
+              ctx.log(`私发 ${t.name}（${[...t.stations.keys()].join('、')}，共 ${cnt} 条）`);
+            } catch (e) {
+              dmFail++;
+              ctx.log(`[warn] 私发 ${t.name}（${oid}）失败: ${(e as Error).message}`);
+            }
+          }
+          ctx.log(`私发完成：成功 ${dmOk} 人，失败 ${dmFail} 人。`);
+        }
+      } else {
+        ctx.log('（--no-dm）跳过按站点私发负责人。');
+      }
     });
 
     await p.run();

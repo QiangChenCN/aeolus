@@ -8,6 +8,9 @@
 /** 生产目标群（群名，由 dingtalk 模块按名解析 openConversationId）。 */
 export const PRODUCTION_GROUP_NAME = '站点日常管理通知群';
 
+/** 不满意单申诉提醒的默认目标群（按群名运行时解析）。 */
+export const APPEAL_GROUP_NAME = '德佑-不满意&电联整改群';
+
 /** 站长 openDingTalkId（唯一来源，单点维护）。 */
 export const MANAGER_OPENID: Record<string, string> = {
   印立澳: 'DPfqe5kgpkHx7AXNrf7BrKGrxqcvKvxSd',
