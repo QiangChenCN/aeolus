@@ -48,6 +48,17 @@ RESTART_WEB=0       # 前端默认只告警不自动重启（怕误杀你手动�
 # HTTP 探测：能连上并拿到任意响应视为健康
 probe() { curl -s -o /dev/null -m "$2" "http://127.0.0.1:$1/" >/dev/null 2>&1; }
 
+# 后端深度探测：/api/health 的 services.api.ok（后端自检金丝雀）。
+# 普通端口探测发现不了「进程活着但 libuv 线程池被 DNS 挂死占满」的僵死态
+# （2026-11-15：进程能应答 HTTP，但所有出网/连库全超时，人肉重启才恢复）。
+# 金丝雀跑一次限时 localhost 解析，卡死必现；连续 MAX_FAIL 次失败即自动重启后端。
+probe_backend_deep() {
+  local out
+  out=$(curl -s -m 10 "http://127.0.0.1:$BPORT/api/health" 2>/dev/null) || return 1
+  case "$out" in *'"api":{"ok":true'*) return 0 ;; esac
+  return 1
+}
+
 # ---------------- 启动相关 ----------------
 port_listen() { ss -ltn 2>/dev/null | grep -q ":$1 "; }
 
@@ -186,7 +197,10 @@ start_backend() {
   if [ ! -f "$ROOT/apps/api/dist/src/main.js" ]; then
     echo "  [fail] 缺少 apps/api/dist/src/main.js —— 请先 pnpm build:api"; return 1
   fi
-  setsid bash -c "cd $ROOT/apps/api && exec node dist/src/main" \
+  # UV_THREADPOOL_SIZE：libuv 线程池默认仅 4 线程，getaddrinfo（dns.lookup）也占它。
+  # 瞬时网络抖动可能挂死个别解析占满池子 → 进程内所有 DNS/连库全部排队超时。
+  # 扩到 16 只能降低全池被占的概率（缓解，非根治；根治看 /etc/resolv.conf 的 options 封顶）。
+  setsid bash -c "cd $ROOT/apps/api && exec env UV_THREADPOOL_SIZE=16 node dist/src/main" \
     >> "$LOGDIR/backend.log" 2>&1 < /dev/null &
   wait_ready "$BPORT" / backend 40
 }
@@ -197,7 +211,7 @@ start_worker() {
   if [ ! -f "$ROOT/apps/api/dist/src/main-worker.js" ]; then
     echo "  [fail] 缺少 apps/api/dist/src/main-worker.js —— 请先 pnpm build:api"; return 1
   fi
-  setsid bash -c "cd $ROOT/apps/api && exec node dist/src/main-worker" \
+  setsid bash -c "cd $ROOT/apps/api && exec env UV_THREADPOOL_SIZE=16 node dist/src/main-worker" \
     >> "$LOGDIR/worker.log" 2>&1 < /dev/null &
   # worker 无 HTTP 端口，仅等待进程存在
   local i=0
@@ -337,7 +351,7 @@ cmd_watch() {
   local fb=0 fc=0 fw=0 fwk=0
   log "[watch] started; monitoring $BPORT / $CPORT / $WPORT (RESTART_WEB=$RESTART_WEB)"
   while true; do
-    if port_listen $BPORT && probe $BPORT 20; then fb=0
+    if port_listen $BPORT && probe_backend_deep; then fb=0
     else
       fb=$((fb+1)); log "[warn] backend unhealthy (fail $fb/$MAX_FAIL)"
       if [ $fb -ge $MAX_FAIL ]; then pkill -KILL -f "$PAT_BACKEND" 2>/dev/null; sleep 1; start_backend; fb=0; fi

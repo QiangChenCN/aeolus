@@ -72,6 +72,9 @@ export const useAppStore = defineStore('app', {
     connDot: (s) => {
       const api = s.connected === true;
       const py = s.services?.python?.ok === true;
+      // 后端能应答 HTTP 但自检金丝雀失败（libuv 线程池/DNS 卡死僵死态）→ 单独黄灯
+      const selfBad = s.services?.api?.ok === false;
+      if (selfBad) return 'warn';
       if (api && py) return 'ok';
       if (!api && !py) return 'err';
       if (s.connected === null && s.services?.python == null) return 'muted';
@@ -79,6 +82,7 @@ export const useAppStore = defineStore('app', {
     },
     connText: (s) => {
       if (s.connected === null && s.services?.python == null) return '连接中';
+      if (s.services?.api?.ok === false) return '后端异常';
       const api = s.connected === true;
       const py = s.services?.python?.ok === true;
       if (api && py) return s.sseStale ? '事件流重连中' : '已连接';
@@ -89,7 +93,7 @@ export const useAppStore = defineStore('app', {
     connTitle: (s) => {
       const svc = s.services || {};
       const fmt = (v) => (v == null ? '未知' : v.ok ? '正常' : '异常');
-      const apiLine = `NestJS：${s.connected === false ? '不可达' : s.connected ? '正常' : '未知'}`;
+      const apiLine = `NestJS：${s.connected === false ? '不可达' : s.services?.api?.ok === false ? '内部异常' : s.connected ? '正常' : '未知'}`;
       const pyLine = `Python：${fmt(svc.python)}`;
       const wkLine = `Worker：${fmt(svc.worker)}`;
       return [apiLine, pyLine, wkLine].join('\n');

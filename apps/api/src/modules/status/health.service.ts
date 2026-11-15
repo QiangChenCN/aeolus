@@ -1,9 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import dns from 'node:dns';
 import { WorkerHeartbeatService } from '../jobs/worker-heartbeat.service';
 
 /** Python 探测超时：健康探测不能拖慢端点，也不能因上游假死把调用方挂住。 */
 const PY_TIMEOUT_MS = 2500;
+/**
+ * 自检金丝雀超时：dns.lookup 一定经过 libuv 线程池（默认仅 4 线程）。
+ * 一次瞬时网络故障就可能让 glibc getaddrinfo 长时间挂死，线程池被占满后
+ * 进程内**所有** dns.lookup（包括 localhost → PG 连接）全部排队超时 ——
+ * 表现为「端口活着、HTTP 能应答，但任何出网/连库都超时」的僵死态（2026-11-15 实录）。
+ * 金丝雀在 2.5s 内等不到一次 localhost 解析，即可判定进入该僵死态。
+ */
+const SELF_TIMEOUT_MS = 2500;
 /** 探测结果短缓存：SSE 断连时可能并发触发多次探测，1s 内复用同一次结果。
  *  不能调大 —— 它直接决定「Python 挂了」多久能在界面上看到。 */
 const CACHE_MS = 1000;
@@ -37,15 +46,45 @@ export class HealthService {
   async snapshot() {
     const [python, worker] = await Promise.all([this.checkPython(), this.checkWorker()]);
     return {
-      ok: true, // 能应答即后端活着
+      ok: true, // HTTP 能应答即进程活着；内部是否僵死看 services.api（自检金丝雀）
       ts: new Date().toISOString(),
       uptime: Math.round(process.uptime()),
       services: {
-        api: { ok: true, detail: 'NestJS 8787 正常应答' } as ServiceState,
+        api: await this.checkSelf(),
         python,
         worker,
       },
     };
+  }
+
+  /**
+   * 后端自检金丝雀：跑一次 dns.lookup('localhost') 并限时。
+   *
+   * 为什么选 dns.lookup 而不是 SELECT 1：僵死态的根因是 libuv 线程池被挂死的
+   * getaddrinfo 占满，PG 池里现存的空闲连接不需要 DNS，查得动 —— 探不出僵死；
+   * 而 dns.lookup 是必经线程池的最轻操作，卡死必现、正常时 <1ms。
+   * 看门狗（manage.sh watch）据此判定「进程活着但内部僵死」并自动重启后端。
+   */
+  async checkSelf(): Promise<ServiceState> {
+    const started = Date.now();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error(`libuv 线程池/DNS 疑似卡死（>${SELF_TIMEOUT_MS}ms 未完成 localhost 解析，建议重启后端）`)),
+          SELF_TIMEOUT_MS,
+        );
+        dns.lookup('localhost', (err) => {
+          clearTimeout(timer);
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+      return { ok: true, detail: `自检正常（${Date.now() - started}ms）` };
+    } catch (e) {
+      const msg = (e as Error).message || '自检失败';
+      this.logger.warn(`后端自检金丝雀失败：${msg}`);
+      return { ok: false, detail: msg };
+    }
   }
 
   async checkPython(): Promise<ServiceState> {
