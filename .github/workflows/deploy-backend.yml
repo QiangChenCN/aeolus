@@ -103,6 +103,15 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             apps/api/dist/ \
             "$ECS_USER@$ECS_HOST:/opt/aeolusdata/apps/api/dist/"
+          # 任务注册表：TaskRegistryService 读 WORKBENCH_DIR/tasks.json（服务器默认即
+          # /opt/aeolusdata/apps/api/tasks.json），且按 mtime 热加载（改完刷新页面即生效）。
+          # tasks.json 不属于 dist 产物，不同步的话服务器任务中心永远停留在旧列表
+          # （2026-11-16 实际踩过：orange_storm_appeal 上线后服务器不显示）。
+          # 注意：tasks.json 以仓库为单一事实来源，此同步会覆盖服务器上的本地改动。
+          rsync -az \
+            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            apps/api/tasks.json \
+            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/apps/api/tasks.json"
           ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             "$ECS_USER@$ECS_HOST" 'systemctl restart aeolusdata-backend aeolusdata-worker'
 
