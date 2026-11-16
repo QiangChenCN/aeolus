@@ -16,6 +16,7 @@ import { TaskBoardPipeline } from './pipelines/task-board.pipeline';
 import { AppealReminderPipeline } from './pipelines/appeal-reminder.pipeline';
 import { AttendancePipeline } from './pipelines/attendance.pipeline';
 import { TaskEquipmentPipeline } from './pipelines/task-equipment.pipeline';
+import { OrangeStormAppealPipeline } from './pipelines/orange-storm-appeal.pipeline';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { TaskEquipmentPipeline } from './pipelines/task-equipment.pipeline';
     AppealReminderPipeline,
     AttendancePipeline,
     TaskEquipmentPipeline,
+    OrangeStormAppealPipeline,
   ],
   exports: [TaskRunnerService, TaskRegistryService, TaskHandlersService],
 })

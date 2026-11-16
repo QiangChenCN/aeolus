@@ -552,6 +552,83 @@ export class ReportRenderService {
     drawLeft(ctx, margin, y + 10, `共 ${tasks.length} 条进行中任务`, smallF, C.TEXT_TERTIARY);
     return savePng(canvas, out);
   }
+
+  // ───────────── 6. 橙色风暴申诉提醒（QC 抽检判定待申诉明细） ─────────────
+  renderOrangeStormAppeal(
+    rows: Record<string, string>[],
+    label: string,
+    outPath?: string,
+  ): string {
+    const out = outPath || this.out('apps/api/runtime/jobs/orange_storm_appeal/out/orange_storm_appeal.png');
+    const timeStr = fmtNow();
+    const cols: [string, number][] = [
+      ['抽检时间', 145],
+      ['骑手信息', 150],
+      ['站点', 175],
+      ['抽检类型', 90],
+      ['不合格原因', 175],
+      ['处罚金额', 85],
+      ['申诉状态', 80],
+      ['申诉截止', 145],
+      ['剩余时间', 105],
+      ['抽检ID', 105],
+    ];
+    const [titleF, subF, headF, cellF, noteF] = [28, 14, 14, 13, 12];
+    const padX = 28;
+    const padY = 18;
+    const [rowH, headerH, titleH, footerH] = [44, 42, 66, 40];
+    const tableW = cols.reduce((s, [, w]) => s + w, 0);
+    const imgW = tableW + padX * 2;
+    const nRows = Math.max(rows.length, 1);
+    const imgH = padY * 2 + titleH + headerH + nRows * rowH + footerH;
+    const { canvas, ctx } = newCanvas(imgW, imgH, C.WHITE);
+
+    fillRect(ctx, 0, 0, imgW, titleH, C.BRAND);
+    drawLeft(ctx, padX, 16, '橙色风暴申诉提醒', titleF, C.WHITE);
+    drawLeft(
+      ctx,
+      padX,
+      46,
+      `窗口：${label}  ·  ${timeStr}  ·  判定不通过 · 未申诉 共 ${rows.length} 条`,
+      subF,
+      C.WHITE,
+    );
+
+    let y = padY * 2 + titleH;
+    fillRect(ctx, padX, y, tableW, headerH, C.BRAND_TINT);
+    let x = padX;
+    for (const [name, w] of cols) {
+      drawLeft(ctx, x + 10, y + (headerH - 18) / 2, name, headF, C.TEXT_PRIMARY);
+      x += w;
+    }
+    hLine(ctx, padX, y + headerH, imgW - padX, C.BRAND, 2);
+    y += headerH;
+
+    if (rows.length) {
+      const keys = cols.map(([name]) => name);
+      rows.forEach((r, i) => {
+        fillRect(ctx, padX, y, tableW, rowH, i % 2 === 0 ? C.WHITE : C.SURFACE);
+        hLine(ctx, padX, y + rowH, imgW - padX, C.DIVIDER, 1);
+        let cx = padX;
+        keys.forEach((k, idx) => {
+          const w = cols[idx][1];
+          const val = String(r[k] ?? '');
+          // 剩余时间不足 24 小时标红
+          const urgent = k === '剩余时间' && /小时/.test(val) && !/天/.test(val);
+          const sz = fitFontSize(ctx, val, w - 20, cellF);
+          drawLeft(ctx, cx + 10, y + (rowH - sz) / 2, val, sz, urgent ? C.DANGER : C.TEXT_REGULAR);
+          cx += w;
+        });
+        y += rowH;
+      });
+    } else {
+      drawLeft(ctx, padX + 10, y + 12, '✓ 无待申诉的橙色风暴判定', 16, C.SUCCESS);
+      y += rowH;
+    }
+
+    drawLeft(ctx, padX, y + 12, '请相关站点负责人尽快登录风神完成申诉，逾期处罚将生效', noteF, C.TEXT_TERTIARY);
+    return savePng(canvas, out);
+  }
 }
 
 /** 剩余时间配色（对照 Python render_tasks 的语义重写）。 */
