@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, Post, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
 import * as path from 'path';
@@ -52,6 +53,7 @@ export class TasksController {
     private readonly streaming: StreamingService,
   ) {}
 
+  @RequirePerm('task:run')
   @Post('run')
   async run(@Body() body: RunTaskDto) {
     if (!body.items || body.items.length !== 1) {
@@ -73,12 +75,14 @@ export class TasksController {
     return { ok: true, run_ids: ids };
   }
 
+  @RequirePerm('task:run')
   @Post('stop')
   async stop() {
     const stopped = await this.jobQueue.stopAll();
     return { ok: true, stopped };
   }
 
+  @RequirePerm('task:run')
   @Post('cancel')
   async cancel(@Body() b: { run_id?: string }) {
     const ok = b.run_id ? await this.jobQueue.cancelQueued(b.run_id) : false;
@@ -86,6 +90,7 @@ export class TasksController {
   }
 
   /** 删除运行记录：仅终态（成功/失败/停止/取消）可删，排队/执行中的记录不支持删除。 */
+  @RequirePerm('task:run')
   @Post('runs/delete')
   async deleteRuns(@Body() b: DeleteRunsDto) {
     let deleted = 0;
@@ -103,6 +108,7 @@ export class TasksController {
     return { ok: true, deleted };
   }
 
+  @RequirePerm('view')
   @Get('state')
   async state() {
     // registry（groups + tasks）必须与 snapshot 一起下发：前端读的是
@@ -132,11 +138,13 @@ export class TasksController {
     };
   }
 
+  @RequirePerm('view')
   @Get('history')
   async history() {
     return { ok: true, history: await this.jobQueue.listRecent(60) };
   }
 
+  @RequirePerm('view')
   @Get('log')
   async log(@Query('run_id') runId: string, @Res() res: Response): Promise<void> {
     // 与单体一致：查不到是 404，不是「200 + ok:false」。
@@ -159,6 +167,7 @@ export class TasksController {
   }
 
   /** 下载运行日志（纯文本，供浏览器直接跳转下载）。 */
+  @RequirePerm('file:read')
   @Get('download')
   async download(@Query('run_id') runId: string, @Res() res: Response): Promise<void> {
     const lines = (await this.jobQueue.getLog(runId)) || [];
@@ -167,6 +176,7 @@ export class TasksController {
   }
 
   /** 列举运行产物（file:read 权限由 AccessGuard 裁决）。 */
+  @RequirePerm('file:read')
   @Get('files')
   async files(@Query('task_id') taskId?: string) {
     // task_id 要回显：单体如此，前端也按它显示当前筛选的任务
@@ -174,6 +184,7 @@ export class TasksController {
   }
 
   /** 产物预览 / 下载。 */
+  @RequirePerm('file:read')
   @Get('file')
   file(@Query('path') p: string, @Res() res: Response): void {
     if (!p) {

@@ -34,7 +34,7 @@
           type="primary"
           :loading="verifying"
           :disabled="!masked.configured"
-          @click="runVerify"
+          v-perm="'admin:minio'" @click="runVerify"
         >
           验证连接
         </el-button>
@@ -106,7 +106,7 @@
               <span class="muted switch-tip">开启则用 HTTPS（useSSL）连接</span>
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+              <el-button type="primary" :loading="saving" v-perm="'admin:minio'" @click="save">保存</el-button>
               <el-button @click="editing = false">取消</el-button>
               <span class="muted">保存后立即生效（无需重启），下一次图片上传即使用新配置。</span>
             </el-form-item>

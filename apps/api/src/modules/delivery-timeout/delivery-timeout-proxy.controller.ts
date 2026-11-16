@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, Post, Req } from '@nestjs/common';
 import { Request } from 'express';
 import { ComputeService } from '../compute/compute.service';
@@ -29,12 +30,14 @@ export class DeliveryTimeoutProxyController {
     private readonly cfg: DeliveryTimeoutConfigService,
   ) {}
 
+  @RequirePerm('view')
   @Get('{*path}')
   proxyGet(@Req() req: Request) {
     if (this.config.isConfigPath(req.path)) return this.handleConfig('GET', req);
     return forwardToCompute(req, 'GET', this.compute, this.auth, this.dataPerm);
   }
 
+  @RequirePerm('view')
   @Post('{*path}')
   proxyPost(@Req() req: Request, @Body() body: unknown) {
     if (this.config.isConfigPath(req.path)) return this.handleConfig('POST', req, body);

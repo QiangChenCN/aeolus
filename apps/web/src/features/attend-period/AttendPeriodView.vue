@@ -172,7 +172,7 @@
       </el-checkbox-group>
       <template #footer>
         <el-button @click="cfgVisible = false">取消</el-button>
-        <el-button type="primary" :loading="cfgSaving" @click="saveCfg">保存</el-button>
+        <el-button type="primary" :loading="cfgSaving" v-perm="'config:write'" @click="saveCfg">保存</el-button>
       </template>
     </el-dialog>
   </div>

@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { TaskRegistryService } from '../tasks/task-registry.service';
 import { StreamingService } from '../streaming/streaming.service';
@@ -18,6 +19,7 @@ export class CronController {
     private readonly streaming: StreamingService,
   ) {}
 
+  @RequirePerm('view')
   @Get('cron')
   async getCron() {
     const items = await this.store.listItems();
@@ -46,6 +48,7 @@ export class CronController {
     };
   }
 
+  @RequirePerm('view')
   @Get('cron/runs')
   async getRuns(@Query('item_id') itemId = '', @Query('limit') limit = '20') {
     const lim = Math.max(1, Math.min(50, parseInt(limit, 10) || 20));
@@ -53,6 +56,7 @@ export class CronController {
   }
 
   /** 自动任务页：调度触发的运行记录 + 今日统计 + 下次执行时间 + 调度器诊断日志。 */
+  @RequirePerm('view')
   @Get('cron/auto-runs')
   async getAutoRuns(@Query('status') status = '', @Query('limit') limit = '100') {
     const lim = Math.max(1, Math.min(500, parseInt(limit, 10) || 100));
@@ -82,6 +86,7 @@ export class CronController {
     };
   }
 
+  @RequirePerm('cron:write')
   @Post('cron/lists')
   async postLists(@Body() data: Record<string, unknown>) {
     const op = data['op'];
@@ -113,6 +118,7 @@ export class CronController {
     }
   }
 
+  @RequirePerm('cron:write')
   @Post('cron/items')
   async postItems(@Body() data: Record<string, unknown>) {
     const op = data['op'];
@@ -172,12 +178,14 @@ export class CronController {
     }
   }
 
+  @RequirePerm('cron:write')
   @Post('cron/trigger')
   async postTrigger(@Body() data: Record<string, unknown>) {
     const [ok, msg] = await this.scheduler.triggerNow(String(data['item_id']));
     return { ok, error: ok ? null : msg };
   }
 
+  @RequirePerm('cron:write')
   @Post('cron/import')
   async postImport(@Body() data: Record<string, unknown>) {
     try {
@@ -189,6 +197,7 @@ export class CronController {
   }
 
   /** 全局「自动执行」总开关：paused=true 暂停所有自动任务的点火与重试，false 恢复。 */
+  @RequirePerm('cron:write')
   @Post('cron/auto-paused')
   async postAutoPaused(@Body() data: Record<string, unknown>) {
     const paused = !!data['paused'];

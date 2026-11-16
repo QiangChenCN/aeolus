@@ -33,7 +33,7 @@
         <template #default="{ row }">
           <el-button link type="primary" size="small" @click="openLog(row)">日志</el-button>
           <el-button link type="primary" size="small" @click="openDrawer(row)">详情</el-button>
-          <el-button link type="danger" size="small" @click="onDelete(row)">删除</el-button>
+          <el-button link type="danger" size="small" v-perm="'task:run'" @click="onDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>

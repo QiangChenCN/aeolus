@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, Post, Req } from '@nestjs/common';
 import { Request } from 'express';
 import { RefreshRunnerService } from '../../infra/fetch/runners/refresh-runner.service';
@@ -21,6 +22,7 @@ export class RefreshController {
     private readonly raw: RawCacheService,
   ) {}
 
+  @RequirePerm('data:refresh')
   @Post('standard/refresh-all')
   start(
     @Req() req: Request,
@@ -29,6 +31,7 @@ export class RefreshController {
     return this.runner.startFromRequest(req, body);
   }
 
+  @RequirePerm('view')
   @Get('standard/refresh-all-status')
   status(@Req() req: Request) {
     return { ok: true, status: this.runner.status(req) };
@@ -39,6 +42,7 @@ export class RefreshController {
    * 支持通用 payload 与 violation 的 rows 形态（后者由 `RawCacheService.saveViolation`
    * 组装 `fetch_ok` 包装，使「已刷新但 0 条」与「未刷新」可区分）。
    */
+  @RequirePerm('view')
   @Post('standard/raw')
   saveRaw(
     @Body()

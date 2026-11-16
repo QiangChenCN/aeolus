@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Controller, Get, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { existsSync } from 'fs';
@@ -23,7 +24,9 @@ export class ServeController {
     return this.config.get<string>('AUTH_TOKEN') || '';
   }
 
+  @RequirePerm('view')
   @Get()
+  @RequirePerm('view')
   @Get('index.html')
   index(@Res() res: Response): void {
     const html = resolveIndexHtml(this.config.get<string>('PROJECT_ROOT'));
@@ -34,6 +37,7 @@ export class ServeController {
     res.type('text/html').send(injectMachineToken(html, this.resolveToken()));
   }
 
+  @RequirePerm('view')
   @Get('tokens.css')
   tokensCss(@Res() res: Response): void {
     const f =     path.join(
@@ -49,11 +53,13 @@ export class ServeController {
     res.type('text/css').sendFile(f);
   }
 
+  @RequirePerm('view')
   @Get('favicon.ico')
   favicon(@Res() res: Response): void {
     res.status(204).end();
   }
 
+  @RequirePerm('self')
   @Get('health')
   health(): { status: string } {
     return { status: 'ok' };

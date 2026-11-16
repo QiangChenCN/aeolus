@@ -54,7 +54,7 @@ const routes = [
       { path: 'preset', name: 'preset', component: PresetView, meta: { title: '预设' } },
       { path: 'cron', name: 'cron', component: CronView, meta: { title: '定时任务', kind: 'cron' } },
       { path: 'cron-runs', name: 'cron-runs', component: AutoRunsView, meta: { title: '自动任务', kind: 'cron-runs' } },
-      { path: 'assess', name: 'assess', component: AssessView, redirect: { name: 'assess-service' }, meta: { title: '考核设置', kind: 'assess' },
+      { path: 'assess', name: 'assess', component: AssessView, redirect: { name: 'assess-service' }, meta: { title: '考核设置', kind: 'assess', perm: 'config:write' },
         children: [
           { path: 'service', name: 'assess-service', component: AssessServiceView, meta: { title: '服务质量设置', kind: 'assessService', id: '' } },
           { path: 'standard', name: 'assess-standard', component: AssessStandardView, meta: { title: '标准达成设置', kind: 'assessStandard', id: '' } },
@@ -69,23 +69,23 @@ const routes = [
       { path: 'timeout', name: 'timeout', component: DeliveryTimeoutView, meta: { title: '配送超时', kind: 'timeout', id: '' } },
       { path: 'im-contact', name: 'im-contact', component: ImContactView, meta: { title: 'IM 电联', kind: 'imContact', id: '' } },
       { path: 'unsatisfied', name: 'unsatisfied', component: UnsatisfiedView, meta: { title: '违规处罚', kind: 'unsatisfied', id: '' } },
-      { path: 'operation-log', name: 'operation-log', component: OperationLogView, meta: { title: '操作日志', kind: 'operationLog', id: '' } },
+      { path: 'operation-log', name: 'operation-log', component: OperationLogView, meta: { title: '操作日志', kind: 'operationLog', id: '', perm: 'admin:roles' } },
       { path: 'groups', name: 'groups', component: GroupsView, meta: { title: '群组' } },
       { path: 'settings', name: 'system-settings', component: SystemSettingsView, meta: { title: '系统设置', kind: 'syscfg' } },
-      { path: 'settings/dingtalk', name: 'dingtalk-settings', component: DingtalkSettingsView, meta: { title: '钉钉设置', kind: 'sys-dingtalk' } },
-      { path: 'settings/aeolus', name: 'aeolus-settings', component: AeolusSettingsView, meta: { title: '风神设置', kind: 'sys-aeolus' } },
-      { path: 'settings/minio', name: 'minio-settings', component: MinioSettingsView, meta: { title: 'MinIO 设置', kind: 'sys-minio' } },
-      { path: 'settings/managers', name: 'station-managers', component: StationManagersView, meta: { title: '站点负责人设置', kind: 'sys-managers' } },
+      { path: 'settings/dingtalk', name: 'dingtalk-settings', component: DingtalkSettingsView, meta: { title: '钉钉设置', kind: 'sys-dingtalk', perm: 'admin:bot' } },
+      { path: 'settings/aeolus', name: 'aeolus-settings', component: AeolusSettingsView, meta: { title: '风神设置', kind: 'sys-aeolus', perm: 'admin:aeolus' } },
+      { path: 'settings/minio', name: 'minio-settings', component: MinioSettingsView, meta: { title: 'MinIO 设置', kind: 'sys-minio', perm: 'admin:minio' } },
+      { path: 'settings/managers', name: 'station-managers', component: StationManagersView, meta: { title: '站点负责人设置', kind: 'sys-managers', perm: 'config:write' } },
       {
         path: 'settings/rbac',
         name: 'rbac',
         component: RbacView,
         redirect: { name: 'rbac-users' },
-        meta: { title: '权限管理', kind: 'rbac' },
+        meta: { title: '权限管理', kind: 'rbac', perm: 'admin:users' },
         children: [
-          { path: 'users', name: 'rbac-users', component: UsersView, meta: { title: '账号管理', kind: 'rbac-users' } },
-          { path: 'roles', name: 'rbac-roles', component: RolesView, meta: { title: '角色管理', kind: 'rbac-roles' } },
-          { path: 'policy', name: 'rbac-policy', component: PolicyView, meta: { title: '密码策略', kind: 'rbac-policy' } },
+          { path: 'users', name: 'rbac-users', component: UsersView, meta: { title: '账号管理', kind: 'rbac-users', perm: 'admin:users' } },
+          { path: 'roles', name: 'rbac-roles', component: RolesView, meta: { title: '角色管理', kind: 'rbac-roles', perm: 'admin:roles' } },
+          { path: 'policy', name: 'rbac-policy', component: PolicyView, meta: { title: '密码策略', kind: 'rbac-policy', perm: 'admin:policy' } },
         ],
       },
       {
@@ -94,7 +94,7 @@ const routes = [
         component: ProfileInfoView,
         meta: { title: '个人中心', kind: 'profile' },
       },
-      { path: 'bot', name: 'bots', component: BotView, redirect: { name: 'bot-global' }, meta: { title: '调度设置', kind: 'bots' },
+      { path: 'bot', name: 'bots', component: BotView, redirect: { name: 'bot-global' }, meta: { title: '调度设置', kind: 'bots', perm: 'admin:bot' },
         children: [
           { path: 'global', name: 'bot-global', component: BotGlobalView, meta: { title: '全局配置', kind: 'botcfg', id: 'global' } },
           { path: 'robot', name: 'bot-robot', component: BotRobotView, meta: { title: '凭证配置', kind: 'botcfg', id: 'robot' } },
@@ -124,6 +124,8 @@ router.beforeEach(async (to) => {
   // 这里若改成「只在未引导时才等」，就会与 App.vue 的 onMounted 抢跑，
   // 拿到未填充的登录态而误判未登录。
   await auth.bootstrap();
+  // 非阻塞校验权限快照：管理员改了角色权限后，前端缓存的 perms 会自动跟上（15 秒节流）。
+  void auth.refreshPermsIfChanged();
 
   // 初始密码未修改：后端已拦截所有业务接口，前端同步把用户钉在个人中心改密
   if (auth.authenticated && auth.mustChange && to.path !== '/settings/profile') {
@@ -139,6 +141,11 @@ router.beforeEach(async (to) => {
     return redirect
       ? { path: '/login', query: { redirect } }
       : { path: '/login' };
+  }
+  // 权限点守卫：仅体验层收敛，真正的越权防护在后端 AccessGuard。
+  // 无权限时回首页，而不是跳登录页（会话仍有效，跳登录会造成"反复登录"错觉）。
+  if (to.meta && to.meta.perm && !auth.hasPerm(to.meta.perm)) {
+    return { path: '/' };
   }
   return true;
 });

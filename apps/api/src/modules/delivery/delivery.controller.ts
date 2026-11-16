@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, Logger, Post, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { todayYmd } from '../../infra/fetch/storage/raw-cache.service';
@@ -51,6 +52,7 @@ export class DeliveryController {
    *   · order    asc | desc
    *   · page / pageSize
    */
+  @RequirePerm('view')
   @Get('orders')
   async orders(
     @Query('date') date?: string,
@@ -110,6 +112,7 @@ export class DeliveryController {
    * 复用与 orders 完全相同的取数 / 过滤 / 排序逻辑，但返回全部匹配行（不分页）。
    * cols 为逗号分隔的列 key（前端按当前可见列顺序传入）；缺省导出全部列。
    */
+  @RequirePerm('view')
   @Get('export')
   async export(
     @Res() res: Response,
@@ -258,6 +261,7 @@ export class DeliveryController {
   }
 
   /** 刷新：拉全站运单入库（同步返回，前端无需轮询）。需 data:refresh 权限。 */
+  @RequirePerm('data:refresh')
   @Post('refresh')
   async refresh(@Body() body: { date?: string } = {}) {
     return this.refreshSvc.refresh(body?.date);
@@ -267,6 +271,7 @@ export class DeliveryController {
    * 历史运单明细状态：滚动窗口（T-1 ~ T-7）每天的入库行数与写入时间，
    * 以及上一次滚动运行的快照（重启后仍可读）。
    */
+  @RequirePerm('view')
   @Get('history/status')
   async historyStatus() {
     const dates = this.historySvc.windowDates();

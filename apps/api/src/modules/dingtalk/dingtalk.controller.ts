@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { DingtalkService } from './dingtalk.service';
 
@@ -14,6 +15,7 @@ export class DingtalkController {
   constructor(private readonly ding: DingtalkService) {}
 
   /** 发群消息。正文需自带 <@openDingTalkId> 占位符才会真的 @ 到人。 */
+  @RequirePerm('machine')
   @Post('ding/send-message')
   async sendMessage(
     @Body()
@@ -30,6 +32,7 @@ export class DingtalkController {
   }
 
   /** 发文件消息（图片以附件形式发送）。 */
+  @RequirePerm('machine')
   @Post('ding/send-file')
   async sendFile(@Body() b: { group?: string; file?: string; dryRun?: boolean }) {
     return this.guard(() =>
@@ -42,12 +45,14 @@ export class DingtalkController {
   }
 
   /** 列出我加入的全部群。 */
+  @RequirePerm('machine')
   @Get('ding/groups')
   async groups() {
     return this.guard(() => this.ding.listGroups());
   }
 
   /** 按关键词搜索群（分页拉全）。 */
+  @RequirePerm('machine')
   @Get('ding/search-groups')
   async searchGroups(@Query('q') q?: string, @Query('limit') limit?: string) {
     return this.guard(() =>
@@ -56,18 +61,21 @@ export class DingtalkController {
   }
 
   /** 按群号取群信息（chat-list-all 会漏的隐藏群走这里）。 */
+  @RequirePerm('machine')
   @Get('ding/group')
   async groupByNumber(@Query('number') number?: string) {
     return this.guard(() => this.ding.getGroupByNumber(String(number || '')));
   }
 
   /** 按群名解析 openConversationId（不写死 ID，匹配不明确时拒绝）。 */
+  @RequirePerm('machine')
   @Get('ding/resolve-group')
   async resolveGroup(@Query('name') name?: string) {
     return this.guard(() => this.ding.resolveGroup(String(name || '')));
   }
 
   /** 读在线表格区域。 */
+  @RequirePerm('machine')
   @Post('ding/sheet/read')
   async sheetRead(
     @Body() b: { node?: string; sheetId?: string; range?: string },
@@ -82,6 +90,7 @@ export class DingtalkController {
   }
 
   /** 写在线表格区域（values 为二维数组）。 */
+  @RequirePerm('machine')
   @Post('ding/sheet/update')
   async sheetUpdate(
     @Body()
@@ -99,30 +108,35 @@ export class DingtalkController {
   }
 
   /** 发起钉钉设备流登录：返回 userCode + verificationUri，供前端展示让用户授权。 */
+  @RequirePerm('admin:bot')
   @Post('ding/auth/device-login')
   async deviceLogin() {
     return this.guard(() => this.ding.deviceLogin());
   }
 
   /** 查询钉钉登录状态（是否已授权）。 */
+  @RequirePerm('admin:bot')
   @Get('ding/auth/status')
   async authStatus() {
     return this.guard(() => this.ding.authStatus());
   }
 
   /** 退出钉钉登录（清除登录态，用于重新授权）。 */
+  @RequirePerm('admin:bot')
   @Post('ding/auth/logout')
   async authLogout() {
     return this.guard(() => this.ding.authLogout());
   }
 
   /** 读取 dws CLI 全部配置项（元数据 + 当前生效值）。 */
+  @RequirePerm('admin:bot')
   @Get('ding/config')
   async dingConfig() {
     return this.guard(() => this.ding.getDingConfig());
   }
 
   /** 保存 dws CLI 配置覆盖（空字符串表示删除该覆盖，恢复内置默认）。 */
+  @RequirePerm('admin:bot')
   @Post('ding/config')
   async saveDingConfig(@Body() b: { patch?: Record<string, string> }) {
     return this.guard(() => this.ding.saveDingConfig(b?.patch || {}));

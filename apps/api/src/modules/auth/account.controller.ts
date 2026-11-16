@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Post, Req } from '@nestjs/common';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
@@ -8,6 +9,7 @@ import { extractToken } from '../../common/token.util';
 export class AccountController {
   constructor(private readonly auth: AuthService) {}
 
+  @RequirePerm('self')
   @Post('account/change-pw')
   changePw(@Body() b: { old_password?: string; new_password?: string }, @Req() req: Request) {
     const token = extractToken(req);

@@ -128,11 +128,13 @@ const PW_POLICY_DEFAULT: Policy = {
   max_length: 64,
   require_upper: false,
   require_lower: false,
-  require_digit: false,
-  require_symbol: false,
+  // 数字/符号/常见密码/历史复用都有实际校验逻辑，默认开启；
+  // 只作用于「设置新密码」，不会强制存量用户改密。
+  require_digit: true,
+  require_symbol: true,
   max_age_days: 0,
-  prevent_reuse: 0,
-  breach_check: false,
+  prevent_reuse: 5,
+  breach_check: true,
   lockout_attempts: 5,
   lockout_minutes: 15,
   allow_paste: true,
@@ -381,6 +383,16 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     const r = this.loadRoles()[role];
     if (r && r.all) return true;
     return this.effectivePerms(role).has(perm);
+  }
+
+  /**
+   * 权限快照签名：前端据此判断角色权限是否被管理员改动。
+   * 后端 hasPerm 每次读内存角色表，改完即时生效；但前端 perms 是登录时缓存的，
+   * 没有签名就会在权限被收紧后继续显示旧菜单/按钮（点了才 403）。
+   */
+  permsSignature(role: string): string {
+    const raw = `${role}|${[...this.effectivePerms(role)].sort().join(',')}`;
+    return createHash('sha1').update(raw).digest('hex').slice(0, 16);
   }
 
   listRoles(): Array<Record<string, unknown>> {
@@ -925,6 +937,36 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       role: roleOrNote || '-',
       method,
       path: pth,
+    });
+  }
+
+  /**
+   * 权限决策日志：记录「谁 / 以什么角色 / 对哪个端点 / 要求什么权限 / 命中哪条规则 / 结果」。
+   * 与普通审计共用 rbac_audit 表与缓冲写入，但 action 统一为 authz:*，便于单独检索；
+   * 只记录拒绝与敏感权限放行（view/self 的放行不记），避免高频 GET 把审计表撑爆。
+   */
+  auditDecision(
+    perm: string,
+    ok: boolean,
+    reason: string,
+    user: string,
+    ip: string,
+    role: string,
+    method: string,
+    pth: string,
+  ): void {
+    this.store.appendAudit({
+      ts: nowStr(),
+      action: `authz:${perm}:${ok ? 'allow' : 'deny'}`,
+      ok,
+      user: user || '-',
+      ip: ip || '-',
+      role: role || '-',
+      method,
+      path: pth,
+      perm,
+      decision: ok ? 'allow' : 'deny',
+      reason,
     });
   }
 }

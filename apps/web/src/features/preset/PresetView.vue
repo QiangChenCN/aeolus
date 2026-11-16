@@ -15,7 +15,7 @@
           <span class="preset-name">{{ t.name }}</span>
         </div>
         <div class="preset-card-f">
-          <el-button size="small" type="primary" :loading="runningId === t.id" @click="runTask(t)">运行</el-button>
+          <el-button size="small" type="primary" :loading="runningId === t.id" v-perm="'task:run'" @click="runTask(t)">运行</el-button>
           <el-button size="small" @click="goConfig(t)">配置</el-button>
         </div>
       </el-card>

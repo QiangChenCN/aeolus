@@ -62,7 +62,7 @@
         :loading="refreshing"
         :disabled="!rangeIncludesToday || refreshing || cooldown > 0"
         :title="!rangeIncludesToday ? '所选区间不含今天，无法刷新（历史数据由每日 04:00 滚动任务维护）' : (cooldown > 0 ? `刷新过于频繁，请等待 ${cooldown} 秒` : '拉取当天全站运单明细入库')"
-        @click="handleRefresh"
+        v-perm="'data:refresh'" @click="handleRefresh"
       >
         <el-icon><Refresh /></el-icon>
         <span v-if="refreshing">刷新中…</span>

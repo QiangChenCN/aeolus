@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Controller, Get } from '@nestjs/common';
 import { CookieStatusService } from '../../infra/fetch/runners/cookie-status.service';
 
@@ -15,6 +16,7 @@ import { CookieStatusService } from '../../infra/fetch/runners/cookie-status.ser
 export class CookieStatusController {
   constructor(private readonly status: CookieStatusService) {}
 
+  @RequirePerm('view')
   @Get('cookies/status')
   check() {
     return this.status.check();

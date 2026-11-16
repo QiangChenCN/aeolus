@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ImContactFetchService } from './im-contact-fetch.service';
@@ -30,6 +31,7 @@ export class ImContactController {
    *
    * 落盘成功后回调 Python 失效本看板全部结果缓存（数据区间变化，按具体区间失效不可靠）。
    */
+  @RequirePerm('data:refresh')
   @Post('refresh')
   async refresh(@Body() b: { start?: string; end?: string } = {}) {
     let start = (b.start || '').trim();
@@ -64,6 +66,7 @@ export class ImContactController {
   }
 
   /** 当前落盘状态（已落盘区间 / 取数时间 / fetch_ok / 累计条数），供前端判断是否需要刷新。 */
+  @RequirePerm('view')
   @Get('status')
   async status() {
     return this.svc.status();

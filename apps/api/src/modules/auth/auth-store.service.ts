@@ -67,9 +67,17 @@ CREATE TABLE IF NOT EXISTS rbac_audit (
   role       TEXT        NOT NULL DEFAULT '-',
   method     TEXT        NOT NULL DEFAULT '',
   path       TEXT        NOT NULL DEFAULT '',
+  perm       TEXT        NOT NULL DEFAULT '',
+  decision   TEXT        NOT NULL DEFAULT '',
+  reason     TEXT        NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- 幂等补列：老库已有 rbac_audit 表，新增的决策日志字段不能漏。
+ALTER TABLE rbac_audit ADD COLUMN IF NOT EXISTS perm     TEXT NOT NULL DEFAULT '';
+ALTER TABLE rbac_audit ADD COLUMN IF NOT EXISTS decision TEXT NOT NULL DEFAULT '';
+ALTER TABLE rbac_audit ADD COLUMN IF NOT EXISTS reason   TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_rbac_audit_created ON rbac_audit(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rbac_audit_decision ON rbac_audit(decision, created_at DESC);
 `;
 
 /** 审计落库缓冲：攒够 AUDIT_FLUSH_SIZE 条或每 AUDIT_FLUSH_MS 毫秒刷一次。 */
@@ -85,6 +93,10 @@ export interface AuditRec {
   role: string;
   method: string;
   path: string;
+  /** 以下三项仅权限决策日志填写；普通登录/管理审计留空。 */
+  perm?: string;
+  decision?: 'allow' | 'deny';
+  reason?: string;
 }
 
 @Injectable()
@@ -408,9 +420,12 @@ export class AuthStoreService implements OnModuleInit, OnModuleDestroy {
       await this.pg.tx(async (c) => {
         for (const r of batch) {
           await c.query(
-            `INSERT INTO rbac_audit(ts, action, ok, username, ip, role, method, path)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [r.ts, r.action, r.ok, r.user || '-', r.ip || '-', r.role || '-', r.method || '', r.path || ''],
+            `INSERT INTO rbac_audit(ts, action, ok, username, ip, role, method, path, perm, decision, reason)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            [
+              r.ts, r.action, r.ok, r.user || '-', r.ip || '-', r.role || '-',
+              r.method || '', r.path || '', r.perm || '', r.decision || '', r.reason || '',
+            ],
           );
         }
       });
@@ -419,6 +434,45 @@ export class AuthStoreService implements OnModuleInit, OnModuleDestroy {
     } finally {
       this.auditFlushing = false;
     }
+  }
+
+  /**
+   * 权限决策日志查询（供「操作日志 → 权限决策」页排障用）。
+   * 只返回 action='authz:*' 的决策记录，普通登录/管理审计不混入。
+   */
+  async queryDecisions(opts: {
+    limit?: number;
+    username?: string;
+    path?: string;
+    decision?: string;
+  }): Promise<Array<Record<string, unknown>>> {
+    const limit = Math.min(Math.max(Number(opts.limit) || 100, 1), 500);
+    if (!this.pg.isEnabled) {
+      try {
+        return fs.readFileSync(this.files.audit, 'utf-8')
+          .split('\n').filter(Boolean).reverse()
+          .map((l) => JSON.parse(l) as Record<string, unknown>)
+          .filter((r) => String(r.action || '').startsWith('authz:'))
+          .filter((r) => !opts.username || String(r.user) === opts.username)
+          .filter((r) => !opts.decision || r.decision === opts.decision)
+          .filter((r) => !opts.path || String(r.path).includes(opts.path as string))
+          .slice(0, limit);
+      } catch {
+        return [];
+      }
+    }
+    const where = ["action LIKE 'authz:%'"];
+    const args: unknown[] = [];
+    if (opts.username) { args.push(opts.username); where.push(`username = $${args.length}`); }
+    if (opts.decision) { args.push(opts.decision); where.push(`decision = $${args.length}`); }
+    if (opts.path) { args.push(`%${opts.path}%`); where.push(`path LIKE $${args.length}`); }
+    args.push(limit);
+    const rows = await this.pg.query(
+      `SELECT id, ts, action, ok, username, ip, role, method, path, perm, decision, reason, created_at
+         FROM rbac_audit WHERE ${where.join(' AND ')} ORDER BY id DESC LIMIT $${args.length}`,
+      args,
+    );
+    return rows as Array<Record<string, unknown>>;
   }
 
   async onModuleDestroy(): Promise<void> {

@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Controller, Get, Req } from '@nestjs/common';
 import { Request } from 'express';
 import { AuthService } from '../auth/auth.service';
@@ -27,6 +28,7 @@ export class TeamsController {
     private readonly dataPerm: DataPermService,
   ) {}
 
+  @RequirePerm('view')
   @Get('teams')
   async list(@Req() req: Request) {
     const payload = await this.teams.fetchAll();

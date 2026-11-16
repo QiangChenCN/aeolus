@@ -41,7 +41,7 @@
           <div v-if="it.repeatType !== 'none'" class="node-rep">{{ it.repeatLabel }}</div>
           <div class="node-acts">
             <el-button size="small" text @click="openCreate(it)"><el-icon><Edit /></el-icon> 编辑</el-button>
-            <el-button size="small" text type="danger" @click="removeItem(it)"><el-icon><Delete /></el-icon> 删除</el-button>
+            <el-button size="small" text type="danger" v-perm="'cron:write'" @click="removeItem(it)"><el-icon><Delete /></el-icon> 删除</el-button>
           </div>
         </div>
       </el-timeline-item>
@@ -131,7 +131,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dlg = false">取消</el-button>
-        <el-button type="primary" @click="save">保存</el-button>
+        <el-button type="primary" v-perm="'cron:write'" @click="save">保存</el-button>
       </template>
     </el-dialog>
   </div>

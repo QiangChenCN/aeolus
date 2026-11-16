@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { StationManagersService } from './station-managers.service';
 
@@ -11,12 +12,14 @@ export class StationManagersController {
   constructor(private readonly svc: StationManagersService) {}
 
   /** 当前映射（文件不存在时返回硬编码默认，configured=false 提示前端）。 */
+  @RequirePerm('config:write')
   @Get('station-managers')
   get() {
     return this.svc.get();
   }
 
   /** 保存映射（整体覆盖 stations；openDingTalkId 无需手动填，自动解析）。 */
+  @RequirePerm('config:write')
   @Post('station-managers')
   save(@Body() b: Record<string, unknown>) {
     return this.svc.save(b || {});
@@ -26,6 +29,7 @@ export class StationManagersController {
    * 一键解析：把配置里引用到的全部负责人姓名拿去通讯录搜索 openDingTalkId
    * （与发送目标群无关），结果落缓存。
    */
+  @RequirePerm('config:write')
   @Post('station-managers/resolve')
   resolve(@Body() _b: Record<string, unknown>) {
     return this.svc.resolveAll();

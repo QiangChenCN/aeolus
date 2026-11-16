@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, HttpCode, Post, Query, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -22,6 +23,7 @@ export class AuthController {
   // 返回 201 会让浏览器判定「登录失败」。显式改回 200（与旧 server.py 一致）。
   // 会话令牌不再由前端存取，而是后端种 HttpOnly Cookie（同源自动携带、XSS 不可读）；
   // 「记住我」勾选时附带 Max-Age=7d，否则为会话 Cookie（关闭浏览器才失效）。
+  @RequirePerm('self')
   @Post('signin')
   @HttpCode(200)
   signin(
@@ -46,6 +48,7 @@ export class AuthController {
     };
   }
 
+  @RequirePerm('self')
   @Post('logout')
   logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     this.auth.logout(extractToken(req));
@@ -54,6 +57,7 @@ export class AuthController {
   }
 
   /** 无会话也可访问（前端据此决定是否跳登录页）；返回当前有效权限点。 */
+  @RequirePerm('self')
   @Get('me')
   me(@Req() req: Request) {
     const s = this.auth.getSession(extractToken(req));
@@ -67,12 +71,14 @@ export class AuthController {
       phone: this.auth.getUser(s.user)?.phone ?? null,
       email: this.auth.getUser(s.user)?.email ?? null,
       perms: [...this.auth.effectivePerms(s.role)],
+      perms_sig: this.auth.permsSignature(s.role),
       catalog: PERM_CATALOG,
       must_change: !!this.auth.getUser(s.user)?.must_change,
     };
   }
 
   /** 前端探测：钉钉登录是否启用 + corpId + OAuth 授权地址（公开，用于决定是否渲染钉钉登录）。 */
+  @RequirePerm('self')
   @Get('dingtalk/config')
   dingtalkConfig(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     // 每次取授权地址都生成一次性 state 并写 HttpOnly Cookie，回调时比对，防登录 CSRF
@@ -86,12 +92,14 @@ export class AuthController {
   }
 
   /** 设置页读取钉钉 SSO 配置（脱敏；appSecret 不返回明文）。需 admin:bot。 */
+  @RequirePerm('admin:bot')
   @Get('dingtalk/sso-config')
   dingtalkSsoConfig() {
     return { ok: true, config: this.ding.getSettingsConfig() };
   }
 
   /** 设置页保存钉钉 SSO 配置（持久化到 apps/api/runtime/.dingtalk_sso.json）。需 admin:bot。 */
+  @RequirePerm('admin:bot')
   @Post('dingtalk/sso-config')
   @HttpCode(200)
   dingtalkSsoSave(@Body() b: Record<string, any>) {
@@ -115,6 +123,7 @@ export class AuthController {
    * 成功返回 token（前端改用 X-Token 头携带，绕开 iframe 第三方 Cookie 限制）；
    * 同源也顺手种上 Cookie 作为兜底。未绑定返回 needBind（带 unionid 供管理员绑定）。
    */
+  @RequirePerm('self')
   @Post('dingtalk/jsapi')
   @HttpCode(200)
   async dingtalkJsapi(
@@ -144,6 +153,7 @@ export class AuthController {
    * 换取身份 → 解析本地账号 → 种会话 Cookie → 跳转前端首页（cookie 同源自动携带）。
    * 未绑定则跳转登录页并带 unionid 提示。
    */
+  @RequirePerm('self')
   @Get('dingtalk/oauth-callback')
   async dingtalkOauthCallback(
     @Query('code') code: string,
@@ -186,6 +196,7 @@ export class AuthController {
    * 绑定钉钉身份到本地账号：要求已登录会话。
    * 管理员（admin:users）可绑定任意 username；普通用户只能绑定自己（忽略传入 username）。
    */
+  @RequirePerm('self')
   @Post('dingtalk/bind')
   @HttpCode(200)
   dingtalkBind(@Body() b: { username?: string; bindToken?: string }, @Req() req: Request) {
@@ -203,6 +214,7 @@ export class AuthController {
    * 修改个人头像：仅允许修改「当前登录用户自己」的头像（用户名取自会话，不接受外部传入）。
    * 头像以 data URI 形式提交，由 AuthService.updateAvatar 校验格式与体积。
    */
+  @RequirePerm('self')
   @Post('avatar')
   @HttpCode(200)
   setAvatar(@Body() b: { avatar?: string }, @Req() req: Request) {
@@ -221,6 +233,7 @@ export class AuthController {
    * 手机号经 AuthService.assertPhone 校验、邮箱经 assertEmail 校验；
    * 角色、禁用等管理字段不可在此修改。
    */
+  @RequirePerm('self')
   @Post('profile')
   @HttpCode(200)
   setProfile(@Body() b: { name?: string; phone?: string; email?: string }, @Req() req: Request) {

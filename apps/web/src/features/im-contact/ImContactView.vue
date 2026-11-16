@@ -27,7 +27,7 @@
         :loading="refreshing"
         :disabled="refreshing || cooldown > 0"
         :title="cooldown > 0 ? `刷新过于频繁，请等待 ${cooldown} 秒` : '拉取 T-1 所在月 IM 电联数据（累计入库）后重新计算'"
-        @click="refresh"
+        v-perm="'data:refresh'" @click="refresh"
       >
         <el-icon><Refresh /></el-icon>
         <span v-if="refreshing">刷新中…</span>
@@ -224,7 +224,7 @@
       </el-checkbox-group>
       <template #footer>
         <el-button @click="cfgVisible = false">取消</el-button>
-        <el-button type="primary" :loading="cfgSaving" @click="saveCfg">保存</el-button>
+        <el-button type="primary" :loading="cfgSaving" v-perm="'config:write'" @click="saveCfg">保存</el-button>
       </template>
     </el-dialog>
   </div>

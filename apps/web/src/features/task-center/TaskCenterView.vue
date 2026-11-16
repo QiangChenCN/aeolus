@@ -68,7 +68,7 @@
             :plain="!runBtnPrimary(t)"
             class="run-btn"
             :loading="isRunning(t)"
-            @click="onRun(t)"
+            v-perm="'task:run'" @click="onRun(t)"
           >
             <el-icon v-if="!isRunning(t)"><VideoPlay /></el-icon>运行
           </el-button>
@@ -108,7 +108,7 @@
         <el-table-column label="操作">
           <template #default="{ row }">
             <el-button text size="small" @click="onOpenRun(row)">查看</el-button>
-            <el-button text size="small" type="danger" @click="onDeleteRun(row)">删除</el-button>
+            <el-button text size="small" type="danger" v-perm="'task:run'" @click="onDeleteRun(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

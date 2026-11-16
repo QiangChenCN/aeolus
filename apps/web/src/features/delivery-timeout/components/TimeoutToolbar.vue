@@ -19,7 +19,7 @@
       :loading="refreshing"
       :disabled="refreshing || cooldown > 0"
       :title="cooldown > 0 ? `刷新过于频繁，请等待 ${cooldown} 秒` : '拉取今日运单明细后重新计算'"
-      @click="emit('refresh')"
+      v-perm="'data:refresh'" @click="emit('refresh')"
     >
       <el-icon><Refresh /></el-icon>
       <span v-if="refreshing">刷新中…</span>

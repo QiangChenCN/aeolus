@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Controller, Sse } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { MessageEvent } from '@nestjs/common';
@@ -8,6 +9,7 @@ export class StreamingController {
   constructor(private readonly streaming: StreamingService) {}
 
   /** SSE 端点：前端 EventSource('/api/events?token=...') 订阅全量事件流（含 15s 心跳）。 */
+  @RequirePerm('view')
   @Sse('events')
   events(): Observable<MessageEvent> {
     return this.streaming.subscribe();

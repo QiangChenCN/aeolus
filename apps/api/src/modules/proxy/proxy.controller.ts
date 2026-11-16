@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, Post, Req } from '@nestjs/common';
 import { UpstreamHttpException } from '../../common/exceptions/upstream-http.exception';
 import { Request } from 'express';
@@ -114,6 +115,7 @@ export class ProxyController {
   // 与 server.py 的真实路由前缀对齐（原 std/ov/ap 是死配置，前端与 server 均未使用，已移除）。
   // 通配路由统一靠前注册，避免与精确路由冲突导致 404；计算服务侧由 /api/{*path} 捕获并复用
   // server.py 的 GET_ROUTES/POST_ROUTES 派发表，按 x-scope 做数据权限裁决。
+  @RequirePerm('view')
   @Get('standard/{*path}')
   proxyStandardGet(@Req() req: Request) {
     // 配置端点（grade-global）已迁 Nest 原生，优先拦截。
@@ -126,6 +128,7 @@ export class ProxyController {
     }
     return this.unwrap(this.proxyReq(req, 'GET'));
   }
+  @RequirePerm('view')
   @Post('standard/{*path}')
   proxyStandardPost(@Req() req: Request, @Body() body: unknown) {
     if (this.config.isConfigPath(req.path)) return this.handleConfig('POST', req, body);
@@ -138,31 +141,37 @@ export class ProxyController {
     }
     return this.unwrap(this.proxyReq(req, 'POST', body));
   }
+  @RequirePerm('view')
   @Get('attend-period/{*path}')
   proxyAttendGet(@Req() req: Request) {
     if (this.config.isConfigPath(req.path)) return this.handleConfig('GET', req);
     return this.unwrap(this.proxyReq(req, 'GET'));
   }
+  @RequirePerm('view')
   @Post('attend-period/{*path}')
   proxyAttendPost(@Req() req: Request, @Body() body: unknown) {
     if (this.config.isConfigPath(req.path)) return this.handleConfig('POST', req, body);
     return this.unwrap(this.proxyReq(req, 'POST', body));
   }
+  @RequirePerm('view')
   @Get('overview/{*path}')
   proxyOverviewGet(@Req() req: Request) {
     return this.unwrap(this.proxyReq(req, 'GET'));
   }
+  @RequirePerm('view')
   @Post('overview/{*path}')
   proxyOverviewPost(@Req() req: Request, @Body() body: unknown) {
     return this.unwrap(this.proxyReq(req, 'POST', body));
   }
   // 实时在线播报：仅 assessment/station（实时聚合计算）转发 Python，
   // 其余配置端点（service-quality/targets 等）已迁 Nest 原生（config.service.ts）。
+  @RequirePerm('view')
   @Get('assessment/{*path}')
   proxyAssessmentGet(@Req() req: Request) {
     if (this.config.isConfigPath(req.path)) return this.handleConfig('GET', req);
     return this.unwrap(this.proxyReq(req, 'GET'));
   }
+  @RequirePerm('view')
   @Post('assessment/{*path}')
   proxyAssessmentPost(@Req() req: Request, @Body() body: unknown) {
     if (this.config.isConfigPath(req.path)) return this.handleConfig('POST', req, body);
@@ -173,11 +182,13 @@ export class ProxyController {
   //  · /data   → 转发 Python 计算（analytics.im_contact）。
   //  · /teams  → 配置端点（isConfigPath 命中 /api/im-contact/teams），改派 ImContactConfigService。
   // 取数端点不走这里：/api/im-contact-fetch/* 由 ImContactController 原生处理（前缀避开通配）。
+  @RequirePerm('view')
   @Get('im-contact/{*path}')
   proxyImContactGet(@Req() req: Request) {
     if (this.config.isConfigPath(req.path)) return this.handleImContactConfig('GET', req);
     return this.unwrap(this.proxyReq(req, 'GET'));
   }
+  @RequirePerm('view')
   @Post('im-contact/{*path}')
   proxyImContactPost(@Req() req: Request, @Body() body: unknown) {
     if (this.config.isConfigPath(req.path)) return this.handleImContactConfig('POST', req, body);
@@ -196,10 +207,12 @@ export class ProxyController {
   }
 
   // 服务质量考核设置（service-quality/targets）：纯配置端点，已迁 Nest 原生，不转发 Python。
+  @RequirePerm('view')
   @Get('service-quality/{*path}')
   proxyServiceQualityGet(@Req() req: Request) {
     return this.handleConfig('GET', req);
   }
+  @RequirePerm('view')
   @Post('service-quality/{*path}')
   proxyServiceQualityPost(@Req() req: Request, @Body() body: unknown) {
     return this.handleConfig('POST', req, body);
@@ -210,6 +223,7 @@ export class ProxyController {
   //   · /api/teams           → TeamsModule（取数在 FetchModule.TeamsFetchService + 数据权限过滤）
   //   · /api/cookies/status  → StatusModule（探针在 FetchModule.CookieStatusService）
   // 同路径重复注册时 Express 只会保留先注册的那个，另一个静默失效 —— 排查成本极高。
+  @RequirePerm('file:read')
   @Get('sheet')
   getSheet(@Req() req: Request) {
     return this.unwrap(this.proxyReq(req, 'GET'));

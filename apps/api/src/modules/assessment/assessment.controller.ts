@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, Logger, Post, Sse } from '@nestjs/common';
 import { MessageEvent } from '@nestjs/common';
 import { Observable } from 'rxjs';
@@ -35,12 +36,14 @@ export class AssessmentController {
   ) {}
 
   /** 手动刷新冷却状态查询（页面加载恢复读秒用）。 */
+  @RequirePerm('view')
   @Get('refresh-cooldown')
   getCooldown() {
     return this.cooldownSvc.status();
   }
 
   /** 主动写入一次冷却时间戳（如从自动切回手动时，默认进入 1 分钟冷却）。不触发取数。 */
+  @RequirePerm('view')
   @Post('refresh-cooldown')
   markCooldown() {
     this.cooldownSvc.mark();
@@ -81,6 +84,7 @@ export class AssessmentController {
    *       自动轮询不传，跳过冷却）。
    * 返回 {ok, msg, remaining_sec?}；冷却中返回 {ok:false, cooldown:true, remaining_sec}。
    */
+  @RequirePerm('view')
   @Post('violation')
   async fetchViolation(@Body() b: { teams?: string[]; date?: string; manual?: boolean }) {
     const date =
@@ -127,6 +131,7 @@ export class AssessmentController {
    * 运单是全站单文件，取数成功后必须失效当天**全部站点**的考核看板结果缓存
    * （否则 Python 仍返回旧聚合结果，表现就是「刷新了但推配送/完成/T8 没变」）。
    */
+  @RequirePerm('view')
   @Post('delivery')
   async fetchDelivery(@Body() b: { date?: string }) {
     const date =
@@ -153,6 +158,7 @@ export class AssessmentController {
    *       两者都缺省时按 days=7 回补。
    * 返回 {ok, results:[{date, delivery, violation}]}；单日失败不影响其余日期。
    */
+  @RequirePerm('view')
   @Post('backfill-history')
   async backfillHistory(@Body() b: { dates?: string[]; days?: number }) {
     const explicit = (b?.dates || []).map((s) => String(s).trim()).filter(Boolean);
@@ -198,6 +204,7 @@ export class AssessmentController {
    * 前端 `EventSource('/api/assessment-fetch/stream')` 订阅，收到后回读，
    * 替代固定间隔盲轮询，且任一端取数 → 所有在线前端实时刷新。
    */
+  @RequirePerm('view')
   @Sse('stream')
   stream(): Observable<MessageEvent> {
     return this.events.toMessage();
@@ -208,6 +215,7 @@ export class AssessmentController {
    * 入参：mainTaskId（缺省 VISIT_MAIN_TASK_ID / 91467）、date（YYYY-MM-DD，缺省今天）。
    * 返回 {ok, msg, visited, total}（提取不到时 visited/total 为 null，由计算侧降级）。
    */
+  @RequirePerm('view')
   @Post('visit')
   async fetchVisit(@Body() b: { mainTaskId?: number; date?: string }) {
     try {
@@ -219,6 +227,7 @@ export class AssessmentController {
   }
 
   /** 读取服务端自动取数配置（enabled / intervalSec，多端共享）。 */
+  @RequirePerm('view')
   @Get('auto')
   getAuto() {
     return this.auto.getConfig();
@@ -228,6 +237,7 @@ export class AssessmentController {
    * 写入服务端自动取数配置：前端「自动/手动」开关与间隔选择落在这里（多端共享，末次写入生效）。
    * 自动 = 服务端按 intervalSec 定时取数并推送；手动 = 关闭服务端定时，仅手动刷新按钮取数。
    */
+  @RequirePerm('view')
   @Post('auto')
   setAuto(@Body() b: { enabled?: boolean; intervalSec?: number }) {
     this.auto.setConfig(b.enabled === true, b.intervalSec);

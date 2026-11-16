@@ -146,7 +146,7 @@
       <div class="dv-controls">
         <span class="dv-ctl-label">取数时间</span>
         <span class="dv-date">{{ fetchedAt || '—' }}</span>
-        <el-button type="primary" :loading="loadingRealtime" @click="refreshRealtime">
+        <el-button type="primary" :loading="loadingRealtime" v-perm="'data:refresh'" @click="refreshRealtime">
           刷新
         </el-button>
         <el-button v-if="!isToday" @click="backToToday">回到今天</el-button>

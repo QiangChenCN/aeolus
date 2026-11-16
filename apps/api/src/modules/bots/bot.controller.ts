@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { BotConfigService } from './bot-config.service';
 import { BotRegistryService } from './bot-registry.service';
@@ -18,12 +19,14 @@ export class BotController {
   ) {}
 
   /** 读取脱敏后的全局开关配置（AI 打字 / 超时 / 总开关）。 */
+  @RequirePerm('admin:bot')
   @Get('bot/config')
   getConfig() {
     return { ok: true, config: this.cfg.getConfig() };
   }
 
   /** 机器人实例清单 + 各凭据分组连接状态（独立菜单「实例与状态」区）。 */
+  @RequirePerm('admin:bot')
   @Get('bot/status')
   botStatus() {
     const connections = this.gateway.listConnections();
@@ -37,6 +40,7 @@ export class BotController {
   }
 
   /** 保存全局开关并热重载 Stream 长连接（凭据变化即时生效）。打字效果已移至凭据分组。 */
+  @RequirePerm('admin:bot')
   @Post('bot/config')
   async saveConfig(@Body() b: Record<string, any>) {
     const config = this.cfg.saveConfig({
@@ -47,12 +51,14 @@ export class BotController {
   }
 
   /** 凭据分组列表（脱敏，secret 不外泄）。 */
+  @RequirePerm('admin:bot')
   @Get('bot/credentials')
   getCredentials() {
     return { ok: true, groups: this.cfg.listGroups() };
   }
 
   /** 保存凭据分组（整体替换；secret 留空表示不修改）。保存后热重载连接。 */
+  @RequirePerm('admin:bot')
   @Post('bot/credentials')
   async saveCredentials(@Body() b: Record<string, any>) {
     try {
@@ -65,6 +71,7 @@ export class BotController {
   }
 
   /** 仅重新连接 Stream（不动配置）。 */
+  @RequirePerm('admin:bot')
   @Post('bot/reload')
   async reload() {
     return { ok: true, reload: await this.gateway.reload() };
@@ -74,6 +81,7 @@ export class BotController {
    * 单个机器人实例配置：在线启停（enabled）、凭据分组绑定（credentialsRef）、展示名（displayName）。
    * 仅改 enabled 不需重连；改 credentialsRef 需重建连接（自动 reload）；displayName 仅覆盖展示名。
    */
+  @RequirePerm('admin:bot')
   @Post('bot/bots')
   async setBot(
     @Body() b: { botId?: string; enabled?: boolean; credentialsRef?: string; displayName?: string; queryTimeout?: number },

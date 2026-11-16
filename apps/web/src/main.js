@@ -8,6 +8,7 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 
 import App from './App.vue';
 import router from './router';
+import { permission } from './directives/permission.js';
 import './styles/element-overrides.css';
 import './styles/base.css';
 import './styles/responsive.css';
@@ -66,6 +67,7 @@ for (const [key, comp] of Object.entries(ElementPlusIconsVue)) {
 }
 
 app.use(createPinia());
+app.directive('perm', permission);
 app.use(router);
 // 中文语言包：月份选择器等组件显示中文（Jan → 1月）
 app.use(ElementPlus, { locale: zhCn });

@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, Logger, Post, Query } from '@nestjs/common';
 import { OrdersFetchService } from './sources/orders-fetch.service';
 import { FetchPaceService } from './runners/fetch-pace.service';
@@ -47,12 +48,14 @@ export class FetchController {
    * Quark DA cookie 缓存状态（只读探针）。
    * 原属 Python `server.py::_check_quark_cookie` + `quark_sdk.creds`，现由 Nest 独占。
    */
+  @RequirePerm('view')
   @Get('quark/status')
   async quarkStatus() {
     return { ok: true, ...(await this.quark.cacheStatus()) };
   }
 
   /** 当前节奏状态（AIMD 下限 / 当前间隔 / 碰撞次数 / 抓取统计）。 */
+  @RequirePerm('view')
   @Get('pace')
   paceStats() {
     return { ok: true, stats: this.pace.statsSnapshot() };
@@ -68,6 +71,7 @@ export class FetchController {
    * 风神失败/返回空时 `source=fallback` 并附带兜底三站，绝不让选择器空白。
    * `?force=1` 跳过缓存强制重取（排查用）。
    */
+  @RequirePerm('view')
   @Get('teams')
   teamsAll(@Query('force') force?: string) {
     return this.teams.fetchAll(force === '1' || force === 'true');
@@ -77,6 +81,7 @@ export class FetchController {
    * 拉取指定日期的全部运单明细（不落盘，用于验证取数链路）。
    * 接口本身没有站点维度，按 trackingFinish 时间窗取全量，再按 teamId 分组统计。
    */
+  @RequirePerm('view')
   @Get('orders')
   async fetchOrders(
     @Query('date') date?: string,
@@ -111,6 +116,7 @@ export class FetchController {
    * 后续阶段（sched 排班 / att 考勤 / violation 违规 / 结果计算）仍在 Python，
    * 通过保留的委托接口调用 —— 见 FetchModule 头部说明。
    */
+  @RequirePerm('view')
   @Post('refresh-orders')
   async refreshOrders(@Body() b: { teams?: string[]; date?: string }) {
     const d = b.date || new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
@@ -126,6 +132,7 @@ export class FetchController {
    * 反爬节奏/限流退避/会话重登都在本进程完成，Python 侧只负责分组落盘与聚合计算。
    * 可传 start_ms/end_ms，或只传 date（缺省今天）。
    */
+  @RequirePerm('view')
   @Post('orders-raw')
   async ordersRaw(
     @Body() b: { start_ms?: number; end_ms?: number; date?: string; time_field?: string },
@@ -154,6 +161,7 @@ export class FetchController {
   // 判定是否「会话失效」并触发强制重登 —— 与迁移前 Python 直接抛 AuthError 同口径。
 
   /** 单站实时考勤原始 JSON（原 `get_data/attendance.py::fetch_team`）。 */
+  @RequirePerm('view')
   @Post('attendance-raw')
   async attendanceRaw(
     @Body() b: { team_id?: string | number; time_code?: string | number; cookie?: string },
@@ -170,6 +178,7 @@ export class FetchController {
   }
 
   /** 单站排班统计（按天列表，原 `get_data/schedule_statistics.py::query`）。 */
+  @RequirePerm('view')
   @Post('sched-raw')
   async schedRaw(
     @Body() b: { team_id?: string | number; start?: string; end?: string; cookie?: string },
@@ -186,6 +195,7 @@ export class FetchController {
   }
 
   /** 违规处罚 CSV（原 `get_data/violation.py::download_csv`），返回 `{text, file_url}`。 */
+  @RequirePerm('view')
   @Post('violation-csv')
   async violationCsv(@Body() b: { start_ms?: number; end_ms?: number; cookie?: string }) {
     if (b?.start_ms == null || b?.end_ms == null) {
@@ -204,6 +214,7 @@ export class FetchController {
    * 入参：start_ms / end_ms（毫秒区间，必填）、page_no（默认1）、page_size（默认10）、cookie（可选）。
    * 返回上游 result（含 data 列表与分页信息），由调用方解析具体字段。
    */
+  @RequirePerm('view')
   @Post('violation-list')
   async violationList(
     @Body()
@@ -233,6 +244,7 @@ export class FetchController {
    * ② 运维手动复位登录态。返回新 cookie（与 Python 原接口同契约）—— 该文件本就两边可读，
    * 且本端点要求机器令牌。
    */
+  @RequirePerm('view')
   @Post('aeolus-relogin')
   async aeolusRelogin() {
     try {
@@ -248,10 +260,12 @@ export class FetchController {
    * 明文密码永不外泄；POST 保存（账号必填，密码留空 = 沿用原值）。落盘到
    * `apps/api/runtime/aeolus_sdk/credentials.json`（与 AeolusLoginService 读取路径一致）。
    */
+  @RequirePerm('admin:aeolus')
   @Get('settings/aeolus')
   aeolusCredsGet() {
     return this.aeolusCreds.masked();
   }
+  @RequirePerm('admin:aeolus')
   @Post('settings/aeolus')
   aeolusCredsSave(@Body() b: { account?: unknown; password?: unknown }) {
     return this.aeolusCreds.save(b || {});
@@ -264,6 +278,7 @@ export class FetchController {
    * body 可选传 `{account, password}` 做**试登验证**（不落盘，用于保存前先验）；不传则使用
    * 已保存凭据，验证通过会把新 cookie 落盘并刷新进程内缓存，取数链无需再登一次。
    */
+  @RequirePerm('admin:aeolus')
   @Post('settings/aeolus/test')
   async aeolusCredsTest(@Body() b: { account?: unknown; password?: unknown }) {
     return this.aeolusCookie.verify({
@@ -276,6 +291,7 @@ export class FetchController {
    * 退出风神登录态（系统设置「账号设置」→ 退出登录）。只清除本地 SSO cookie 会话，
    * 不删除账号密码；下次取数会自动用已保存凭据重登。
    */
+  @RequirePerm('admin:aeolus')
   @Post('settings/aeolus/logout')
   aeolusLogout() {
     return this.aeolusCookie.logout();
@@ -285,6 +301,7 @@ export class FetchController {
    * 违规处罚明细·整段区间全量（自动翻页）。入参：start_ms / end_ms（必填）、page_size（默认200）。
    * 返回 `{total, rows}`，rows 为上游列表项的拼接（不做字段约定，前端按实际字段渲染）。
    */
+  @RequirePerm('view')
   @Post('violation-range')
   async violationRange(
     @Body()
@@ -310,6 +327,7 @@ export class FetchController {
    * 实时看板"刷新"落盘：将一批违规明细写入独立的 realtime.db（按违规时间日期分桶、按 violationOrderId 去重覆盖）。
    * 与月累计的 violation.db 完全分离，互不影响。
    */
+  @RequirePerm('view')
   @Post('violation-save')
   async violationSave(@Body() b: { rows?: Record<string, any>[] }) {
     try {
@@ -323,6 +341,7 @@ export class FetchController {
   /**
    * 实时看板读取本地缓存：按日期区间 [start, end]（YYYY-MM-DD）从 realtime.db 取已落盘数据，不再请求风神。
    */
+  @RequirePerm('view')
   @Post('violation-range-db')
   async violationRangeDb(@Body() b: { start?: string; end?: string }) {
     if (!b?.start || !b?.end) return { ok: false, error: 'start / end 必填（YYYY-MM-DD）' };
@@ -341,6 +360,7 @@ export class FetchController {
   }
 
   /** 按月（YYYY-MM）读取已落库的违规明细（月累计看板数据源）。 */
+  @RequirePerm('view')
   @Get('violation-month')
   async violationMonth(@Query('month') month: string) {
     if (!month) return { ok: false, error: 'month 必填（YYYY-MM）' };
@@ -352,6 +372,7 @@ export class FetchController {
    * 月累计看板：按日期区间 [start, end]（YYYY-MM-DD，含两端）读取已落库违规明细。
    * 配合前端「日期范围」选择器（含快捷选项）使用，替代原先的按月查询。
    */
+  @RequirePerm('view')
   @Post('violation-month-range')
   async violationMonthRange(@Body() b: { start?: string; end?: string }) {
     if (!b?.start || !b?.end) return { ok: false, error: 'start / end 必填（YYYY-MM-DD）' };
@@ -361,6 +382,7 @@ export class FetchController {
   }
 
   /** 按天（YYYY-MM-DD）读取已落库的违规明细。 */
+  @RequirePerm('view')
   @Get('violation-day')
   async violationDay(@Query('date') date: string) {
     if (!date) return { ok: false, error: 'date 必填（YYYY-MM-DD）' };
@@ -373,6 +395,7 @@ export class FetchController {
    * 入参：startDate / endDate（YYYY-MM-DD，必填）、region（大区数组，可选，默认全部）。
    * 凭证（DA cookie / 三件套 token）由 QuarkCredsService 自动兑换，本端点只负责取数 + 透出。
    */
+  @RequirePerm('view')
   @Post('contact-im')
   async contactIm(
     @Body() b: { startDate?: string; endDate?: string; region?: string[] },

@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Post } from '@nestjs/common';
 import { DeliveryTimeoutRefreshService } from './delivery-timeout-refresh.service';
 import { RawCacheService, RAW_KINDS, RawKind } from '../../infra/fetch/storage/raw-cache.service';
@@ -15,6 +16,7 @@ export class DeliveryTimeoutController {
     private readonly raw: RawCacheService,
   ) {}
 
+  @RequirePerm('data:refresh')
   @Post('refresh')
   refresh(@Body() body: { date?: string } = {}) {
     return this.svc.refresh(body?.date);
@@ -27,6 +29,7 @@ export class DeliveryTimeoutController {
    * （见 `DeliveryTimeoutRefreshService` + `DeliveryTimeoutOrdersStoreService`），
    * 正常刷新**不再写** `apps/api/runtime/raw/orders_*`。这里保留该入口仅为诊断回填。
    */
+  @RequirePerm('view')
   @Post('raw')
   saveRaw(
     @Body()

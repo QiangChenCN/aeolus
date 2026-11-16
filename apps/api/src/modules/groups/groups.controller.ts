@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { GroupsService } from './groups.service';
 
@@ -17,6 +18,7 @@ import { GroupsService } from './groups.service';
 export class GroupsController {
   constructor(private readonly svc: GroupsService) {}
 
+  @RequirePerm('view')
   @Get('groups')
   async groups(@Query('q') q?: string, @Query('id') id?: string) {
     if (id) {
@@ -32,12 +34,14 @@ export class GroupsController {
     return { groups: await this.svc.recent(), source: 'recent', query: '' };
   }
 
+  @RequirePerm('groups:write')
   @Post('groups/used')
   async used(@Body() b: { id?: string; title?: string }) {
     this.svc.noteUsed(String(b?.id || ''), b?.title);
     return { ok: true };
   }
 
+  @RequirePerm('groups:write')
   @Post('groups/forget')
   async forget(@Body() b: { id?: string }) {
     this.svc.forget(String(b?.id || ''));

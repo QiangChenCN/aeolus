@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
+import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
+import { AuthStoreService } from './auth-store.service';
 import { DataPermService, DEFAULT_SCOPE } from './data-perm.service';
 import { PERM_CATALOG, ALL_PERMS } from './permissions';
 import { ComputeService } from '../compute/compute.service';
@@ -9,8 +11,7 @@ import { extractToken } from '../../common/token.util';
 /**
  * 账号 / 角色 / 密码策略 / 数据权限 管理端点（端口自 core/auth.py 与 core/dataperm.py，
  * 原 Python 实现已删除 —— 这里是唯一入口）。
- * 路由→权限由 AccessGuard 按 permissions.ts 自动裁决（admin:users / admin:roles /
- * admin:policy / admin:data-perm）。
+ * 每个端点的权限由方法上的 @RequirePerm 声明，AccessGuard 直接读该元数据裁决。
  */
 @Controller('api')
 export class AdminController {
@@ -18,6 +19,7 @@ export class AdminController {
     private readonly auth: AuthService,
     private readonly dataPerm: DataPermService,
     private readonly compute: ComputeService,
+    private readonly store: AuthStoreService,
   ) {}
 
   private currentUser(req: Request): { user: string; role: string } | null {
@@ -26,11 +28,20 @@ export class AdminController {
     return s ? { user: s.user, role: s.role } : null;
   }
 
+  /** 角色/权限变更写入 rbac_audit：回答"谁把角色改成了什么"。 */
+  private logRoleChange(req: Request, action: string, note: string, ok = true): void {
+    const cur = this.currentUser(req);
+    const ip = String(req.headers['x-forwarded-for'] || req.ip || '-').split(',')[0].trim();
+    this.auth.audit(action, ok, cur?.user || 'machine', ip, note, req.method || 'POST', req.originalUrl || req.url || '');
+  }
+
   // ---------------- 账号 ----------------
+  @RequirePerm('admin:users')
   @Get('admin/users')
   users() {
     return { ok: true, users: this.auth.listUsersSafe() };
   }
+  @RequirePerm('admin:users')
   @Post('admin/user')
   addUser(@Body() b: Record<string, any>) {
     try {
@@ -40,6 +51,7 @@ export class AdminController {
       return { ok: false, error: (e as Error).message };
     }
   }
+  @RequirePerm('admin:users')
   @Post('admin/user/update')
   updateUser(@Body() b: Record<string, any>, @Req() req: Request) {
     try {
@@ -52,6 +64,7 @@ export class AdminController {
       return { ok: false, error: (e as Error).message };
     }
   }
+  @RequirePerm('admin:users')
   @Post('admin/user/reset-pw')
   resetPw(@Body() b: Record<string, any>) {
     try {
@@ -61,6 +74,7 @@ export class AdminController {
       return { ok: false, error: (e as Error).message };
     }
   }
+  @RequirePerm('admin:users')
   @Post('admin/user/delete')
   deleteUser(@Req() req: Request, @Body() b: Record<string, any>) {
     const cur = this.currentUser(req);
@@ -73,6 +87,7 @@ export class AdminController {
   }
 
   // ---------------- 角色 ----------------
+  @RequirePerm('admin:roles')
   @Get('admin/roles')
   roles() {
     // all_perms：角色权限编辑页按它渲染「权限点」勾选框（admin.js 的 _allPerms）。
@@ -85,39 +100,52 @@ export class AdminController {
       all_perms: [...ALL_PERMS].sort(),
     };
   }
+  @RequirePerm('admin:roles')
   @Post('admin/role')
-  createRole(@Body() b: Record<string, any>) {
+  createRole(@Body() b: Record<string, any>, @Req() req: Request) {
+    const note = `role=${b.name}; perms=${(b.perms || []).join(',')}; parents=${(b.parents || []).join(',')}`;
     try {
       this.auth.createRole(b.name, b.perms || [], b.parents || []);
+      this.logRoleChange(req, 'role.create', note);
       return { ok: true };
     } catch (e) {
+      this.logRoleChange(req, 'role.create', `${note}; error=${(e as Error).message}`, false);
       return { ok: false, error: (e as Error).message };
     }
   }
+  @RequirePerm('admin:roles')
   @Post('admin/role/update')
-  updateRole(@Body() b: Record<string, any>) {
+  updateRole(@Body() b: Record<string, any>, @Req() req: Request) {
+    const note = `role=${b.name}; perms=${(b.perms || []).join(',')}; parents=${(b.parents || []).join(',')}`;
     try {
       this.auth.updateRole(b.name, b.perms, b.parents);
+      this.logRoleChange(req, 'role.update', note);
       return { ok: true };
     } catch (e) {
+      this.logRoleChange(req, 'role.update', `${note}; error=${(e as Error).message}`, false);
       return { ok: false, error: (e as Error).message };
     }
   }
+  @RequirePerm('admin:roles')
   @Post('admin/role/delete')
-  deleteRole(@Body() b: Record<string, any>) {
+  deleteRole(@Body() b: Record<string, any>, @Req() req: Request) {
     try {
       this.auth.deleteRole(b.name);
+      this.logRoleChange(req, 'role.delete', `role=${b.name}`);
       return { ok: true };
     } catch (e) {
+      this.logRoleChange(req, 'role.delete', `role=${b.name}; error=${(e as Error).message}`, false);
       return { ok: false, error: (e as Error).message };
     }
   }
 
   // ---------------- 密码策略 ----------------
+  @RequirePerm('admin:policy')
   @Get('policy')
   policy() {
     return { ok: true, policy: this.auth.getPolicy() };
   }
+  @RequirePerm('admin:policy')
   @Post('policy')
   setPolicy(@Body() b: Record<string, any>) {
     try {
@@ -165,6 +193,7 @@ export class AdminController {
    * 两侧各自都对、拼起来是坏的，数据权限页因此拿不到用户列表和站点选择器。
    * （这类「契约对不上」只有跨实现比对才能发现，单侧测试与路由扫描都测不出来。）
    */
+  @RequirePerm('admin:data-perm')
   @Get('data-perms')
   async dataPerms() {
     const orgIds = this.dataPerm.orgCities();
@@ -193,6 +222,7 @@ export class AdminController {
       default_new_site: this.dataPerm.getDefaultNewSite(),
     };
   }
+  @RequirePerm('admin:data-perm')
   @Get('data-perms/org')
   org() {
     return {
@@ -202,6 +232,7 @@ export class AdminController {
       default_new_site: this.dataPerm.getDefaultNewSite(),
     };
   }
+  @RequirePerm('admin:data-perm')
   @Post('data-perms')
   setDataPerm(@Body() b: Record<string, any>) {
     try {
@@ -216,6 +247,7 @@ export class AdminController {
       return { ok: false, error: (e as Error).message };
     }
   }
+  @RequirePerm('admin:data-perm')
   @Post('data-perms/delete')
   deleteDataPerm(@Body() b: Record<string, any>) {
     try {
@@ -225,4 +257,20 @@ export class AdminController {
       return { ok: false, error: (e as Error).message };
     }
   }
+
+  // ---------------- 权限决策日志（可解释性） ----------------
+  /** 查询 AccessGuard 的裁决记录：谁/什么角色/访问什么端点/要求什么权限/命中哪条规则/结果。
+   *  admin:roles 权限（与角色管理同级），供「操作日志 → 权限决策」排障。 */
+  @RequirePerm('admin:roles')
+  @Get('admin/authz-decisions')
+  async authzDecisions(@Query() q: Record<string, unknown>) {
+    const items = await this.store.queryDecisions({
+      limit: q.limit === undefined ? undefined : Number(q.limit),
+      username: typeof q.username === 'string' ? q.username : undefined,
+      path: typeof q.path === 'string' ? q.path : undefined,
+      decision: typeof q.decision === 'string' ? q.decision : undefined,
+    });
+    return { ok: true, items };
+  }
+
 }

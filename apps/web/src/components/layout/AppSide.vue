@@ -56,21 +56,21 @@ const navItems = computed(() => {
   ];
   items.push({ type: 'parent', key: 'work', name: '工作任务', icon: 'List', children: workChildren });
 
-  // 系统设置：个人中心对所有登录用户可见（账号信息 + 个人改密），置于分组首位便于快速找到；
-  // 其余管理类子项（钉钉/风神/权限/调度）仅管理员可见，排在个人中心之后。
+  // 系统设置：个人中心对所有登录用户可见（账号信息 + 个人改密），置于分组首位便于快速找到。
+  // 管理类子项不再一刀切 isAdmin，而是按后端下发的权限点逐项收敛：
+  // 例如 operator 有 config:write 可见「站点负责人设置」，但看不到风神/MinIO/权限等管理员项。
   const sysSubs = [];
   sysSubs.push({ type: 'leaf', kind: 'profile', id: '', key: 'profile', name: '个人中心', icon: 'User' });
-  if (auth.isAdmin) {
-    sysSubs.push(
-      { type: 'leaf', kind: 'sys-dingtalk', id: '', name: '钉钉设置', icon: 'ChatDotRound' },
-      { type: 'leaf', kind: 'sys-aeolus', id: '', name: '风神设置', icon: 'Key' },
-      { type: 'leaf', kind: 'sys-minio', id: '', name: 'MinIO 设置', icon: 'Picture' },
-      { type: 'leaf', kind: 'sys-managers', id: '', name: '站点负责人设置', icon: 'UserFilled' },
-      { type: 'leaf', kind: 'rbac', id: '', name: '权限管理', icon: 'Tools' },
-      { type: 'leaf', kind: 'bots', id: '', name: '调度设置', icon: 'ChatDotRound' },
-      { type: 'leaf', kind: 'operationLog', id: '', key: 'operationLog', name: '操作日志', icon: 'Document' },
-    );
-  }
+  const adminEntries = [
+    { type: 'leaf', kind: 'sys-dingtalk', id: '', name: '钉钉设置', icon: 'ChatDotRound', perm: 'admin:bot' },
+    { type: 'leaf', kind: 'sys-aeolus', id: '', name: '风神设置', icon: 'Key', perm: 'admin:aeolus' },
+    { type: 'leaf', kind: 'sys-minio', id: '', name: 'MinIO 设置', icon: 'Picture', perm: 'admin:minio' },
+    { type: 'leaf', kind: 'sys-managers', id: '', name: '站点负责人设置', icon: 'UserFilled', perm: 'config:write' },
+    { type: 'leaf', kind: 'rbac', id: '', name: '权限管理', icon: 'Tools', perm: 'admin:users' },
+    { type: 'leaf', kind: 'bots', id: '', name: '调度设置', icon: 'ChatDotRound', perm: 'admin:bot' },
+    { type: 'leaf', kind: 'operationLog', id: '', key: 'operationLog', name: '操作日志', icon: 'Document', perm: 'admin:roles' },
+  ];
+  sysSubs.push(...adminEntries.filter((e) => auth.hasPerm(e.perm)));
   items.push({ type: 'parent', key: 'sys', name: '系统设置', icon: 'Setting', kind: 'syscfg', children: sysSubs });
   return items;
 });

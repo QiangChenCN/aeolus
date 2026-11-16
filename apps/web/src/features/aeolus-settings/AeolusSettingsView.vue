@@ -37,7 +37,7 @@
           type="primary"
           :loading="verifying"
           :disabled="!(masked.hasAccount && masked.hasPassword)"
-          @click="runVerify"
+          v-perm="'admin:aeolus'" @click="runVerify"
         >
           验证登录
         </el-button>
@@ -70,7 +70,7 @@
               />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+              <el-button type="primary" :loading="saving" v-perm="'admin:aeolus'" @click="save">保存</el-button>
               <el-button @click="editing = false">取消</el-button>
               <span class="muted">保存后立即生效，并自动跑一遍登录验证（获取 cookie 确认账号密码正确）。</span>
             </el-form-item>

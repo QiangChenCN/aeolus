@@ -23,10 +23,17 @@ export const useAuthStore = defineStore('auth', {
     phone: null,
     email: null,
     mustChange: false,
+    /** /auth/me 返回的权限点；前端仅用于界面收敛，真正的安全边界在后端 AccessGuard。 */
+    perms: [],
+    /** 后端权限快照签名，用于发现角色权限被改而前端缓存未刷新的情况。 */
+    permsSig: '',
+    lastPermsCheck: 0,
   }),
   getters: {
     authenticated: (s) => !!s.user,
     isAdmin: (s) => s.role === 'admin',
+    /** 与后端 hasPerm 同口径：admin 角色直通，其余按权限点判定。 */
+    hasPerm: (s) => (perm) => s.role === 'admin' || (Array.isArray(s.perms) && s.perms.includes(perm)),
   },
   actions: {
     // 启动时：调 /auth/me 校验会话 Cookie；有效则填充用户信息，无效则保持未登录（由路由守卫跳登录页）。
@@ -43,6 +50,8 @@ export const useAuthStore = defineStore('auth', {
               this.phone = data.phone ?? null;
               this.email = data.email ?? null;
               this.mustChange = !!data.must_change;
+              this.perms = Array.isArray(data.perms) ? data.perms : [];
+              this.permsSig = data.perms_sig || '';
             }
           } catch (e) { /* 未登录 / 网络异常：保持 user=null，等待守卫重定向 */ }
         })();
@@ -58,9 +67,38 @@ export const useAuthStore = defineStore('auth', {
         this.phone = data.phone ?? null;
         this.email = data.email ?? null;
         this.mustChange = !!data.must_change;
+        // signin 响应不含权限点，补一次 /me 拉取，避免菜单/按钮按空权限渲染。
+        await this.reloadPerms();
         return data;
       }
       throw new Error((data && data.error) || '登录失败');
+    },
+    /** 单独刷新权限点与签名。 */
+    async reloadPerms() {
+      try {
+        const data = await apiMe();
+        if (data && data.authenticated) {
+          this.perms = Array.isArray(data.perms) ? data.perms : [];
+          this.permsSig = data.perms_sig || '';
+        }
+      } catch (e) { /* ignore */ }
+    },
+    /**
+     * 角色权限被管理员改动后，后端即时生效但前端 perms 是登录时缓存的。
+     * 路由切换时非阻塞调用：按签名比对，仅变化时刷新；15 秒节流避免每次导航都打 /me。
+     */
+    async refreshPermsIfChanged() {
+      if (!this.authenticated) return;
+      const now = Date.now();
+      if (now - this.lastPermsCheck < 15_000) return;
+      this.lastPermsCheck = now;
+      try {
+        const data = await apiMe();
+        if (data && data.authenticated && data.perms_sig !== this.permsSig) {
+          this.perms = Array.isArray(data.perms) ? data.perms : [];
+          this.permsSig = data.perms_sig || '';
+        }
+      } catch (e) { /* ignore */ }
     },
     async signout() {
       try { await apiSignout(); } catch (e) { /* ignore */ }
@@ -68,6 +106,9 @@ export const useAuthStore = defineStore('auth', {
       this.user = null; this.role = null; this.avatar = null;
       this.name = null; this.phone = null; this.email = null;
       this.mustChange = false;
+      this.perms = [];
+      this.permsSig = '';
+      this.lastPermsCheck = 0;
       this.requireLogin();
     },
     /**
@@ -84,6 +125,8 @@ export const useAuthStore = defineStore('auth', {
         this.phone = data.phone ?? null;
         this.email = data.email ?? null;
         this.mustChange = !!data.must_change;
+        this.perms = Array.isArray(data.perms) ? data.perms : [];
+        this.permsSig = data.perms_sig || '';
         return true;
       }
       clearBearerToken();

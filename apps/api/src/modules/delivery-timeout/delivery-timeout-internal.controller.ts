@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Controller, Get, Logger, Query } from '@nestjs/common';
 import { DeliveryTimeoutOrdersStoreService } from './delivery-timeout-orders-store.service';
 import { todayYmd } from '../../infra/fetch/storage/raw-cache.service';
@@ -26,6 +27,7 @@ export class DeliveryTimeoutInternalController {
    * 返回 `{ok, date, team, rows, total, fetched_at}`；表不可用/参数缺失时 `ok:false` ——
    * Python 侧把它等同于旧版的「None」（判 need_refresh），语义保持一致。
    */
+  @RequirePerm('machine')
   @Get('orders')
   async orders(@Query('team') team?: string, @Query('date') date?: string) {
     if (!this.store.ready) {
@@ -45,6 +47,7 @@ export class DeliveryTimeoutInternalController {
   }
 
   /** 诊断：某天全站入库行数与最近入库时间。 */
+  @RequirePerm('machine')
   @Get('status')
   async status(@Query('date') date?: string) {
     if (!this.store.ready) return { ok: false, error: 'PG 未启用（DATABASE_URL 未配置）' };

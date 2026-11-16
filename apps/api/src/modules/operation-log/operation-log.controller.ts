@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Controller, Get, Query } from '@nestjs/common';
 import { OperationLogService, OperationLogQuery } from './operation-log.service';
 
@@ -10,6 +11,7 @@ import { OperationLogService, OperationLogQuery } from './operation-log.service'
 export class OperationLogController {
   constructor(private readonly log: OperationLogService) {}
 
+  @RequirePerm('admin:roles')
   @Get()
   async list(
     @Query('limit') limit?: string,

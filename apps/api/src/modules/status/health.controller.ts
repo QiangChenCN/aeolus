@@ -1,3 +1,4 @@
+import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { Controller, Get } from '@nestjs/common';
 import { HealthService } from './health.service';
 
@@ -12,6 +13,7 @@ import { HealthService } from './health.service';
 export class HealthController {
   constructor(private readonly svc: HealthService) {}
 
+  @RequirePerm('self')
   @Get('health')
   async health() {
     return this.svc.snapshot();
