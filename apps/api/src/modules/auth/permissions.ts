@@ -15,7 +15,7 @@ export const PERM_CATALOG: PermItem[] = [
   { perm: 'file:read', label: '读取文件/下载', group: '数据' },
   { perm: 'task:run', label: '执行任务', group: '操作' },
   { perm: 'data:refresh', label: '刷新数据', group: '操作' },
-  { perm: 'cron:write', label: '编辑自动任务', group: '操作' },
+  { perm: 'cron:write', label: '编辑定时任务', group: '操作' },
   { perm: 'groups:write', label: '管理分组', group: '操作' },
   { perm: 'config:write', label: '修改系统配置', group: '配置' },
   { perm: 'realtime:targets', label: '考核目标配置', group: '配置' },
@@ -38,6 +38,8 @@ export const GET_ROUTE_PERMS: Record<string, string> = {
   '/api/admin/roles': 'admin:roles',
   '/api/policy': 'admin:policy',
   '/api/data-perms': 'admin:data-perm',
+  // 自动任务页运行记录（新增端点必须显式登记，否则默认降级为 view）
+  '/api/cron/auto-runs': 'view',
   '/api/service-quality/targets': 'view',
   '/api/service-quality/weather': 'view',
   '/api/delivery-timeout/teams': 'config:write',
@@ -75,6 +77,8 @@ export const POST_ROUTE_PERMS: Record<string, string> = {
   '/api/cron/items': 'cron:write',
   '/api/cron/trigger': 'cron:write',
   '/api/cron/import': 'cron:write',
+  // 自动执行总开关：暂停/恢复全局调度是强操作，必须限 cron:write
+  '/api/cron/auto-paused': 'cron:write',
   '/api/groups/used': 'groups:write',
   '/api/groups/forget': 'groups:write',
   '/api/admin/user': 'admin:users',

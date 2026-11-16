@@ -6,6 +6,7 @@ import TaskCenterView from '../features/task-center/TaskCenterView.vue';
 import HistoryView from '../features/history/HistoryView.vue';
 import PresetView from '../features/preset/PresetView.vue';
 import CronView from '../features/cron/CronView.vue';
+import AutoRunsView from '../features/cron/AutoRunsView.vue';
 import StandardView from '../features/standard/StandardView.vue';
 import AssessServiceView from '../features/assess-service/AssessServiceView.vue';
 import AssessStandardView from '../features/assess-standard/AssessStandardView.vue';
@@ -51,7 +52,8 @@ const routes = [
       { path: 'tasks', name: 'tasks-all', component: TaskCenterView, meta: { title: '全部任务', kind: 'tasks', id: 'all' } },
       { path: 'history', name: 'history', component: HistoryView, meta: { title: '运行记录', kind: 'history', id: '' } },
       { path: 'preset', name: 'preset', component: PresetView, meta: { title: '预设' } },
-      { path: 'cron', name: 'cron', component: CronView, meta: { title: '自动任务', kind: 'cron' } },
+      { path: 'cron', name: 'cron', component: CronView, meta: { title: '定时任务', kind: 'cron' } },
+      { path: 'cron-runs', name: 'cron-runs', component: AutoRunsView, meta: { title: '自动任务', kind: 'cron-runs' } },
       { path: 'assess', name: 'assess', component: AssessView, redirect: { name: 'assess-service' }, meta: { title: '考核设置', kind: 'assess' },
         children: [
           { path: 'service', name: 'assess-service', component: AssessServiceView, meta: { title: '服务质量设置', kind: 'assessService', id: '' } },
@@ -122,6 +124,11 @@ router.beforeEach(async (to) => {
   // 这里若改成「只在未引导时才等」，就会与 App.vue 的 onMounted 抢跑，
   // 拿到未填充的登录态而误判未登录。
   await auth.bootstrap();
+
+  // 初始密码未修改：后端已拦截所有业务接口，前端同步把用户钉在个人中心改密
+  if (auth.authenticated && auth.mustChange && to.path !== '/settings/profile') {
+    return { path: '/settings/profile' };
+  }
 
   if (to.meta && to.meta.public) {
     if (auth.authenticated) return { path: '/' };

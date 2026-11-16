@@ -32,6 +32,13 @@ export function importCron(lists, items) {
 export function fetchCronRuns(itemId, limit = 20) {
   return request('/cron/runs?item_id=' + enc(itemId) + '&limit=' + limit);
 }
+/* 自动任务页：调度触发的运行记录 + 今日统计 + 下次执行 */
+export function fetchCronAutoRuns(status = '', limit = 100) {
+  const p = [];
+  if (status) p.push('status=' + enc(status));
+  p.push('limit=' + limit);
+  return request('/cron/auto-runs?' + p.join('&'));
+}
 
 /* ============ 群组 ============ */
 export function fetchGroups(q) {

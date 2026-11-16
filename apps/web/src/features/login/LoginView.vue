@@ -133,8 +133,8 @@ const inDingtalk = ref(false);
 const dtLoading = ref(false);
 const dtStatus = ref(''); // idle | logging | unbound | failed
 const dtMessage = ref('');
-/** 免登返回「未绑定」时记住的钉钉身份，待账密登录成功后自动绑定。 */
-const pendingUnionid = ref('');
+/** 免登返回「未绑定」时记住的一次性绑定凭证，待账密登录成功后自动绑定。 */
+const pendingBindToken = ref('');
 
 function redirectTarget() {
   return typeof route.query.redirect === 'string' && route.query.redirect
@@ -148,18 +148,22 @@ async function submit() {
   loading.value = true;
   try {
     await auth.signin(username.value, password.value, remember.value);
-    // 登录成功后，若有「待绑定的钉钉身份」则自动绑定当前账号：
-    //   · 钉钉内免登未绑定（pendingUnionid）
-    //   · 浏览器 OAuth 回跳未绑定（URL 上带 dingtalk=needbind&unionid=…）
-    // 绑定后下次打开即可直接免登；失败不影响本次登录。
-    const uid =
-      pendingUnionid.value ||
-      (route.query.dingtalk === 'needbind' && typeof route.query.unionid === 'string'
-        ? route.query.unionid
+    // 初始密码必须先改：后端已拦截其它接口，这里先把用户送到个人中心
+    if (auth.mustChange) {
+      router.replace('/settings/profile');
+      return;
+    }
+    // 登录成功后，若有「已通过钉钉验证的待绑定凭证」则自动绑定当前账号：
+    //   · 钉钉内免登未绑定（JSAPI 返回的 bindToken）
+    //   · 浏览器 OAuth 回跳未绑定（URL 上带 dingtalk=needbind&bindToken=…）
+    const bindToken =
+      pendingBindToken.value ||
+      (route.query.dingtalk === 'needbind' && typeof route.query.bindToken === 'string'
+        ? route.query.bindToken
         : '');
-    if (uid) {
+    if (bindToken) {
       try {
-        await dingtalkBind(undefined, uid);
+        await dingtalkBind(undefined, bindToken);
       } catch (e) {
         // 绑定失败不影响本次登录（下次仍会提示绑定，也可由管理员在账号管理中处理）
         // eslint-disable-next-line no-console
@@ -290,14 +294,14 @@ async function autoDingtalkLogin() {
     if (data && data.ok && data.token) {
       const ok = await auth.applyDingtalkSession(data.token);
       if (ok) {
-        router.replace(redirectTarget());
+        router.replace(auth.mustChange ? '/settings/profile' : redirectTarget());
         return;
       }
     } else if (data && data.needBind) {
       dtStatus.value = 'unbound';
       // 记住这个钉钉身份：用户用已分配的账号登录后会自动完成绑定，之后即可免登。
       // 不再依赖管理员手工绑定，也不再自动开户（那样会造出 dt_<unionid> 这类无意义的账号）。
-      pendingUnionid.value = data.unionid || '';
+      pendingBindToken.value = data.bindToken || '';
       dtMessage.value =
         '该钉钉身份尚未绑定本系统账号。请用你已分配的账号（工号）登录 —— ' +
         '登录成功后会自动绑定当前钉钉，下次打开即可直接免登。';
@@ -330,7 +334,7 @@ onMounted(async () => {
   // OAuth 回跳的三种结果都要落到界面上。此前只处理了 needbind，error / disabled 一律
   // 被忽略 —— 一旦换取身份或读通讯录失败，用户看到的就是「回到登录页、毫无反应」。
   const dt = route.query.dingtalk;
-  if (dt === 'needbind' && typeof route.query.unionid === 'string') {
+  if (dt === 'needbind' && typeof route.query.bindToken === 'string') {
     dtStatus.value = 'unbound';
     dtMessage.value =
       '钉钉已认证成功，但该钉钉身份尚未绑定本系统账号。请用工号密码登录 —— 登录成功后会自动完成绑定，之后即可直接免登。';

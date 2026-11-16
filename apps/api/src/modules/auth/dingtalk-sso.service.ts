@@ -84,10 +84,10 @@ export class DingtalkSsoService {
   }
 
   /** 给前端的公开配置：是否启用、corpId（JSAPI 免登需要）、OAuth 授权页地址。 */
-  getPublicConfig(): Record<string, unknown> {
+  getPublicConfig(state: string): Record<string, unknown> {
     if (!this.isEnabled()) return { enabled: false, corpId: '', authorizeUrl: '' };
     const c = this.effectiveConfig();
-    return { enabled: true, corpId: c.corpId, authorizeUrl: this.buildAuthorizeUrl() };
+    return { enabled: true, corpId: c.corpId, authorizeUrl: this.buildAuthorizeUrl(state) };
   }
 
   /** 给设置页的脱敏配置（appSecret 不返回明文，仅用 appSecretSet 标记是否已设置）。 */
@@ -145,9 +145,8 @@ export class DingtalkSsoService {
    *  内部应用浏览器登录：先用 userAccessToken 这个「用户 AccessToken」去调 contact/users/me
    *  取 unionid，因此授权 scope 必须包含 Contact.User.Read（通讯录个人信息读权限）。
    *  同时带上 openid 作为兜底——若令牌响应直接带回 unionId 则可省一次调用。 */
-  private buildAuthorizeUrl(): string {
+  private buildAuthorizeUrl(state: string): string {
     const c = this.effectiveConfig();
-    const state = 'wb';
     return (
       'https://login.dingtalk.com/oauth2/auth?redirect_uri=' +
       encodeURIComponent(c.oauthRedirectUri) +

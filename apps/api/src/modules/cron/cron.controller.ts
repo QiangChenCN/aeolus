@@ -52,6 +52,36 @@ export class CronController {
     return { ok: true, runs: await this.store.itemRuns(itemId, lim) };
   }
 
+  /** 自动任务页：调度触发的运行记录 + 今日统计 + 下次执行时间 + 调度器诊断日志。 */
+  @Get('cron/auto-runs')
+  async getAutoRuns(@Query('status') status = '', @Query('limit') limit = '100') {
+    const lim = Math.max(1, Math.min(500, parseInt(limit, 10) || 100));
+    const st = (status || '').trim();
+    const rows = await this.store.recentRuns(lim, st);
+    const runs = rows.map((r) => {
+      const tid = String(r['item_task_id'] || '');
+      const task = tid ? this.registry.get(tid) : undefined;
+      return { ...r, task_name: (task && task['name']) || tid || '' };
+    });
+    // 下次自动执行：开启自动执行且未完成的事项里最近的 remind_at
+    const items = await this.store.listItems();
+    const upcoming = items
+      .filter((it) => Number(it['auto_run']) === 1 && it['status'] === 'open' && it['remind_at'])
+      .map((it) => ({ remind_at: String(it['remind_at']), title: String(it['title']) }))
+      .sort((a, b) => a.remind_at.localeCompare(b.remind_at));
+    return {
+      ok: true,
+      runs,
+      stats: await this.store.runStatsToday(),
+      next: upcoming[0] || null,
+      scheduler: {
+        running: this.scheduler.isAlive(),
+        auto_paused: (await this.store.getMeta('auto_paused', '0')) === '1',
+        log: this.scheduler.recentLog(),
+      },
+    };
+  }
+
   @Post('cron/lists')
   async postLists(@Body() data: Record<string, unknown>) {
     const op = data['op'];

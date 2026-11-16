@@ -7,6 +7,7 @@ import * as path from 'path';
 import compression from 'compression';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { normalizeRequestPath } from './common/guards/access.guard';
 import { loadAppConfig } from './config/configuration';
 import { injectMachineToken, resolveIndexHtml } from './common/serve-html.util';
 import { dirs } from './config/paths';
@@ -29,10 +30,45 @@ console.log(`[shared] monorepo name = ${AEOLUS_MONOREPO_NAME}`);
  */
 const BODY_LIMIT = '16mb';
 
+/**
+ * 登录端点限流（内存滑动窗口）：无第三方依赖，按 IP + 用户名双维度限制。
+ * 只覆盖「无会话建会话」的入口，防止在线爆破；正常业务接口不受影响。
+ */
+interface AttemptBucket { count: number; resetAt: number }
+const LOGIN_WINDOW_MS = 60_000;
+const LOGIN_MAX_PER_IP = 20;
+const LOGIN_MAX_PER_USER = 10;
+const loginBuckets = new Map<string, AttemptBucket>();
+
+function consumeLoginAttempt(key: string, max: number): boolean {
+  const now = Date.now();
+  const bucket = loginBuckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    loginBuckets.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    return true;
+  }
+  if (bucket.count >= max) return false;
+  bucket.count++;
+  return true;
+}
+
+const loginBucketSweeper = setInterval(() => {
+  const now = Date.now();
+  for (const [key, b] of loginBuckets) if (b.resetAt <= now) loginBuckets.delete(key);
+}, 5 * 60 * 1000);
+loginBucketSweeper.unref?.();
+
 async function bootstrap(): Promise<void> {
   // bodyParser: false —— 必须自己注册：框架默认那对解析器（100kb）会先于下面注册，
   // 大 body 仍然会被它先拒掉，`useBodyParser` 加在默认之后是无效的（顺序即生效顺序）。
   const app = await NestFactory.create(AppModule, { bodyParser: false });
+
+  // trust proxy 只信任回环（Nginx 与后端同机），让 req.secure 能识别 X-Forwarded-Proto，
+  // 从而给会话 Cookie 正确加上 Secure 标志；不信任外部伪造的转发头。
+  // 注意：strict/case-sensitive routing 必须在 express() 创建前设置才生效，Nest 初始化后
+  // 再 app.set 已晚（router 已 lazy 创建），因此路径变体改由下面的早期中间件直接拒绝。
+  const expressApp = app.getHttpAdapter().getInstance() as express.Express;
+  expressApp.set('trust proxy', 'loopback');
 
   // 响应压缩：前端 bundle / API JSON 经 gzip 传输，显著降低首屏与刷新的传输体积。
   // 跳过 SSE（text/event-stream）实时日志流，避免缓冲破坏逐块推送。
@@ -47,6 +83,35 @@ async function bootstrap(): Promise<void> {
   );
   app.use(express.json({ limit: BODY_LIMIT }));
   app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
+
+  // 拒绝 API 路径变体（尾斜杠 / 大小写 / 重复斜杠 / 百分号编码）：
+  // Express 路由容忍这些变体，而 Guard 的权限表按规范化路径查表 —— 若放任，二者口径
+  // 不一致会让 `/api/admin/user/`、`/API/ADMIN/USER` 以 view 权限命中管理员接口。
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const raw = (req.url || '/').split('?')[0];
+    if (raw.startsWith('/api') && raw !== normalizeRequestPath(raw)) {
+      res.status(404).json({ code: 404, message: 'Not Found', path: raw });
+      return;
+    }
+    next();
+  });
+
+  // 登录限流：放在 Nest 路由之前，命中阈值直接 429，不进入 AuthService（避免 scrypt 开销）。
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.method !== 'POST') return next();
+    const p = (req.path || '').toLowerCase().replace(/\/+$/, '');
+    if (p !== '/api/auth/signin' && p !== '/api/auth/dingtalk/jsapi') return next();
+    const ip = (req.get('x-real-ip') || req.ip || req.socket?.remoteAddress || '-') as string;
+    const body = req.body as Record<string, unknown> | undefined;
+    const user = String((body && body['username']) || '').slice(0, 128);
+    if (!consumeLoginAttempt('ip:' + ip, LOGIN_MAX_PER_IP) ||
+        (user && !consumeLoginAttempt('user:' + user.toLowerCase(), LOGIN_MAX_PER_USER))) {
+      res.status(429).json({ ok: false, error: '尝试次数过多，请稍后再试' });
+      return;
+    }
+    next();
+  });
+
   const config = loadAppConfig();
 
   // 静态资源托管（替代 @nestjs/serve-static 挂在 `/` 的整站拦截）：

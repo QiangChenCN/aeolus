@@ -41,9 +41,12 @@ export class AdminController {
     }
   }
   @Post('admin/user/update')
-  updateUser(@Body() b: Record<string, any>) {
+  updateUser(@Body() b: Record<string, any>, @Req() req: Request) {
     try {
-      this.auth.updateUser(b.username, b.role, b.disabled, b.name, b.phone, b.email);
+      this.auth.updateUser(
+        b.username, b.role, b.disabled, b.name, b.phone, b.email,
+        extractToken(req), // 保留操作者自己的会话，防止管理员把自己禁用后当场掉线导致无法回滚
+      );
       return { ok: true };
     } catch (e) {
       return { ok: false, error: (e as Error).message };

@@ -10,10 +10,11 @@ export class AccountController {
 
   @Post('account/change-pw')
   changePw(@Body() b: { old_password?: string; new_password?: string }, @Req() req: Request) {
-    const s = this.auth.getSession(extractToken(req));
+    const token = extractToken(req);
+    const s = this.auth.getSession(token);
     if (!s) return { ok: false, error: 'unauthorized' };
     try {
-      this.auth.changePassword(s.user, b.old_password || '', b.new_password || '');
+      this.auth.changePassword(s.user, b.old_password || '', b.new_password || '', token);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: (e as Error).message };

@@ -16,6 +16,7 @@ export function navTo(it) {
     case 'imContact': return '/im-contact';
     case 'unsatisfied': return '/unsatisfied';
     case 'cron': return '/cron';
+    case 'cron-runs': return '/cron-runs';
     case 'assessService': return '/assess/service';
     case 'assessStandard': return '/assess/standard';
     case 'assessPeriod': return '/assess/period';

@@ -51,7 +51,8 @@ const navItems = computed(() => {
   const workChildren = [
     { type: 'leaf', key: 'hub', kind: 'tasks', id: 'all', name: '任务中心', icon: 'Grid', count: tasks.tasks.length },
     { type: 'leaf', key: 'history', kind: 'history', id: '', name: '运行记录', icon: 'Clock', count: runs.history.length },
-    { type: 'leaf', key: 'cron', kind: 'cron', id: '', name: '自动任务', icon: 'List' },
+    { type: 'leaf', key: 'cron-runs', kind: 'cron-runs', id: '', name: '自动任务', icon: 'AlarmClock' },
+    { type: 'leaf', key: 'cron', kind: 'cron', id: '', name: '定时任务', icon: 'List' },
   ];
   items.push({ type: 'parent', key: 'work', name: '工作任务', icon: 'List', children: workChildren });
 

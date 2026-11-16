@@ -723,6 +723,28 @@ export class CronStoreService implements OnModuleInit {
     return this.all('SELECT * FROM cron_run WHERE item_id=$1 ORDER BY id DESC LIMIT $2', itemId, limit);
   }
 
+  /** 自动任务页：最近的调度触发记录（联 cron_item 取事项标题/任务 id，可选按状态过滤）。 */
+  async recentRuns(limit = 100, status = ''): Promise<Row[]> {
+    const base = 'SELECT r.*, i.title AS item_title, i.task_id AS item_task_id' +
+      ' FROM cron_run r LEFT JOIN cron_item i ON i.id=r.item_id';
+    if (status) {
+      return this.all(base + ' WHERE r.status=$2 ORDER BY r.id DESC LIMIT $1', limit, status);
+    }
+    return this.all(base + ' ORDER BY r.id DESC LIMIT $1', limit);
+  }
+
+  /** 今日（自然日，排除手动触发 manual:*）各状态触发计数。 */
+  async runStatsToday(): Promise<Record<string, number>> {
+    const today = this.nowStr().slice(0, 10);
+    const rows = await this.all(
+      "SELECT status, COUNT(*) AS c FROM cron_run WHERE left(due_at,10)=$1 AND due_at NOT LIKE 'manual:%' GROUP BY status",
+      today,
+    );
+    const out: Record<string, number> = {};
+    for (const r of rows) out[String(r['status'])] = Number(r['c'] || 0);
+    return out;
+  }
+
   async advanceAfterRun(iid: string): Promise<Row | null> {
     const row = await this.getItem(iid);
     if (!row) return null;

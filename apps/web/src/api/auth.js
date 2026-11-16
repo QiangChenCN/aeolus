@@ -47,10 +47,11 @@ export async function dingtalkJsapi(authCode) {
     body: JSON.stringify({ authCode }),
   });
 }
-export async function dingtalkBind(username, unionid) {
+// bindToken 是服务端经钉钉验证后签发的一次性凭证；不再由前端传 unionid
+export async function dingtalkBind(username, bindToken) {
   return request('/auth/dingtalk/bind', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, unionid }),
+    body: JSON.stringify({ username, bindToken }),
   });
 }

@@ -47,6 +47,24 @@ const EXEMPT_MACHINE = new Set([
   '/api/health',
 ]);
 
+/**
+ * 路径规范化：Guard 的路由→权限表是精确字符串匹配，而 Express/Nest 路由大小写不敏感且
+ * 容忍尾斜杠。若直接拿原始 req.url 查表，`/api/admin/user/`、`/API/ADMIN/USER` 都会
+ * 落回默认 'view'，但 Express 仍会路由到管理员接口 —— 低权限用户可借此提权。
+ * 这里把路径统一为「小写 + 去尾斜杠 + 折叠重复斜杠」，保证查表口径与路由命中口径一致。
+ */
+export function normalizeRequestPath(url: string): string {
+  let p = (url || '/').split('?')[0];
+  try {
+    p = decodeURIComponent(p);
+  } catch {
+    /* 非法百分号编码：保持原样，Express 也不会匹配到合法路由 */
+  }
+  p = p.replace(/\/{2,}/g, '/').toLowerCase();
+  if (p.length > 1) p = p.replace(/\/+$/, '');
+  return p || '/';
+}
+
 @Injectable()
 export class AccessGuard implements CanActivate {
   constructor(
@@ -58,7 +76,7 @@ export class AccessGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<Request>();
     // 操作日志：先解析「谁在操作」挂到 req.actor，供全局 OperationLogMiddleware 在响应结束时读取
     (req as unknown as { actor?: string }).actor = this.resolveActor(req);
-    const path = (req.url || '/').split('?')[0];
+    const path = normalizeRequestPath(req.url || '/');
     const method = (req.method || 'GET').toUpperCase();
 
     // 入口页（HTML + 机器令牌注入）对所有人公开：浏览器首屏 GET / 还没有会话/机器令牌，
@@ -84,17 +102,28 @@ export class AccessGuard implements CanActivate {
     }
 
     // 2) RBAC 会话鉴权
+    const session = this.auth.getSession(this.token(req));
+
+    // 初始密码强制修改：must_change 用户除「改密 / 读自身状态 / 登出」外一律拦截。
+    // /auth/me 与 /auth/logout 在 EXEMPT_MACHINE 白名单里，不会走到这里（前者用于前端引导，
+    // 后者必须允许退出），其余端点（含改密的 /api/account/change-pw）在此裁决。
+    if (
+      session &&
+      this.auth.getUser(session.user)?.must_change &&
+      path !== '/api/account/change-pw'
+    ) {
+      throw new ForbiddenException('请先修改初始密码');
+    }
+
     const perm = routePerm(method, path);
     if (perm === 'self') {
-      if (!this.auth.getSession(this.token(req))) {
-        throw new UnauthorizedException('not logged in');
-      }
+      if (!session) throw new UnauthorizedException('not logged in');
       return true;
     }
     if (perm === 'view') {
-      const s = this.auth.getSession(this.token(req));
-      if (s && this.auth.hasPerm(s.role, 'view')) return true;
-      return true; // 已持机器令牌的系统/iframe 调用放行基线 view
+      // 有会话：按角色判定 view 权限；无会话：说明是持机器令牌的系统/iframe 调用，放行基线 view。
+      if (session) return this.auth.hasPerm(session.role, 'view');
+      return true;
     }
     if (perm === 'machine') {
       // 仅内部服务可调用：必须持有效机器令牌，会话不算。
@@ -102,9 +131,8 @@ export class AccessGuard implements CanActivate {
       if (this.machineTokenMatches(req)) return true;
       throw new ForbiddenException('machine token required');
     }
-    const s = this.auth.getSession(this.token(req));
-    if (!s) throw new UnauthorizedException('not logged in');
-    if (this.auth.hasPerm(s.role, perm)) return true;
+    if (!session) throw new UnauthorizedException('not logged in');
+    if (this.auth.hasPerm(session.role, perm)) return true;
     throw new ForbiddenException('permission denied: ' + perm);
   }
 

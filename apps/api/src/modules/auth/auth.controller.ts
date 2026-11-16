@@ -3,7 +3,8 @@ import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { PERM_CATALOG } from './permissions';
 import { DingtalkSsoService } from './dingtalk-sso.service';
-import { extractToken } from '../../common/token.util';
+import { extractToken, getCookie } from '../../common/token.util';
+import { randomBytes } from 'crypto';
 
 // 注意：此前把 auth/* 路由挂在 @Controller('api') 下作为 /api 路由表的嵌套子路径时，
 // Express5 / path-to-regexp v8 在 auth/ 静态子树下出现诡异 bug：auth/logout 这种特定静态
@@ -41,6 +42,7 @@ export class AuthController {
       phone: this.auth.getUser(b.username || '')?.phone ?? null,
       email: this.auth.getUser(b.username || '')?.email ?? null,
       expires_in: r.expiresIn,
+      must_change: r.mustChange,
     };
   }
 
@@ -66,13 +68,21 @@ export class AuthController {
       email: this.auth.getUser(s.user)?.email ?? null,
       perms: [...this.auth.effectivePerms(s.role)],
       catalog: PERM_CATALOG,
+      must_change: !!this.auth.getUser(s.user)?.must_change,
     };
   }
 
   /** 前端探测：钉钉登录是否启用 + corpId + OAuth 授权地址（公开，用于决定是否渲染钉钉登录）。 */
   @Get('dingtalk/config')
-  dingtalkConfig() {
-    return this.ding.getPublicConfig();
+  dingtalkConfig(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    // 每次取授权地址都生成一次性 state 并写 HttpOnly Cookie，回调时比对，防登录 CSRF
+    const state = randomBytes(16).toString('hex');
+    const parts = [
+      `wb_dtstate=${state}`, 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Max-Age=600',
+    ];
+    if (req.secure) parts.push('Secure');
+    res.setHeader('Set-Cookie', parts.join('; '));
+    return this.ding.getPublicConfig(state);
   }
 
   /** 设置页读取钉钉 SSO 配置（脱敏；appSecret 不返回明文）。需 admin:bot。 */
@@ -117,7 +127,11 @@ export class AuthController {
     try {
       const id = await this.ding.exchangeJsapiCode(b.authCode);
       const r = this.auth.resolveDingtalkUser(id.unionid, id.name || '', this.ip(req), false);
-      if ('needBind' in r) return { ok: false, needBind: true, unionid: r.unionid, name: r.name };
+      if ('needBind' in r) {
+        // 只下发一次性绑定凭证，绝不把 unionid 交给前端作为绑定依据
+        const bindToken = this.auth.createDingtalkBind(r.unionid, r.name);
+        return { ok: false, needBind: true, bindToken, name: r.name };
+      }
       this.setSessionCookie(res, r.token, false, req.secure);
       return { ok: true, token: r.token, user: r.user, role: r.role, avatar: this.auth.getUser(r.user)?.avatar ?? null, expires_in: r.expiresIn };
     } catch (e) {
@@ -133,9 +147,17 @@ export class AuthController {
   @Get('dingtalk/oauth-callback')
   async dingtalkOauthCallback(
     @Query('code') code: string,
+    @Query('state') state: string,
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    // state 校验：必须与我们签发并写入 HttpOnly Cookie 的值一致
+    const expectedState = getCookie(req, 'wb_dtstate');
+    res.setHeader('Set-Cookie', 'wb_dtstate=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+    if (!expectedState || !state || state !== expectedState) {
+      res.redirect('/login?dingtalk=error&msg=' + encodeURIComponent('授权状态校验失败，请重新发起登录'));
+      return;
+    }
     if (!this.ding.isEnabled()) {
       res.redirect('/login?dingtalk=disabled');
       return;
@@ -148,7 +170,8 @@ export class AuthController {
       const id = await this.ding.exchangeOauthCode(code);
       const r = this.auth.resolveDingtalkUser(id.unionid, id.name || '', this.ip(req), false);
       if ('needBind' in r) {
-        res.redirect('/login?dingtalk=needbind&unionid=' + encodeURIComponent(r.unionid));
+        const bindToken = this.auth.createDingtalkBind(r.unionid, r.name);
+        res.redirect('/login?dingtalk=needbind&bindToken=' + encodeURIComponent(bindToken));
         return;
       }
       this.setSessionCookie(res, r.token, false, req.secure);
@@ -165,12 +188,14 @@ export class AuthController {
    */
   @Post('dingtalk/bind')
   @HttpCode(200)
-  dingtalkBind(@Body() b: { username?: string; unionid?: string }, @Req() req: Request) {
+  dingtalkBind(@Body() b: { username?: string; bindToken?: string }, @Req() req: Request) {
     const s = this.auth.getSession(extractToken(req));
     if (!s) throw new UnauthorizedException('请先登录');
+    // unionid 只能来自服务端经钉钉验证后签发的一次性凭证，不接受客户端自报
+    const identity = this.auth.consumeDingtalkBind(b.bindToken);
+    if (!identity) return { ok: false, error: '绑定凭证无效或已过期，请重新通过钉钉登录发起绑定' };
     const username = this.auth.hasPerm(s.role, 'admin:users') ? b.username || s.user : s.user;
-    if (b.unionid === undefined) return { ok: false, error: '缺少 unionid' };
-    this.auth.bindDingtalk(username, b.unionid);
+    this.auth.bindDingtalk(username, identity.unionid);
     return { ok: true };
   }
 

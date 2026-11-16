@@ -1,5 +1,14 @@
 <template>
   <div class="pi">
+    <el-alert
+      v-if="auth.mustChange"
+      class="pi-must-change"
+      type="warning"
+      show-icon
+      :closable="false"
+      title="首次登录请先修改初始密码"
+      description="为保障账号安全，修改密码前无法访问其它功能。"
+    />
     <!-- 通栏资料头 -->
     <section class="pi-hero">
       <div class="pi-hero-main">
@@ -196,6 +205,7 @@ async function savePw() {
   savingPw.value = true;
   try {
     await changePw({ old_password: pwForm.old, new_password: pwForm.next });
+    auth.mustChange = false;
     ElMessage.success('密码已修改');
     pwDlg.value = false;
   } catch (e) {

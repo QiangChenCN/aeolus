@@ -22,6 +22,7 @@ export const useAuthStore = defineStore('auth', {
     name: null,
     phone: null,
     email: null,
+    mustChange: false,
   }),
   getters: {
     authenticated: (s) => !!s.user,
@@ -41,6 +42,7 @@ export const useAuthStore = defineStore('auth', {
               this.name = data.name ?? null;
               this.phone = data.phone ?? null;
               this.email = data.email ?? null;
+              this.mustChange = !!data.must_change;
             }
           } catch (e) { /* 未登录 / 网络异常：保持 user=null，等待守卫重定向 */ }
         })();
@@ -55,6 +57,7 @@ export const useAuthStore = defineStore('auth', {
         this.name = data.name ?? null;
         this.phone = data.phone ?? null;
         this.email = data.email ?? null;
+        this.mustChange = !!data.must_change;
         return data;
       }
       throw new Error((data && data.error) || '登录失败');
@@ -64,6 +67,7 @@ export const useAuthStore = defineStore('auth', {
       clearBearerToken(); // 清掉 iframe/JSAPI 场景下的 X-Token 内存态
       this.user = null; this.role = null; this.avatar = null;
       this.name = null; this.phone = null; this.email = null;
+      this.mustChange = false;
       this.requireLogin();
     },
     /**
@@ -79,6 +83,7 @@ export const useAuthStore = defineStore('auth', {
         this.name = data.name ?? null;
         this.phone = data.phone ?? null;
         this.email = data.email ?? null;
+        this.mustChange = !!data.must_change;
         return true;
       }
       clearBearerToken();

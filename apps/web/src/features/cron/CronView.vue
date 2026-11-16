@@ -1,8 +1,8 @@
 <template>
   <div class="auto">
     <div class="auto-bar">
-      <h2 class="v-title">自动任务</h2>
-      <span class="v-sub">按时间线管理自动任务，绑定手动任务后可定时 / 自动执行</span>
+      <h2 class="v-title">定时任务</h2>
+      <span class="v-sub">按时间线管理定时任务，绑定手动任务后可定时 / 自动执行</span>
       <el-switch v-model="autoRunEnabled" @change="toggleAuto" inline-prompt
         active-text="自动开" inactive-text="已暂停" class="auto-sw" title="总开关：关闭后暂停所有自动任务的自动执行" />
       <span class="sp" />
@@ -47,10 +47,10 @@
       </el-timeline-item>
     </el-timeline>
 
-    <div v-else class="auto-state auto-empty">还没有自动任务，点击右上角「新建任务」开始。</div>
+    <div v-else class="auto-state auto-empty">还没有定时任务，点击右上角「新建任务」开始。</div>
 
     <!-- 新建 / 编辑任务 -->
-    <el-dialog v-model="dlg" :title="form.id ? '编辑自动任务' : '新建自动任务'" width="640px">
+    <el-dialog v-model="dlg" :title="form.id ? '编辑定时任务' : '新建定时任务'" width="640px">
       <el-form label-width="92px">
         <el-form-item label="绑定任务" required>
           <el-select v-model="form.taskId" clearable filterable placeholder="选择已创建的手动任务（必选，任务名即取自它）" style="width:100%">
@@ -354,7 +354,7 @@ async function save() {
 }
 
 async function removeItem(it) {
-  if (!(await app.confirmDialog({ message: `删除自动任务「${it.title}」？` }))) return;
+  if (!(await app.confirmDialog({ message: `删除定时任务「${it.title}」？` }))) return;
   try { await postCronItem('delete', { id: it.id }); ElMessage.success('已删除'); await load(); }
   catch (e) { ElMessage.error(e.message || '删除失败'); }
 }

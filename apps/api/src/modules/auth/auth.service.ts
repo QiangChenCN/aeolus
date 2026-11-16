@@ -102,6 +102,15 @@ const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 const SCRYPT_DKLEN = 64;
 
+// 用户名不存在时也执行一次同参数 scrypt，抹平「存在/不存在」的响应耗时差，避免时序枚举。
+const DUMMY_SALT = Buffer.alloc(16, 7);
+const DUMMY_KEY = scryptSync('not-a-real-password', DUMMY_SALT, SCRYPT_DKLEN, {
+  N: SCRYPT_N,
+  r: SCRYPT_R,
+  p: SCRYPT_P,
+});
+const DUMMY_HASH = DUMMY_SALT.toString('hex') + '$' + DUMMY_KEY.toString('hex');
+
 const ROLES_SEED: Record<string, RoleRecord> = {
   admin: { perms: [], parents: [], builtin: true, locked: true, all: true },
   operator: {
@@ -150,6 +159,8 @@ function nowStr(): string {
 export class AuthService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AuthService.name);
   private readonly sessions = new Map<string, Session>();
+  /** 钉钉未绑定身份的短期凭证：只有经钉钉接口验证过的 unionid 才能进入此表。 */
+  private readonly pendingBinds = new Map<string, { unionid: string; name: string; exp: number }>();
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
   /** 内存态：启动时全量载入，读写都走这里（同步 API 需要），写操作再异步落盘。 */
   private users: UserRecord[] = [];
@@ -196,6 +207,9 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     }
     if (removed > 0) {
       this.logger.debug(`清理过期会话 ${removed} 个，剩余 ${this.sessions.size} 个`);
+    }
+    for (const [nonce, b] of this.pendingBinds) {
+      if (b.exp <= now) this.pendingBinds.delete(nonce);
     }
     // 周期性快照：滑动续期只改内存里的 exp，靠这里把最新值写回持久层。
     // 不做每次请求都写 —— 那样 QPS 一高就是持续 IO。
@@ -496,10 +510,12 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     password: string,
     ip: string,
     remember = false,
-  ): { token: string; role: string; expiresIn: number } | null {
+  ): { token: string; role: string; expiresIn: number; mustChange: boolean } | null {
     const users = this.loadUsers();
     const u = users.find((x) => x.username === username);
     if (!u) {
+      // 与真实用户走同样的 scrypt 耗时，避免通过响应时间枚举用户名
+      this.verifyPw(password, DUMMY_HASH);
       this.audit('login', false, username, ip, 'no such user');
       return null;
     }
@@ -528,7 +544,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     this.saveUsers(users);
     const r = this.issueSession(username, u.role, ip, remember);
     this.audit('login', true, username, ip, u.role);
-    return r;
+    return { ...r, mustChange: !!u.must_change };
   }
 
   /** 签发会话（账密登录与钉钉登录共用）。 */
@@ -593,6 +609,31 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     return { needBind: true, unionid, name };
   }
 
+  /**
+   * 为「钉钉已认证但未绑定」的身份签发一次性绑定凭证。unionid 只能由 exchangeJsapiCode /
+   * exchangeOauthCode 验证后传入，前端拿到的只是这个 nonce —— 绑定接口不信任客户端自报的
+   * unionid，避免任意登录用户把他人 unionid 绑到自己账号（或阻止受害者绑定）。
+   */
+  createDingtalkBind(unionid: string, name: string): string {
+    const nonce = randomBytes(24).toString('hex');
+    this.pendingBinds.set(nonce, {
+      unionid,
+      name: name || '',
+      exp: Date.now() / 1000 + 10 * 60,
+    });
+    return nonce;
+  }
+
+  /** 一次性消费绑定凭证：过期或重复使用均失效。 */
+  consumeDingtalkBind(nonce?: string): { unionid: string; name: string } | null {
+    if (!nonce) return null;
+    const b = this.pendingBinds.get(nonce);
+    if (!b) return null;
+    this.pendingBinds.delete(nonce);
+    if (b.exp <= Date.now() / 1000) return null;
+    return { unionid: b.unionid, name: b.name };
+  }
+
   /** 将钉钉 unionid 绑定到指定本地账号（防重复绑定）。unionid 为空表示解绑。 */
   bindDingtalk(username: string, unionid: string): void {
     const users = this.loadUsers();
@@ -611,10 +652,30 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     this.audit('user:bind-dingtalk', true, username, '-', unionid || 'unbind');
   }
 
+  /** 使指定用户的会话立即失效（禁用账号 / 改角色 / 重置密码时调用）。可保留当前会话。 */
+  invalidateUserSessions(username: string, exceptToken?: string): void {
+    let removed = 0;
+    for (const [token, s] of this.sessions) {
+      if (s.user === username && token !== exceptToken) {
+        this.sessions.delete(token);
+        void this.store.deleteSession(token);
+        removed++;
+      }
+    }
+    if (removed > 0) void this.persistSessions();
+  }
+
   getSession(token?: string): Session | null {
     if (!token) return null;
     const s = this.sessions.get(token);
     if (!s) return null;
+    // 兜底：账号被删/禁用时即使管理路径漏调 invalidateUserSessions，旧会话也立即失效
+    const owner = this.getUser(s.user);
+    if (!owner || owner.disabled) {
+      this.sessions.delete(token);
+      void this.store.deleteSession(token);
+      return null;
+    }
     const now = Date.now() / 1000;
     // 1) 越过绝对上限：不可续期，直接失效
     if (s.max_exp <= now) {
@@ -665,15 +726,28 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     this.audit('user:add', true, username, '-', role);
   }
 
-  updateUser(username: string, role?: string, disabled?: boolean, name?: string, phone?: string, email?: string): void {
+  updateUser(
+    username: string,
+    role?: string,
+    disabled?: boolean,
+    name?: string,
+    phone?: string,
+    email?: string,
+    exceptToken?: string,
+  ): void {
     const users = this.loadUsers();
     const u = users.find((x) => x.username === username);
     if (!u) throw new Error('用户不存在：' + username);
+    let credentialChanged = false;
     if (role !== undefined) {
       if (!this.loadRoles()[role]) throw new Error('无效角色：' + role);
+      if (u.role !== role) credentialChanged = true;
       u.role = role;
     }
-    if (disabled !== undefined) u.disabled = !!disabled;
+    if (disabled !== undefined) {
+      if (!!u.disabled !== !!disabled) credentialChanged = true;
+      u.disabled = !!disabled;
+    }
     if (name !== undefined) u.name = name.trim() || undefined;
     if (phone !== undefined) {
       const p = phone.trim();
@@ -686,6 +760,8 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       u.email = e || undefined;
     }
     this.saveUsers(users);
+    // 角色/禁用状态变更后旧会话仍带旧 role，必须立即吊销（保留操作者自己的会话）
+    if (credentialChanged) this.invalidateUserSessions(username, exceptToken);
     this.audit('user:update', true, username, '-', u.role);
   }
 
@@ -728,6 +804,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       throw new Error('至少需保留一个启用的管理员账号');
     }
     this.saveUsers(users.filter((u) => u.username !== username));
+    this.invalidateUserSessions(username);
     this.audit('user:delete', true, username, '-', '-');
   }
 
@@ -745,10 +822,11 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     u.pw_hash = newHash;
     this.recordPw(u, newHash, pol);
     this.saveUsers(users);
+    this.invalidateUserSessions(username);
     this.audit('user:reset-pw', true, username, '-', u.role);
   }
 
-  changePassword(username: string, oldPassword: string, newPassword: string): void {
+  changePassword(username: string, oldPassword: string, newPassword: string, exceptToken?: string): void {
     const users = this.loadUsers();
     const u = users.find((x) => x.username === username);
     if (!u) throw new Error('用户不存在：' + username);
@@ -768,6 +846,8 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     u.pw_hash = newHash;
     this.recordPw(u, newHash, pol);
     this.saveUsers(users);
+    // 改密后其它设备上的旧会话必须失效，当前会话保留（用户无需重新登录）
+    this.invalidateUserSessions(username, exceptToken);
     this.audit('user:change-pw', true, username, '-', u.role);
   }
 
