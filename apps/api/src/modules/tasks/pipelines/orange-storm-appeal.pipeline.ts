@@ -24,7 +24,7 @@ import { PRODUCTION_GROUP_NAME } from '../../notify/notify-config';
  * 输出：runtime/jobs/orange_storm_appeal/out/ 下 JSON + CSV 明细落盘。
  */
 
-/** 展示用明细列（明细图 / CSV / 私发 Markdown 表格共用）。 */
+/** 展示用明细列（明细图 / CSV 共用）。 */
 const DETAIL_COLS = [
   '抽检时间',
   '骑手信息',
@@ -70,10 +70,6 @@ function remainText(expireMs: number, nowMs: number): string {
 function csvCell(v: unknown): string {
   const s = v === null || v === undefined ? '' : String(v);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-function mdCell(v: unknown): string {
-  return (v === null || v === undefined ? '' : String(v)).replace(/\|/g, '\\|').replace(/\n/g, ' ');
 }
 
 /** 固定统计窗口：前一天 00:00:00 ~ 当前（东八区，覆盖当天 + 前一天）。 */
@@ -178,12 +174,6 @@ export class OrangeStormAppealPipeline implements TaskHandler {
     return { details, skippedExpired, skippedNotAppealable };
   }
 
-  private markdownTable(rows: Record<string, string>[], cols: string[]): string {
-    const header = `| ${cols.join(' | ')} |\n|${cols.map(() => '---').join('|')}|`;
-    const body = rows.map((r) => `| ${cols.map((c) => mdCell(r[c])).join(' | ')} |`);
-    return [header, ...body].join('\n');
-  }
-
   /** 按站点聚合明细行。 */
   private groupByStation(details: Record<string, string>[]): Map<string, Record<string, string>[]> {
     const byStation = new Map<string, Record<string, string>[]>();
@@ -222,7 +212,7 @@ export class OrangeStormAppealPipeline implements TaskHandler {
     return parts.join('\n');
   }
 
-  /** 单个负责人的私发 Markdown：名下每个站点一节 + 明细图内联。 */
+  /** 单个负责人的私发 Markdown：名下每个站点一节 + 明细图内联（不含明细表格）。 */
   private buildDmText(
     label: string,
     name: string,
@@ -230,7 +220,6 @@ export class OrangeStormAppealPipeline implements TaskHandler {
     imgUrl: string | null,
   ): string {
     const total = [...stations.values()].reduce((n, l) => n + l.length, 0);
-    const tableCols = DETAIL_COLS;
     const parts = [
       `## 橙色风暴申诉提醒（${name}）`,
       `**统计窗口：** ${label}　**您名下站点判定不通过 · 未申诉 共 ${total} 条**`,
@@ -238,9 +227,6 @@ export class OrangeStormAppealPipeline implements TaskHandler {
     ];
     if (imgUrl) {
       parts.push(`![明细](${imgUrl})`, '');
-    }
-    for (const [station, list] of stations) {
-      parts.push(`### ${station}（${list.length} 条）`, this.markdownTable(list, tableCols), '');
     }
     parts.push('请及时登录风神处理申诉，避免逾期处罚生效。');
     return parts.join('\n');
