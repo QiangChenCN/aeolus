@@ -43,7 +43,7 @@
               <template #header>
                 <span class="dv-rate-title">{{ t.title }}</span>
               </template>
-              <el-table v-loading="loading" :data="t.rows" stripe border class="dv-table" empty-text="暂无站点数据" :max-height="520">
+              <el-table v-loading="loading" :data="t.rows" stripe border class="dv-table" empty-text="暂无站点数据">
                 <el-table-column prop="team_id" label="站点ID" min-width="120" show-overflow-tooltip />
                 <el-table-column prop="team_name" label="站点名称" min-width="220" show-overflow-tooltip />
                 <el-table-column :label="t.weightedFull ? '全天加权' : '全天'" :min-width="t.weightedFull ? 120 : 150" align="center">
@@ -80,14 +80,16 @@
 
       <!-- ============ 骑手看板 ============ -->
       <el-tab-pane label="骑手看板" name="rider">
+        <div class="dv-rider-wrap">
           <div v-if="riderCards.length" class="dv-cards">
             <el-card v-for="c in riderCards" :key="c.label" class="dv-card" shadow="never">
               <span class="dv-card-num">{{ c.value }}</span>
               <span class="dv-card-label">{{ c.label }}</span>
             </el-card>
           </div>
+          <el-card class="dv-rider-card" shadow="never">
           <div class="dv-matrix-wrap">
-            <el-table v-loading="loading" :data="riderRowsSorted" stripe border class="dv-table" empty-text="暂无骑手数据" :max-height="520">
+            <el-table v-loading="loading" :data="riderRowsSorted" stripe border class="dv-table" empty-text="暂无骑手数据">
               <el-table-column prop="rider_name" label="骑手" min-width="120" fixed>
                 <template #header>
                   <span class="sort-h" @click="toggleSort('rider_name')">
@@ -140,29 +142,65 @@
               </el-table-column>
             </el-table>
             </div>
+          </el-card>
+        </div>
             </el-tab-pane>
 
-      <!-- ============ 骑手时段看板 ============ -->
-      <el-tab-pane label="骑手时段看板" name="period">
-          <div v-if="tpSummaryCards.length" class="dv-cards">
-            <el-card v-for="c in tpSummaryCards" :key="c.label" class="dv-card" shadow="never">
-              <span class="dv-card-num">{{ c.value }}</span>
-              <span class="dv-card-label">{{ c.label }}</span>
-            </el-card>
+      <!-- ============ 时段看板（骑手 × 时段明细） ============ -->
+      <el-tab-pane label="时段看板" name="period">
+        <div class="dv-period-wrap">
+          <div class="dv-filter">
+            <el-select v-model="tpFilterPeriod" class="dv-filter-sel" placeholder="时段">
+              <el-option label="全部时段" value="__all__" />
+              <el-option v-for="p in tpPeriodOptions" :key="p.code" :label="p.name" :value="p.code" />
+            </el-select>
+            <el-select v-model="teamSel" class="dv-filter-sel" placeholder="站点">
+              <el-option label="全部站点" value="__all__" />
+              <el-option v-for="t in teamOptions" :key="t.id" :label="t.name" :value="t.id" />
+            </el-select>
+            <el-select v-model="tpFilterAch" class="dv-filter-sel" placeholder="达标">
+              <el-option label="全部达标状态" value="__all__" />
+              <el-option label="达标" value="ok" />
+              <el-option label="未达标" value="miss" />
+            </el-select>
           </div>
-          <el-table v-loading="loading" :data="tpRowsFiltered" stripe border class="dv-table" height="520" empty-text="暂无时段数据">
-              <el-table-column prop="time_name" label="时段" min-width="120" fixed />
-              <el-table-column prop="start_time" label="开始" min-width="90" />
-              <el-table-column prop="end_time" label="结束" min-width="90" />
-              <el-table-column prop="target" label="目标" min-width="80" />
-              <el-table-column prop="scheduled" label="排班" min-width="80" />
-              <el-table-column prop="online" label="在线" min-width="80" />
-              <el-table-column prop="offline" label="离线" min-width="80" />
-              <el-table-column prop="rest" label="休息" min-width="80" />
-              <el-table-column prop="absent" label="缺勤" min-width="80" />
-              <el-table-column prop="rate" label="达成率" min-width="90" />
-              <el-table-column prop="valid_dur" label="有效时长" min-width="110" />
+          <el-card class="dv-period-card" shadow="never">
+          <div class="dv-table-fill">
+          <el-table v-loading="loading" :data="pagedTpRiderRows" stripe border class="dv-table" empty-text="暂无时段数据">
+              <el-table-column prop="time_name" label="时段" min-width="130" fixed show-overflow-tooltip />
+              <el-table-column prop="rider_id" label="骑手ID" min-width="120" show-overflow-tooltip />
+              <el-table-column prop="rider_name" label="骑手" min-width="120" show-overflow-tooltip />
+              <el-table-column prop="team_name" label="站点" min-width="140" show-overflow-tooltip />
+              <el-table-column label="达标" min-width="100" align="center">
+                <template #default="{ row }">
+                  <span class="dv-cell-badge" :class="achClass(row.achieved)">{{ row.achievedText }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="完成单量" min-width="130" align="center">
+                <template #default="{ row }">
+                  <span :class="{ 'dv-miss': row.orderOk === false }">{{ row.orders }}</span><span class="dv-target">/{{ row.orderTarget }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="有效在线时长" min-width="200" align="center">
+                <template #default="{ row }">
+                  <span :class="{ 'dv-miss': row.onlineOk === false }">{{ row.onlineDur }}</span><span class="dv-target">/{{ row.onlineTarget }}</span>
+                </template>
+              </el-table-column>
             </el-table>
+          </div>
+          <div class="dv-pager">
+            <el-pagination
+              v-model:current-page="tpPage"
+              v-model:page-size="tpPageSize"
+              :page-sizes="[25, 50, 100]"
+              :total="tpRiderRows.length"
+              layout="total, sizes, prev, pager, next, jumper"
+              background
+              @size-change="tpPage = 1"
+            />
+          </div>
+          </el-card>
+        </div>
       </el-tab-pane>
     </el-tabs>
 
@@ -179,7 +217,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { fetchAttendTeams, saveAttendTeams, fetchAttendDataset } from '../../api/dashboards.js';
 
@@ -299,21 +337,6 @@ const fetchedAt = computed(() => (resp.value && resp.value.fetched_at) || tp.val
 const isCache = computed(() => (resp.value && resp.value.source) === 'cache' || tp.value.source === 'cache');
 const dataNote = computed(() => resp.value?.data_note || '');
 
-/* 时段看板卡片（随选中站点筛选） */
-const tpSummaryCards = computed(() => {
-  const rows = tpRowsFiltered.value;
-  if (!rows.length) return [];
-  const target = rows.reduce((a, r) => a + (r.target || 0), 0);
-  const online = rows.reduce((a, r) => a + (r.online || 0), 0);
-  const absent = rows.reduce((a, r) => a + (r.absent || 0), 0);
-  return [
-    { label: '时段数', value: rows.length },
-    { label: '排班', value: target },
-    { label: '在线', value: online },
-    { label: '缺勤', value: absent },
-  ];
-});
-
 /* 站点看板卡片（随选中站点筛选） */
 const stationCards = computed(() => [
   { label: '站点数', value: stationRowsFiltered.value.length },
@@ -421,57 +444,67 @@ const riderRowsSorted = computed(() => {
     .map(o => o.r);
 });
 
-/* 时段看板：选中具体站点时，按该站骑手明细 + 站点指标重新按时段聚合（纯派生，不重新取数） */
+/* 时长格式化：xx小时xx分钟 */
 function fmtDur(sec) {
   sec = Math.trunc(sec || 0);
-  if (sec <= 0) return '0';
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
-  return h > 0 ? `${h}h${m}m` : `${m}m`;
+  return `${h}小时${m}分钟`;
 }
-const tpRowsFiltered = computed(() => {
-  if (isAllTeam.value) return tpRows.value;
-  const periods = tp.value.rows || [];
-  const sr = (station.value.rows || []).find(r => String(r.team_id) === selTeamId.value);
-  const targetSum = {}, schedSum = {};
-  if (sr) {
-    for (const [tc, m] of Object.entries(sr.metrics || {})) {
-      targetSum[tc] = _num(m.target);
-      schedSum[tc] = _num(m.scheduled);
-    }
-  }
-  const gOnline = {}, gOffline = {}, gRest = {}, gDur = {};
-  for (const r of riderRowsFiltered.value) {
-    for (const [tcRaw, cell] of Object.entries(r.cells || {})) {
-      const tc = String(tcRaw);
-      if (!cell || !cell.scheduled) continue;
-      const ws = cell.work_status;
-      if (ws === 3) gOffline[tc] = (gOffline[tc] || 0) + 1;
-      else if (ws === 2) gRest[tc] = (gRest[tc] || 0) + 1;
-      else {
-        gOnline[tc] = (gOnline[tc] || 0) + 1;
-        const sec = cell.online_sec;
-        if (sec) gDur[tc] = (gDur[tc] || 0) + sec;
-      }
-    }
-  }
+
+/* 时段看板筛选：时段 / 达标状态（站点复用页面顶部的 teamSel） */
+const tpFilterPeriod = ref('__all__');
+const tpFilterAch = ref('__all__');
+const tpPeriodOptions = computed(() =>
+  tpRows.value.map(p => ({ code: String(p.time_code), name: p.time_name })));
+
+/* 时段看板：骑手 × 时段逐行展开（仅列出该时段实际排班的骑手，随选中站点筛选） */
+const tpRiderRows = computed(() => {
+  const riders = riderRowsFiltered.value.slice().sort((a, b) =>
+    String(a.team_name ?? '').localeCompare(String(b.team_name ?? ''), 'zh-Hans-CN')
+    || String(a.rider_id ?? '').localeCompare(String(b.rider_id ?? ''), 'zh-Hans-CN'));
+  const targets = new Map(riderPeriods.value.map(p => [String(p.time_code), p]));
   const rows = [];
-  for (const p of periods) {
+  for (const p of tpRows.value) {
     const tc = String(p.time_code);
     if (tc === '9999') continue;
-    const tOn = gOnline[tc];
-    const tTarget = targetSum[tc] || null;
-    const tSched = schedSum[tc] || null;
-    const rateV = _pct(tOn, tTarget);
-    const absent = (tTarget != null && tTarget !== 0 && tOn != null) ? (tTarget - tOn) : null;
-    rows.push({
-      time_code: tc, time_name: p.time_name, start_time: p.start_time, end_time: p.end_time,
-      target: tTarget, scheduled: tSched, online: tOn,
-      offline: gOffline[tc] || null, rest: gRest[tc] || null,
-      absent, rate: rateV, valid_dur: fmtDur(gDur[tc] || 0),
-    });
+    if (tpFilterPeriod.value !== '__all__' && tc !== tpFilterPeriod.value) continue;
+    const target = targets.get(tc) || {};
+    const orderTarget = target.orders_req == null ? '—' : _num(target.orders_req);
+    const onlineTarget = target.online_req_h == null ? '—' : fmtDur(_num(target.online_req_h) * 3600);
+    for (const r of riders) {
+      const cell = r.cells?.[tc];
+      if (!cell?.scheduled) continue;
+      if (tpFilterAch.value === 'ok' && cell.achieved !== true) continue;
+      if (tpFilterAch.value === 'miss' && cell.achieved !== false) continue;
+      rows.push({
+        time_name: p.time_name,
+        rider_id: r.rider_id,
+        rider_name: r.rider_name,
+        team_name: r.team_name,
+        achieved: cell.achieved,
+        achievedText: cell.configured === false ? '未配置'
+          : cell.achieved === true ? '达标'
+          : cell.achieved === false ? '未达标' : '—',
+        orders: cell.orders ?? '—',
+        orderTarget,
+        orderOk: cell.order_ok,
+        onlineDur: cell.online_sec == null ? '—' : fmtDur(cell.online_sec),
+        onlineTarget,
+        onlineOk: cell.online_ok,
+      });
+    }
   }
   return rows;
 });
+
+/* 时段看板分页（默认 25 行/页，纯前端切片） */
+const tpPage = ref(1);
+const tpPageSize = ref(25);
+const pagedTpRiderRows = computed(() => {
+  const start = (tpPage.value - 1) * tpPageSize.value;
+  return tpRiderRows.value.slice(start, start + tpPageSize.value);
+});
+watch([teamSel, date, tpFilterPeriod, tpFilterAch, tpRiderRows], () => { tpPage.value = 1; });
 
 /* 读取缓存（进入页面 / 切换日期）：始终读取「全部站点」，选中具体站点在前端筛选，不重新取数。 */
 async function loadCached() {
@@ -554,7 +587,20 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.dv { padding: var(--sp-20); }
+.dv { padding: var(--sp-20); height: 100%; display: flex; flex-direction: column; }
+.dv-tabs { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dv-tabs :deep(.el-tabs__content) { flex: 1; min-height: 0; overflow: visible; }
+.dv-tabs :deep(.el-tab-pane) { height: 100%; }
+.dv-period-wrap { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.dv-filter { display: flex; gap: var(--sp-12); margin-bottom: var(--sp-12); flex-wrap: wrap; }
+.dv-filter-sel { width: 160px; }
+.dv-period-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dv-period-card :deep(.el-card__body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dv-table-fill { flex: 1; min-height: 0; display: flex; }
+.dv-pager { display: flex; justify-content: flex-end; padding-top: var(--sp-12); }
+.dv-rider-wrap { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.dv-rider-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dv-rider-card :deep(.el-card__body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .dv-bar { display: flex; align-items: center; gap: var(--sp-12); margin-bottom: var(--sp-16); flex-wrap: wrap; }
 .v-title { margin: 0; font-size: var(--el-font-size-extra-large); }
 .dv-sel { width: 160px; }
@@ -568,9 +614,11 @@ onMounted(async () => {
 .dv-card-num { font-size: 24px; font-weight: var(--fw-bold); color: var(--el-color-primary); }
 .dv-card-label { font-size: var(--el-font-size-extra-small); color: var(--el-text-color-secondary); }
 .dv-table { border-radius: var(--el-border-radius-base); }
+.dv-target { color: var(--el-text-color-secondary); }
+.dv-miss { color: var(--danger, #d32f2f); }
 .dv-rate-block { margin-bottom: var(--sp-16); }
 .dv-rate-title { font-size: var(--el-font-size-medium); font-weight: var(--fw-semibold); color: var(--el-text-color-primary); }
-.dv-matrix-wrap { overflow: auto; border-radius: var(--el-border-radius-base); max-height: 560px; }
+.dv-matrix-wrap { flex: initial; min-height: 0; overflow: visible; border-radius: var(--el-border-radius-base); }
 /* 站点看板 4 张率值表：每张表格一张 el-card，标题走 #header（无 footer）；
    header/body 均沿用 Element Plus 默认 padding，故此处不做 :deep 覆盖 */
 

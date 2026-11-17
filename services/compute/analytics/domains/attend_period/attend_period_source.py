@@ -178,8 +178,45 @@ def _full_day_achieved(riders, std):
     return n
 
 
+def _config_periods(schedule_periods, month):
+    """以「考核设置 → 时段设置」为准生成看板时段列（不含全天）。
+
+    与排班目标时段按「时段名称 / 起止时间」匹配，取其 time_code 与目标/排班数；
+    未匹配到排班时段的配置项仍保留为列（无数据，前端展示为空 / 未排班）。
+    """
+    cfg_periods = [p for p in (PC.load(month=month).get("periods") or [])
+                   if p.get("name") != "全天"
+                   and (p.get("start"), p.get("end")) != ("00:00", "00:00")]
+    if not cfg_periods:
+        return []
+    by_name = {}
+    by_time = {}
+    for p in schedule_periods or []:
+        by_name.setdefault(str(p.get("time_name")), p)
+        by_time.setdefault((str(p.get("start_time")), str(p.get("end_time"))), p)
+    out = []
+    for c in cfg_periods:
+        sp = by_name.get(str(c.get("name"))) \
+            or by_time.get((str(c.get("start")), str(c.get("end"))))
+        tc = sp.get("time_code") if sp else f"cfg_{c.get('start')}-{c.get('end')}"
+        out.append({
+            "time_code": str(tc),
+            "time_name": c.get("name"),
+            "start_time": c.get("start"),
+            "end_time": c.get("end"),
+            "orders_req": c.get("orders"),
+            "online_req_h": c.get("effective_online_req_h"),
+            "weight": PC.norm_weight(c.get("weight")),
+            "configured": True,
+            "actual_num": (sp or {}).get("actual_num"),
+            "predict_num": (sp or {}).get("predict_num"),
+            "error": None,
+        })
+    return out
+
+
 def _station_periods(periods, date=None):
-    """站点卡片时段列顺序：全天(9999) 排第一，真实时段按开始时间升序。
+    """站点卡片时段列顺序：全天(9999) 排第一，真实时段按传入顺序（时段设置保存顺序）。
 
     旧落盘快照（加权口径上线前生成）的 periods 不带 weight：按「时段设置」的
     名称 / 起止时间回填，让历史缓存无需重新拉取实时数据也能按当前权重加权。
@@ -239,7 +276,7 @@ def _station_periods(periods, date=None):
         "ended": _ended(p),
         "end_time": p.get("end_time"),
     } for p in periods]
-    real.sort(key=lambda p: _hm(p.get("time_name")))   # time_name 形如 "10:30-13:30"，按起始排序；回退用 start_time 亦可
+    # 时段列顺序以「时段设置」保存顺序为准，不再按开始时间重排
     return [{"time_code": DAY_TIME_CODE, "time_name": "全天",
              "is_full_day": True, "weight": None, "ended": True}] + real
 
@@ -284,6 +321,8 @@ def build_dataset(team, date, teams=None):
 
     if periods_tpl is None:
         periods_tpl = []
+    # 站点/骑手看板的时段列以「考核设置 → 时段设置」为准（不回落排班默认），全天列另由投影补齐
+    periods_tpl = _config_periods(periods_tpl, str(date)[:7])
     configured = all(config_flags) if config_flags else True
     _log("统一数据集构建完成：%s，%d 名骑手，%d 站" % (team, len(rider_rows), len(station_rows)))
     return {
@@ -361,7 +400,8 @@ def get_dataset(team, date, refresh, teams=None):
 def to_rider_detail(ds):
     """投影为「骑手明细」接口返回结构。"""
     rider_rows = ds.get("rider_rows") or []
-    periods = ds.get("periods") or []
+    # 时段列以「考核设置 → 时段设置」为准（兼容旧缓存快照，投影时按当前配置重排）
+    periods = _config_periods(ds.get("periods") or [], str(ds.get("date") or "")[:7])
     summary = {
         "rider_count": len(rider_rows),
         "scheduled_total": sum(r.get("scheduled_periods", 0) for r in rider_rows),
@@ -409,7 +449,10 @@ def to_station_data(ds):
                 continue
             cell["achieved"] = n
             cell["rate"] = _rate(n, cell.get("target"))
-    periods = _station_periods(ds.get("periods") or [], str(ds.get("date") or ""))
+    periods = _station_periods(
+        _config_periods(ds.get("periods") or [], str(ds.get("date") or "")[:7]),
+        str(ds.get("date") or ""),
+    )
     return {
         "ok": True,
         "team": ds.get("team"),
