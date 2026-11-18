@@ -166,10 +166,10 @@
           </div>
           <el-card class="dv-period-card" shadow="never">
           <div class="dv-table-fill">
-          <el-table v-loading="loading" :data="pagedTpRiderRows" stripe border class="dv-table" empty-text="暂无时段数据">
-              <el-table-column prop="time_name" label="时段" min-width="130" fixed show-overflow-tooltip />
-              <el-table-column prop="rider_id" label="骑手ID" min-width="120" show-overflow-tooltip />
-              <el-table-column prop="rider_name" label="骑手" min-width="120" show-overflow-tooltip />
+          <el-table v-loading="loading" :data="pagedTpRiderRows" stripe border size="small" class="dv-table" height="100%" empty-text="暂无时段数据">
+              <el-table-column prop="time_name" label="时段" min-width="130" fixed align="center" show-overflow-tooltip />
+              <el-table-column prop="rider_id" label="骑手ID" min-width="120" align="center" show-overflow-tooltip />
+              <el-table-column prop="rider_name" label="骑手" min-width="120" align="center" show-overflow-tooltip />
               <el-table-column prop="team_name" label="站点" min-width="140" show-overflow-tooltip />
               <el-table-column label="达标" min-width="100" align="center">
                 <template #default="{ row }">
@@ -596,7 +596,7 @@ onMounted(async () => {
 .dv-filter-sel { width: 160px; }
 .dv-period-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .dv-period-card :deep(.el-card__body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.dv-table-fill { flex: 1; min-height: 0; display: flex; }
+.dv-table-fill { flex: 1; min-height: 0; }
 .dv-pager { display: flex; justify-content: flex-end; padding-top: var(--sp-12); }
 .dv-rider-wrap { height: 100%; min-height: 0; display: flex; flex-direction: column; }
 .dv-rider-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -614,6 +614,14 @@ onMounted(async () => {
 .dv-card-num { font-size: 24px; font-weight: var(--fw-bold); color: var(--el-color-primary); }
 .dv-card-label { font-size: var(--el-font-size-extra-small); color: var(--el-text-color-secondary); }
 .dv-table { border-radius: var(--el-border-radius-base); }
+/* 三个看板表头统一为主题色底 + 白字 */
+.dv-table {
+  --el-table-header-bg-color: var(--el-color-primary);
+  --el-table-header-text-color: #fff;
+}
+.dv-table .sort-h { color: #fff; }
+.dv-table .sort-h:hover { color: #fff; opacity: .85; }
+.dv-table .sort-ic { color: #fff; }
 .dv-target { color: var(--el-text-color-secondary); }
 .dv-miss { color: var(--danger, #d32f2f); }
 .dv-rate-block { margin-bottom: var(--sp-16); }

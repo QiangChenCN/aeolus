@@ -215,6 +215,29 @@ def _config_periods(schedule_periods, month):
     return out
 
 
+def _periods_with_target(periods, station_rows):
+    """仅保留「至少一个站点有目标」的时段列。
+
+    目标取各站 metrics 同 time_code 的 target（排班目标 predict_num）；
+    若某时段所有站点都没有目标（未排到 / 0），则该时段列不展示。
+    全天列（is_full_day）不参与此过滤。
+    """
+    rows = station_rows or []
+    out = []
+    for p in periods or []:
+        if p.get("is_full_day"):
+            out.append(p)
+            continue
+        tc = str(p.get("time_code"))
+        has_target = any(
+            (_norm_int(((sr.get("metrics") or {}).get(tc) or {}).get("target")) or 0) > 0
+            for sr in rows
+        )
+        if has_target:
+            out.append(p)
+    return out
+
+
 def _station_periods(periods, date=None):
     """站点卡片时段列顺序：全天(9999) 排第一，真实时段按传入顺序（时段设置保存顺序）。
 
@@ -400,8 +423,12 @@ def get_dataset(team, date, refresh, teams=None):
 def to_rider_detail(ds):
     """投影为「骑手明细」接口返回结构。"""
     rider_rows = ds.get("rider_rows") or []
-    # 时段列以「考核设置 → 时段设置」为准（兼容旧缓存快照，投影时按当前配置重排）
-    periods = _config_periods(ds.get("periods") or [], str(ds.get("date") or "")[:7])
+    # 时段列以「考核设置 → 时段设置」为准（兼容旧缓存快照，投影时按当前配置重排）；
+    # 所有站点都没有目标的时段不展示
+    periods = _periods_with_target(
+        _config_periods(ds.get("periods") or [], str(ds.get("date") or "")[:7]),
+        ds.get("station_rows") or [],
+    )
     summary = {
         "rider_count": len(rider_rows),
         "scheduled_total": sum(r.get("scheduled_periods", 0) for r in rider_rows),
@@ -449,9 +476,13 @@ def to_station_data(ds):
                 continue
             cell["achieved"] = n
             cell["rate"] = _rate(n, cell.get("target"))
-    periods = _station_periods(
-        _config_periods(ds.get("periods") or [], str(ds.get("date") or "")[:7]),
-        str(ds.get("date") or ""),
+    # 所有站点都没有目标的时段列不展示（全天列不受影响）
+    periods = _periods_with_target(
+        _station_periods(
+            _config_periods(ds.get("periods") or [], str(ds.get("date") or "")[:7]),
+            str(ds.get("date") or ""),
+        ),
+        station_rows,
     )
     return {
         "ok": True,
