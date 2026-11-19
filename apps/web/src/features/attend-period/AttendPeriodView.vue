@@ -32,48 +32,47 @@
     <el-tabs v-model="activeTab" class="dv-tabs">
       <!-- ============ 站点看板（四张率值表） ============ -->
       <el-tab-pane label="站点看板" name="station">
-          <div v-if="stationCards.length" class="dv-cards">
-            <el-card v-for="c in stationCards" :key="c.label" class="dv-card" shadow="never">
-              <span class="dv-card-num">{{ c.value }}</span>
-              <span class="dv-card-label">{{ c.label }}</span>
-            </el-card>
-          </div>
           <div v-for="(t, i) in stationRateTables" :key="i" class="dv-rate-block">
             <el-card class="dv-rate-card" shadow="never">
               <template #header>
-                <span class="dv-rate-title">{{ t.title }}</span>
+                <div class="dv-rate-header" @click="rateFolded[i] = !rateFolded[i]">
+                  <span class="dv-rate-title">{{ t.title }}</span>
+                  <el-icon class="dv-rate-fold" :class="{ 'is-folded': rateFolded[i] }"><ArrowDown /></el-icon>
+                </div>
               </template>
-              <el-table v-loading="loading" :data="t.rows" stripe border class="dv-table" empty-text="暂无站点数据">
-                <el-table-column prop="team_id" label="站点ID" min-width="120" show-overflow-tooltip />
-                <el-table-column prop="team_name" label="站点名称" min-width="220" show-overflow-tooltip />
-                <el-table-column :label="t.weightedFull ? '全天加权' : '全天'" :min-width="t.weightedFull ? 120 : 150" align="center">
-                  <template #default="{ row }">
-                    <div class="dv-cell">
-                      <span class="dv-cell-rate" :class="rateClass(row.full.rate)">
-                        {{ row.full.rate == null ? '—' : (row.full.rate + '%') }}
-                      </span>
-                      <span v-if="!t.weightedFull" class="dv-cell-sub">
-                        {{ t.numLabel }}{{ row.full.num }} / {{ t.denLabel }}{{ row.full.den }}
-                      </span>
-                    </div>
-                  </template>
-                </el-table-column>
-                <el-table-column
-                  v-for="p in t.periods" :key="p.time_code"
-                  :label="p.time_name" min-width="150" align="center"
-                >
-                  <template #default="{ row }">
-                    <div class="dv-cell">
-                      <span class="dv-cell-rate" :class="rateClass(rateCell(row, p.time_code).rate)">
-                        {{ rateCell(row, p.time_code).rate == null ? '—' : (rateCell(row, p.time_code).rate + '%') }}
-                      </span>
-                      <span class="dv-cell-sub">
-                        {{ t.numLabel }}{{ rateCell(row, p.time_code).num }} / {{ t.denLabel }}{{ rateCell(row, p.time_code).den }}
-                      </span>
-                    </div>
-                  </template>
-                </el-table-column>
-              </el-table>
+              <div v-show="!rateFolded[i]">
+                <el-table v-loading="loading" :data="t.rows" stripe border class="dv-table" :row-class-name="stationRowClass" :span-method="stationSpanMethod" empty-text="暂无站点数据">
+                  <el-table-column prop="team_id" label="站点ID" min-width="120" show-overflow-tooltip />
+                  <el-table-column prop="team_name" label="站点名称" min-width="220" show-overflow-tooltip />
+                  <el-table-column :label="t.weightedFull ? '全天加权' : '全天'" :min-width="t.weightedFull ? 120 : 150" align="center">
+                    <template #default="{ row }">
+                      <div class="dv-cell">
+                        <span class="dv-cell-rate" :class="rateClass(row.full.rate)">
+                          {{ row.full.rate == null ? '—' : (row.full.rate + '%') }}
+                        </span>
+                        <span v-if="!t.weightedFull" class="dv-cell-sub">
+                          {{ t.numLabel }}{{ row.full.num }} / {{ t.denLabel }}{{ row.full.den }}
+                        </span>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column
+                    v-for="p in t.periods" :key="p.time_code"
+                    :label="p.time_name" min-width="150" align="center"
+                  >
+                    <template #default="{ row }">
+                      <div class="dv-cell">
+                        <span class="dv-cell-rate" :class="rateClass(rateCell(row, p.time_code).rate)">
+                          {{ rateCell(row, p.time_code).rate == null ? '—' : (rateCell(row, p.time_code).rate + '%') }}
+                        </span>
+                        <span class="dv-cell-sub">
+                          {{ t.numLabel }}{{ rateCell(row, p.time_code).num }} / {{ t.denLabel }}{{ rateCell(row, p.time_code).den }}
+                        </span>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
             </el-card>
           </div>
       </el-tab-pane>
@@ -150,18 +149,39 @@
       <el-tab-pane label="时段看板" name="period">
         <div class="dv-period-wrap">
           <div class="dv-filter">
-            <el-select v-model="tpFilterPeriod" class="dv-filter-sel" placeholder="时段">
-              <el-option label="全部时段" value="__all__" />
+            <el-select v-model="tpFilterPeriod" multiple clearable collapse-tags collapse-tags-tooltip :max-collapse-tags="1" class="dv-filter-sel" placeholder="全部时段">
+              <template #header>
+                <div class="dv-sel-all">
+                  <div class="el-select-dropdown__item" @click="tpFilterPeriod = toggleSelectAll(tpFilterPeriod, tpAllPeriods)">
+                    {{ isAllSelected(tpFilterPeriod, tpAllPeriods) ? '反选' : '全选' }}
+                  </div>
+                </div>
+              </template>
               <el-option v-for="p in tpPeriodOptions" :key="p.code" :label="p.name" :value="p.code" />
             </el-select>
-            <el-select v-model="teamSel" class="dv-filter-sel" placeholder="站点">
-              <el-option label="全部站点" value="__all__" />
-              <el-option v-for="t in teamOptions" :key="t.id" :label="t.name" :value="t.id" />
+            <el-select v-model="tpFilterTeam" multiple clearable collapse-tags collapse-tags-tooltip :max-collapse-tags="1" class="dv-filter-sel" placeholder="全部站点">
+              <template #header>
+                <div class="dv-sel-all">
+                  <div class="el-select-dropdown__item" @click="tpFilterTeam = toggleSelectAll(tpFilterTeam, tpAllTeams)">
+                    {{ isAllSelected(tpFilterTeam, tpAllTeams) ? '反选' : '全选' }}
+                  </div>
+                </div>
+              </template>
+              <el-option v-for="t in teamOptions" :key="t.id" :label="t.name" :value="String(t.id)" />
             </el-select>
-            <el-select v-model="tpFilterAch" class="dv-filter-sel" placeholder="达标">
-              <el-option label="全部达标状态" value="__all__" />
-              <el-option label="达标" value="ok" />
-              <el-option label="未达标" value="miss" />
+            <el-select v-model="tpFilterAch" multiple clearable collapse-tags collapse-tags-tooltip class="dv-filter-sel" placeholder="全部达标状态">
+              <template #header>
+                <div class="dv-sel-all">
+                  <div class="el-select-dropdown__item" @click="tpFilterAch = toggleSelectAll(tpFilterAch, tpAchValues)">
+                    {{ isAllSelected(tpFilterAch, tpAchValues) ? '反选' : '全选' }}
+                  </div>
+                </div>
+              </template>
+              <el-option label="达标" value="达标" />
+              <el-option label="不达标" value="不达标" />
+              <el-option label="可达标" value="可达标" />
+              <el-option label="不可达标" value="不可达标" />
+              <el-option label="未开始" value="未开始" />
             </el-select>
           </div>
           <el-card class="dv-period-card" shadow="never">
@@ -173,7 +193,7 @@
               <el-table-column prop="team_name" label="站点" min-width="140" show-overflow-tooltip />
               <el-table-column label="达标" min-width="100" align="center">
                 <template #default="{ row }">
-                  <span class="dv-cell-badge" :class="achClass(row.achieved)">{{ row.achievedText }}</span>
+                  <span class="dv-cell-badge" :class="row.badgeClass">{{ row.achievedText }}</span>
                 </template>
               </el-table-column>
               <el-table-column label="完成单量" min-width="130" align="center">
@@ -230,6 +250,7 @@ const resp = ref(null);     // 后端返回的完整响应
 const loading = ref(false);
 const dataError = ref('');
 const activeTab = ref('station');  // station | rider | period
+const rateFolded = ref({});        // 站点看板 4 张率值表的折叠状态，key 为表格序号
 
 /* 日期默认当天（北京时间） */
 function todayStr() {
@@ -265,58 +286,77 @@ const riderPeriods = computed(() => rider.value.periods || []);
 */
 function _num(x) { const n = Number(x); return Number.isFinite(n) ? n : 0; }
 function _pct(n, d) { return d > 0 ? Math.round((n / d) * 1000) / 10 : null; }
-/* 站点看板：四张率值表，行=站点、列=时段，单元格含率值/分子/分母 */
+/* 站点看板：四张率值表，行=站点、列=时段，单元格含率值/分子/分母；首行为合计行 */
 const stationRateTables = computed(() => {
   const periods = (stationPeriods.value || [])
     .filter(p => !p.is_full_day)  // 去掉时段循环里那个"全天"列（已在前方硬编码全天汇总列呈现），避免重复
     .slice().sort((a, b) => Number(a.time_code) - Number(b.time_code));
-  const build = (numKey, denKey, numLabel, denLabel, title, weightedFull = false) => ({
-    title, numLabel, denLabel, periods, weightedFull,
-    rows: stationRowsFiltered.value.map(r => {
+
+  // 由原始 metrics 生成展示单元格，null 显示「—」
+  const _cellOf = (m, numKey, denKey) => {
+    const n = m[numKey], d = m[denKey];
+    return {
+      rate: _pct(_num(n), _num(d)),
+      num: n == null ? '—' : _num(n),
+      den: d == null ? '—' : _num(d),
+    };
+  };
+  // 合计：跨站点先对分子/分母分别求和，再算率（缺失值不计入）
+  const _sumCell = (list) => {
+    let n = 0, d = 0, has = false;
+    for (const c of list) {
+      if (!c || c.num === '—' || c.den === '—') continue;
+      has = true;
+      n += _num(c.num);
+      d += _num(c.den);
+    }
+    if (!has) return { rate: null, num: '—', den: '—' };
+    return { rate: _pct(n, d), num: n, den: d };
+  };
+  // 「全天加权」：按「考核设置 → 时段设置」权重对各时段率加权平均；
+  // 未结束/无目标（分母为 0 或缺失）的时段按 100%，其余封顶 100%；权重缺省按 100，0 权重不参与。
+  const _weightedFull = (cells) => {
+    let acc = 0, wsum = 0;
+    for (const p of periods) {
+      const raw = Number(p.weight);
+      const w = p.weight == null || p.weight === '' || !Number.isFinite(raw) ? 100 : raw;
+      if (w <= 0) continue;
+      const c = cells[String(p.time_code)];
+      const value = (p.ended === false || !c || c.rate == null) ? 100 : Math.min(100, c.rate);
+      acc += value * w;
+      wsum += w;
+    }
+    return { rate: wsum > 0 ? Math.round(acc / wsum * 10) / 10 : null };
+  };
+
+  const build = (numKey, denKey, numLabel, denLabel, title, weightedFull = false) => {
+    const dataRows = stationRowsFiltered.value.map(r => {
       const ms = r.metrics || {};
       const cells = {};
       for (const p of periods) {
-        const m = ms[String(p.time_code)] || {};
-        const n = m[numKey], d = m[denKey];
-        cells[String(p.time_code)] = {
-          rate: _pct(_num(n), _num(d)),
-          num: n == null ? '—' : _num(n),
-          den: d == null ? '—' : _num(d),
-        };
+        cells[String(p.time_code)] = _cellOf(ms[String(p.time_code)] || {}, numKey, denKey);
       }
-      let full;
-      if (weightedFull) {
-        // 仅「时段有效达成率」：各真实时段值按「考核设置 → 时段设置」权重加权平均，只展示率值。
-        // 参与加权的值：未结束的时段、没有目标（分母为 0/缺失）的时段按 100%；
-        // 其余时段用封顶 100% 后的达成率（时段列本身仍展示原始达成率）。
-        // 权重缺省（旧缓存快照）按 100 处理，0 权重时段不参与。
-        let acc = 0;
-        let wsum = 0;
-        for (const p of periods) {
-          const raw = Number(p.weight);
-          const w = p.weight == null || p.weight === '' || !Number.isFinite(raw) ? 100 : raw;
-          if (w <= 0) continue;
-          const c = cells[String(p.time_code)];
-          const value = (p.ended === false || !c || c.rate == null) ? 100 : Math.min(100, c.rate);
-          acc += value * w;
-          wsum += w;
-        }
-        full = { rate: wsum > 0 ? Math.round(acc / wsum * 10) / 10 : null };
-      } else {
-        // 其余三张表：沿用后端已算好的全天汇总 metrics['9999']，并显示分子/分母。
-        const fm = ms['9999'] || {};
-        const fn = fm[numKey], fd = fm[denKey];
-        full = {
-          rate: _pct(_num(fn), _num(fd)),
-          num: fn == null ? '—' : _num(fn),
-          den: fd == null ? '—' : _num(fd),
-        };
-      }
-      return {
-        team_id: r.team_id, team_name: r.team_name, cells, full,
-      };
-    }),
-  });
+      // 仅「时段有效达成率」用加权全天；其余三张表沿用后端 metrics['9999'] 原口径
+      const full = weightedFull ? _weightedFull(cells) : _cellOf(ms['9999'] || {}, numKey, denKey);
+      return { team_id: r.team_id, team_name: r.team_name, cells, full };
+    });
+    // 合计行固定在第一行
+    const totalCells = {};
+    for (const p of periods) {
+      totalCells[String(p.time_code)] = _sumCell(dataRows.map(r => r.cells[String(p.time_code)]));
+    }
+    const totalRow = {
+      team_id: '合计',
+      team_name: '',
+      cells: totalCells,
+      full: weightedFull ? _weightedFull(totalCells) : _sumCell(dataRows.map(r => r.full)),
+      _isTotal: true,
+    };
+    return {
+      title, numLabel, denLabel, periods, weightedFull,
+      rows: [totalRow, ...dataRows],
+    };
+  };
   return [
     build('achieved', 'target', '有效', '目标', '时段有效达成率（有效达成 / 目标）', true),
     build('achieved', 'scheduled', '有效', '排班', '时段排班有效出勤率（有效达成 / 排班）'),
@@ -328,6 +368,16 @@ const stationRateTables = computed(() => {
 function rateCell(row, tc) {
   return (row.cells && row.cells[String(tc)]) || { rate: null, num: '—', den: '—' };
 }
+/* 站点看板合计行（首行）加样式标识 */
+function stationRowClass({ row }) {
+  return row._isTotal ? 'dv-total-row' : '';
+}
+/* 合计行的「站点ID + 站点名称」两列合并为一列 */
+function stationSpanMethod({ row, columnIndex }) {
+  if (!row._isTotal) return;
+  if (columnIndex === 0) return { colspan: 2, rowspan: 1 };
+  if (columnIndex === 1) return { colspan: 0, rowspan: 0 };
+}
 
 const needRefresh = computed(() => !!resp.value && resp.value.need_refresh === true);
 const hasData = computed(() =>
@@ -336,12 +386,6 @@ const hasData = computed(() =>
 const fetchedAt = computed(() => (resp.value && resp.value.fetched_at) || tp.value.fetched_at || '');
 const isCache = computed(() => (resp.value && resp.value.source) === 'cache' || tp.value.source === 'cache');
 const dataNote = computed(() => resp.value?.data_note || '');
-
-/* 站点看板卡片（随选中站点筛选） */
-const stationCards = computed(() => [
-  { label: '站点数', value: stationRowsFiltered.value.length },
-  { label: '考核时段数', value: (stationPeriods.value.filter(p => !p.is_full_day).length) },
-]);
 
 /* 骑手看板卡片（随选中站点筛选） */
 const riderCards = computed(() => {
@@ -451,40 +495,113 @@ function fmtDur(sec) {
   return `${h}小时${m}分钟`;
 }
 
-/* 时段看板筛选：时段 / 达标状态（站点复用页面顶部的 teamSel） */
-const tpFilterPeriod = ref('__all__');
-const tpFilterAch = ref('__all__');
+/* 时段看板筛选（多选）：时段 / 站点 / 达标状态，空数组表示全部；站点独立于顶部 teamSel */
+const tpFilterPeriod = ref([]);
+const tpFilterTeam = ref([]);
+const tpFilterAch = ref([]);
 const tpPeriodOptions = computed(() =>
   tpRows.value.map(p => ({ code: String(p.time_code), name: p.time_name })));
 
+/* 多选筛选：单个按钮在未全选时全选、已全选时反选（当前选中取反） */
+const tpAllPeriods = computed(() => tpPeriodOptions.value.map(p => p.code));
+const tpAllTeams = computed(() => teamOptions.value.map(t => String(t.id)));
+const tpAchValues = ['达标', '不达标', '可达标', '不可达标', '未开始'];
+function isAllSelected(arr, values) {
+  return values.length > 0 && values.every(v => arr.includes(v));
+}
+function toggleSelectAll(arr, values) {
+  return isAllSelected(arr, values) ? values.filter(v => !arr.includes(v)) : [...values];
+}
+
+/* 北京时间当前时刻（不依赖浏览器本地时区） */
+function bjClock() {
+  const d = new Date(Date.now() + 8 * 3600 * 1000);
+  return { day: d.toISOString().slice(0, 10), hm: d.getUTCHours() * 60 + d.getUTCMinutes() };
+}
+function _hmMin(s) {
+  if (!s || !String(s).includes(':')) return null;
+  const [h, m] = String(s).split(':').map(Number);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+}
+/* 时段运行状态：done=已过完、running=进行中、not_started=未开始 */
+function periodRunState(p, now) {
+  const sel = String(date.value || '').slice(0, 10);
+  if (!sel || sel < now.day) return 'done';
+  if (sel > now.day) return 'not_started';
+  const s = _hmMin(p.start_time), e = _hmMin(p.end_time);
+  if (s == null || e == null) return 'done';
+  if (e <= s) return now.hm >= s ? 'running' : 'not_started'; // 跨日时段（如 22:00-00:00）
+  if (now.hm >= e) return 'done';
+  if (now.hm >= s) return 'running';
+  return 'not_started';
+}
+
+/* 进行中时段三态：已达标 / 可达标 / 不可达标（时间进度对照口径） */
+function tpRunningInfo(cell, p, target, now) {
+  if (cell.achieved === true) return { text: '达标', cls: 'is-ok' };
+  const s = _hmMin(p.start_time), e = _hmMin(p.end_time);
+  if (s == null || e == null) return { text: '可达标', cls: 'is-warn' };
+  const span = e > s ? e - s : (24 * 60 - s) + e; // 跨日时段
+  const elapsed = Math.max(0, Math.min(span, now.hm - s));
+  const remain = span - elapsed;
+  const tgtO = Number(target.orders_req) || 0;
+  const doneO = Number(cell.orders) || 0;
+  const tgtM = (Number(target.online_req_h) || 0) * 3600;
+  const doneM = Number(cell.online_sec) || 0;
+  // 时长物理不可达：剩余时间全在线也凑不够在线时长
+  if (Math.max(0, tgtM - doneM) > remain * 60) return { text: '不可达标', cls: 'is-bad' };
+  const tp = span > 0 ? elapsed / span : 1;
+  const op = tgtO > 0 ? doneO / tgtO : 1;
+  const mp = tgtM > 0 ? doneM / tgtM : 1;
+  return (op >= tp && mp >= tp)
+    ? { text: '可达标', cls: 'is-warn' }
+    : { text: '不可达标', cls: 'is-bad' };
+}
+
 /* 时段看板：骑手 × 时段逐行展开（仅列出该时段实际排班的骑手，随选中站点筛选） */
 const tpRiderRows = computed(() => {
-  const riders = riderRowsFiltered.value.slice().sort((a, b) =>
+  const teams = tpFilterTeam.value;
+  const source = teams.length
+    ? rider.value.rows.filter(r => teams.includes(String(r.team_id)))
+    : rider.value.rows;
+  const riders = source.slice().sort((a, b) =>
     String(a.team_name ?? '').localeCompare(String(b.team_name ?? ''), 'zh-Hans-CN')
     || String(a.rider_id ?? '').localeCompare(String(b.rider_id ?? ''), 'zh-Hans-CN'));
   const targets = new Map(riderPeriods.value.map(p => [String(p.time_code), p]));
+  const now = bjClock();
   const rows = [];
   for (const p of tpRows.value) {
     const tc = String(p.time_code);
     if (tc === '9999') continue;
-    if (tpFilterPeriod.value !== '__all__' && tc !== tpFilterPeriod.value) continue;
+    if (tpFilterPeriod.value.length && !tpFilterPeriod.value.includes(tc)) continue;
     const target = targets.get(tc) || {};
+    const runState = periodRunState(p, now);
     const orderTarget = target.orders_req == null ? '—' : _num(target.orders_req);
     const onlineTarget = target.online_req_h == null ? '—' : fmtDur(_num(target.online_req_h) * 3600);
     for (const r of riders) {
       const cell = r.cells?.[tc];
       if (!cell?.scheduled) continue;
-      if (tpFilterAch.value === 'ok' && cell.achieved !== true) continue;
-      if (tpFilterAch.value === 'miss' && cell.achieved !== false) continue;
+      let achievedText, badgeClass;
+      if (runState === 'not_started') {
+        achievedText = '未开始'; badgeClass = 'is-none';
+      } else if (cell.configured === false) {
+        achievedText = '未配置'; badgeClass = 'is-none';
+      } else if (runState === 'running') {
+        const info = tpRunningInfo(cell, p, target, now);
+        achievedText = info.text; badgeClass = info.cls;
+      } else {
+        achievedText = cell.achieved === true ? '达标' : '不达标';
+        badgeClass = achClass(cell.achieved);
+      }
+      if (tpFilterAch.value.length && !tpFilterAch.value.includes(achievedText)) continue;
       rows.push({
         time_name: p.time_name,
         rider_id: r.rider_id,
         rider_name: r.rider_name,
         team_name: r.team_name,
         achieved: cell.achieved,
-        achievedText: cell.configured === false ? '未配置'
-          : cell.achieved === true ? '达标'
-          : cell.achieved === false ? '未达标' : '—',
+        achievedText,
+        badgeClass,
         orders: cell.orders ?? '—',
         orderTarget,
         orderOk: cell.order_ok,
@@ -504,7 +621,7 @@ const pagedTpRiderRows = computed(() => {
   const start = (tpPage.value - 1) * tpPageSize.value;
   return tpRiderRows.value.slice(start, start + tpPageSize.value);
 });
-watch([teamSel, date, tpFilterPeriod, tpFilterAch, tpRiderRows], () => { tpPage.value = 1; });
+watch([date, tpFilterPeriod, tpFilterTeam, tpFilterAch, tpRiderRows], () => { tpPage.value = 1; });
 
 /* 读取缓存（进入页面 / 切换日期）：始终读取「全部站点」，选中具体站点在前端筛选，不重新取数。 */
 async function loadCached() {
@@ -594,6 +711,10 @@ onMounted(async () => {
 .dv-period-wrap { height: 100%; min-height: 0; display: flex; flex-direction: column; }
 .dv-filter { display: flex; gap: var(--sp-12); margin-bottom: var(--sp-12); flex-wrap: wrap; }
 .dv-filter-sel { width: 160px; }
+/* 多选下拉头部：全选 / 反选 / 清空 */
+/* 头部内边距由负 margin 抵消，让全选项与下拉选项左对齐、样式一致 */
+.dv-sel-all { margin: -10px; }
+.dv-sel-all .el-select-dropdown__item:hover { background-color: var(--el-fill-color-light); }
 .dv-period-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .dv-period-card :deep(.el-card__body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .dv-table-fill { flex: 1; min-height: 0; }
@@ -626,9 +747,22 @@ onMounted(async () => {
 .dv-miss { color: var(--danger, #d32f2f); }
 .dv-rate-block { margin-bottom: var(--sp-16); }
 .dv-rate-title { font-size: var(--el-font-size-medium); font-weight: var(--fw-semibold); color: var(--el-text-color-primary); }
+/* 卡片标题可点击折叠：箭头展开朝下、收起朝右 */
+.dv-rate-header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-8); width: 100%; cursor: pointer; user-select: none; }
+.dv-rate-fold { font-size: 14px; color: var(--el-text-color-secondary); transition: transform .2s ease; }
+.dv-rate-fold.is-folded { transform: rotate(-90deg); }
 .dv-matrix-wrap { flex: initial; min-height: 0; overflow: visible; border-radius: var(--el-border-radius-base); }
 /* 站点看板 4 张率值表：每张表格一张 el-card，标题走 #header（无 footer）；
    header/body 均沿用 Element Plus 默认 padding，故此处不做 :deep 覆盖 */
+/* 合计行固定在首行：加底色与加粗便于和站点行区分 */
+.dv-table :deep(.dv-total-row > td.el-table__cell) {
+  background: var(--el-color-primary-light-9);
+  font-weight: var(--fw-bold);
+}
+/* 合并后的「合计」单元格文本居中 */
+.dv-table :deep(.dv-total-row > td.el-table__cell:first-child .cell) {
+  text-align: center;
+}
 
 .dv-cfg-group { display: flex; flex-direction: column; gap: var(--sp-8); }
 .dv-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; line-height: 1.2; }
@@ -640,6 +774,7 @@ onMounted(async () => {
 .dv-cell-badge { font-size: 13px; font-weight: var(--fw-semibold); padding: 1px 6px; border-radius: 4px; }
 .dv-cell-badge.is-ok { color: #2e7d32; background: #e8f5e9; }
 .dv-cell-badge.is-bad { color: #d32f2f; background: #fdecea; }
+.dv-cell-badge.is-warn { color: #ed6c02; background: #fff3e0; }
 .dv-cell-badge.is-none { color: var(--el-text-color-secondary); }
 /* 骑手看板可排序列头：指针提示可点击；仅当前排序列根据 sortField 显示升/降序图标 */
 .sort-h { cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
