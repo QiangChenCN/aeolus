@@ -23,11 +23,11 @@ describe('navTo', () => {
     ['rbac-pw', '/settings/rbac/pw'],
     ['rbac', '/settings/rbac'],
     ['profile', '/settings/profile'],
-    ['bots', '/bot'],
     ['syscfg', '/settings'],
     ['sys-dingtalk', '/settings/dingtalk'],
-    ['sys-aeolus', '/settings/aeolus'],
-    ['sys-minio', '/settings/minio'],
+    ['sys-credentials', '/settings/credentials'],
+    ['hr-org', '/hr/org'],
+    ['hr-org-positions', '/hr/positions'],
   ];
 
   it.each(cases)('kind=%s -> %s', (kind, expected) => {
@@ -35,7 +35,7 @@ describe('navTo', () => {
   });
 
   it('botcfg 带 id 拼接路径', () => {
-    expect(navTo({ kind: 'botcfg', id: '42' })).toBe('/bot/42');
+    expect(navTo({ kind: 'botcfg', id: '42' })).toBe('/settings/dingtalk/42');
   });
 
   it('未知 kind 回落到首页', () => {
