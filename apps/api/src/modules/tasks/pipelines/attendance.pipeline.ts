@@ -372,7 +372,7 @@ export class AttendancePipeline implements TaskHandler {
       const bj = new Date(Date.now() + 8 * 3600 * 1000);
       const pp = (n: number) => String(n).padStart(2, '0');
       const summary: Summary = {
-        query_time: `${bj.getUTCFullYear()}-${pp(bj.getUTCMonth() + 1)}-${pp(bj.getUTCDate())} ${pp(bj.getUTCHours())}:${pp(bj.getUTCMinutes())}`,
+        query_time: `${bj.getUTCFullYear()}-${pp(bj.getUTCMonth() + 1)}-${pp(bj.getUTCDate())} ${pp(bj.getUTCHours())}:${pp(bj.getUTCMinutes())}:${pp(bj.getUTCSeconds())}`,
         slot_code: queryCode,
         slot_name: queryName,
         slot_range: rangeStr,
@@ -408,6 +408,7 @@ export class AttendancePipeline implements TaskHandler {
         teamItems,
         stats as never,
         this.imgPath,
+        summary.query_time,
       );
       ctx.log(`[render] PNG 已生成：${out}`);
     });
@@ -493,11 +494,7 @@ export class AttendancePipeline implements TaskHandler {
           `\n\n⚠ 以上站点未匹配到负责人，未 @ 到人（请在「系统设置 → 站点负责人设置」维护）`;
       }
       if (noAt) ids = [];
-      const text =
-        `## 实时在线\n` +
-        `**时段：** ${summary.slot_name}（${summary.slot_range}）　**查询时间：** ${summary.query_time}\n\n` +
-        `![实时在线明细](${imgUrl})\n\n` +
-        tail;
+      const text = `![实时在线明细](${imgUrl})\n\n${tail}`;
       const out = await this.dingtalk.sendMessage({ group: groupId, text, atOpenDingTalkIds: ids });
       ctx.log(`[send] 消息发送：${JSON.stringify(out).slice(0, 300)}`);
     });

@@ -6,6 +6,7 @@ import {
   createCanvas,
   drawCenter,
   drawLeft,
+  drawRight,
   fitFontSize,
   fmtNow,
   fmtRate,
@@ -148,6 +149,10 @@ export class ReportRenderService {
   }
 
   // ───────────── 2. 实时在线（多站点汇总 + 明细） ─────────────
+  /**
+   * 参考「实时在线」设计稿排版（2x 像素尺度）：
+   * 品牌页头 → 六项统计卡 → 站点在线率进度卡 → 骑手明细表。
+   */
   renderAllTeams(
     allRows: AllTeamsRow[],
     queryName: string,
@@ -155,122 +160,127 @@ export class ReportRenderService {
     teamItems: TeamItem[],
     stats: TeamStats,
     outPath?: string,
+    queryTime?: string,
   ): string {
     const out = outPath || this.out('apps/api/runtime/jobs/attendance/out/attendance_absent.png');
-    const timeStr = fmtNow();
+    const rawTime = queryTime || fmtNow();
+    const timePart = rawTime.includes(' ') ? rawTime.slice(rawTime.indexOf(' ') + 1) : rawTime;
+    const fetchTime = timePart.length === 5 ? `${timePart}:00` : timePart;
+    const rangeLabel = rangeStr.replace(/-/g, ' - ');
+    const W = 1656;
+    const PAD = 32;
+    const CONTENT = W - PAD * 2;
+
+    const headerH = 250;
+    const statsY = headerH + 30;
+    const statsH = 190;
+    const sectionF = 30;
+    const sectionBottomGap = 18;
+    const siteCardH = 140;
+    const siteGap = 16;
+    const tableTopGap = 34;
+    const tableHdrH = 80;
+    const rowH = 84;
+    const bottomPad = 40;
+
     const cols: [string, number][] = [
-      ['骑手姓名', 95],
-      ['站点', 165],
-      ['状态', 80],
-      ['配送中单量', 85],
-      ['当前时段完成单量', 130],
-      ['当前时段有效在线时长', 150],
-      ['全天完成单量', 95],
-      ['全天有效在线时长', 130],
+      ['骑手姓名', 150],
+      ['站点', 290],
+      ['状态', 110],
+      ['配送中单量', 150],
+      ['当前时段完成单量', 220],
+      ['当前时段有效在线时长', 260],
+      ['全天完成单量', 200],
+      ['全天有效在线时长', 212],
     ];
-    const titleF = 28;
-    const subF = 14;
-    const siteF = 15;
-    const statF = 13;
-    const headF = 14;
-    const cellF = 13;
-    const padX = 28;
-    const padY = 18;
-    const rowH = 46;
-    const headerH = 44;
-    const titleH = 66;
-    const footerH = 40;
-    const cardH = 44;
-    const cardGap = 12;
-    const tableW = cols.reduce((s, [, w]) => s + w, 0);
-    const imgW = tableW + padX * 2;
+
     const nRows = Math.max(allRows.length, 1);
-    const cardsH = teamItems.length
-      ? (teamItems.length + 1) * (cardH + cardGap) - cardGap
-      : cardH + cardGap;
-    const imgH = padY * 2 + titleH + cardsH + 12 + headerH + nRows * rowH + footerH;
-    const { canvas, ctx } = newCanvas(imgW, imgH, C.WHITE);
+    const siteStartY = statsY + statsH + 28;
+    const sitesH = teamItems.length
+      ? teamItems.length * siteCardH + (teamItems.length - 1) * siteGap
+      : siteCardH;
+    const sec2Y = siteStartY + sitesH + tableTopGap;
+    const tableY = sec2Y + sectionF + 10 + sectionBottomGap;
+    const tableH = tableHdrH + nRows * rowH;
+    const H = tableY + tableH + bottomPad;
 
-    fillRect(ctx, 0, 0, imgW, titleH, C.BRAND);
-    drawLeft(ctx, padX, 16, '实时在线', titleF, C.WHITE);
-    drawLeft(ctx, padX, 46, `时段：${queryName}（${rangeStr}）  ·  ${timeStr}`, subF, C.WHITE);
+    const { canvas, ctx } = newCanvas(W, H, C.CANVAS);
 
-    let y = padY * 2 + titleH;
+    // 1. 品牌色页头
+    fillRect(ctx, 0, 0, W, headerH, C.BRAND);
+    drawLeft(ctx, 48, 44, `${queryName}实时在线播报`, 46, C.WHITE, true);
+    drawLeft(ctx, 48, 116, `时段：${rangeLabel}`, 28, C.WHITE);
+    drawLeft(ctx, 48, 166, `查询时间：${fetchTime}`, 28, C.WHITE);
+
+    // 2. 六项统计卡：排班 / 在线 / 在线率 / 小休 / 下线 / 下线背单
     const tot: TeamStat = [0, 0, 0, 0, 0, 0];
-    for (const [teamId, name] of teamItems) {
+    for (const [teamId] of teamItems) {
       const s = stats[teamId] || [0, 0, 0, 0, 0, 0];
       for (let i = 0; i < 6; i++) tot[i] += s[i];
-      const rate = fmtRate(s[1], s[0]);
-      roundRect(ctx, padX, y, imgW - padX * 2, cardH, 10, { fill: C.SURFACE });
-      drawLeft(ctx, padX + 14, y + (cardH - 18) / 2, name, siteF, C.TEXT_PRIMARY);
-      const parts: [string, string][] = [
-        ['排班 ', C.TEXT_SECONDARY],
-        [String(s[0]), C.TEXT_PRIMARY],
-        ['   在线 ', C.TEXT_SECONDARY],
-        [String(s[1]), C.TEXT_PRIMARY],
-        ['   在线率 ', C.TEXT_SECONDARY],
-        [rate + '%', C.BRAND],
-        ['   小休 ', C.TEXT_SECONDARY],
-        [String(s[3]), C.TEXT_PRIMARY],
-      ];
-      let x = padX + 14 + textW(ctx, name, siteF) + 18;
-      for (const [txt, col] of parts) {
-        drawLeft(ctx, x, y + (cardH - 16) / 2, txt, statF, col);
-        x += textW(ctx, txt, statF);
-      }
-      y += cardH + cardGap;
     }
-
-    // 合计卡片（品牌色强调）：标题按所选站点数量动态生成（N 站合计）
-    const totalLabel = teamItems.length ? `${teamItems.length} 站合计` : '合计';
-    const tRate = fmtRate(tot[1], tot[0]);
-    roundRect(ctx, padX, y, imgW - padX * 2, cardH, 10, { fill: C.BRAND_TINT, stroke: C.BRAND, lineWidth: 1 });
-    drawLeft(ctx, padX + 14, y + (cardH - 18) / 2, totalLabel, siteF, C.BRAND);
-    const tParts: [string, string][] = [
-      ['排班 ', C.TEXT_SECONDARY],
-      [String(tot[0]), C.TEXT_PRIMARY],
-      ['   在线 ', C.TEXT_SECONDARY],
-      [String(tot[1]), C.TEXT_PRIMARY],
-      ['   在线率 ', C.TEXT_SECONDARY],
-      [tRate + '%', C.BRAND],
-      ['   小休 ', C.TEXT_SECONDARY],
-      [String(tot[3]), C.TEXT_PRIMARY],
-      ['   下线 ', C.TEXT_SECONDARY],
-      [String(tot[2]), C.TEXT_PRIMARY],
-      ['   背单 ', C.TEXT_SECONDARY],
-      [String(tot[4] + tot[5]), C.TEXT_PRIMARY],
+    roundRect(ctx, PAD, statsY, CONTENT, statsH, 20, { fill: C.WHITE });
+    const metrics: [string, string, string][] = [
+      ['排班', String(tot[0]), C.TEXT_PRIMARY],
+      ['在线', String(tot[1]), C.TEXT_PRIMARY],
+      ['在线率', `${fmtRate(tot[1], tot[0])}%`, rateColor(tot[0] ? (tot[1] * 100) / tot[0] : 0)],
+      ['小休', String(tot[3]), C.TEXT_PRIMARY],
+      ['下线', String(tot[2]), C.TEXT_PRIMARY],
+      ['下线背单', String(tot[4] + tot[5]), C.TEXT_PRIMARY],
     ];
-    let tx = padX + 14 + textW(ctx, totalLabel, siteF) + 18;
-    for (const [txt, col] of tParts) {
-      drawLeft(ctx, tx, y + (cardH - 16) / 2, txt, statF, col);
-      tx += textW(ctx, txt, statF);
-    }
-    y += cardH + cardGap;
-    y += 12 - cardGap;
-
-    fillRect(ctx, padX, y, tableW, headerH, C.BRAND_TINT);
-    let x = padX;
-    cols.forEach(([name, w], idx) => {
-      const tx2 = idx === 0 || idx === 1 ? x + 10 : x + (w - textW(ctx, name, headF)) / 2;
-      drawLeft(ctx, tx2, y + (headerH - 18) / 2, name, headF, C.TEXT_PRIMARY);
-      x += w;
+    metrics.forEach(([label, value, color], i) => {
+      const cx = PAD + (CONTENT * (i + 0.5)) / metrics.length;
+      const vsz = fitFontSize(ctx, value, CONTENT / metrics.length - 32, 52, 28);
+      drawCenter(ctx, cx, statsY + 58, value, vsz, color, true);
+      drawCenter(ctx, cx, statsY + 124, label, 26, C.TEXT_TERTIARY);
     });
-    hLine(ctx, padX, y + headerH, imgW - padX, C.BRAND, 2);
-    y += headerH;
 
-    const cellIsZero = (idx: number, val: string): boolean => {
-      if (idx === 3 || idx === 4 || idx === 6) {
-        const n = Number(val);
-        return Number.isFinite(n) && n === 0;
+    // 3. 站点卡片（站点名 + 右侧百分比 + 进度条 + 排班/在线/小休/下线）
+    let sy = siteStartY;
+    for (const [teamId, name] of teamItems) {
+      const s = stats[teamId] || [0, 0, 0, 0, 0, 0];
+      const rateStr = fmtRate(s[1], s[0]);
+      const rateNum = Math.max(0, Math.min(100, Number(rateStr) || 0));
+      roundRect(ctx, PAD, sy, CONTENT, siteCardH, 18, { fill: C.WHITE });
+      drawLeft(ctx, PAD + 24, sy + 22, name, 30, C.TEXT_PRIMARY, true);
+      drawRight(ctx, PAD + CONTENT - 24, sy + 22, `${rateStr}%`, 30, C.BRAND, true);
+      const barX = PAD + 24;
+      const barY = sy + 78;
+      const barW = CONTENT - 48;
+      const barH = 12;
+      roundRect(ctx, barX, barY, barW, barH, barH / 2, { fill: '#F2F3F5' });
+      if (rateNum > 0) {
+        roundRect(ctx, barX, barY, Math.max(barH, (barW * rateNum) / 100), barH, barH / 2, { fill: C.BRAND });
       }
-      if (idx === 5 || idx === 7) return val === '0';
-      return false;
-    };
+      drawLeft(ctx, barX, sy + 104, `排班 ${s[0]} · 在线 ${s[1]} · 小休 ${s[3]} · 下线 ${s[2]}`, 24, C.TEXT_TERTIARY);
+      sy += siteCardH + siteGap;
+    }
+    if (!teamItems.length) {
+      roundRect(ctx, PAD, sy, CONTENT, siteCardH, 18, { fill: C.WHITE });
+      drawLeft(ctx, PAD + 24, sy + (siteCardH - 26) / 2, '暂无站点数据', 26, C.TEXT_TERTIARY);
+    }
+
+    // 4. 骑手明细表（圆角容器 + 裁剪，表头浅灰、斑马纹、状态红字）
+    drawLeft(ctx, PAD, sec2Y, '骑手明细', sectionF, C.TEXT_PRIMARY, true);
+    const tableX = PAD;
+    const tableW = CONTENT;
+    roundRect(ctx, tableX, tableY, tableW, tableH, 18);
+    ctx.save();
+    ctx.clip();
+
+    fillRect(ctx, tableX, tableY, tableW, tableH, C.WHITE);
+    fillRect(ctx, tableX, tableY, tableW, tableHdrH, '#F2F3F5');
+    let hx = tableX;
+    cols.forEach(([name, w]) => {
+      const sz = fitFontSize(ctx, name, w - 48, 24, 16);
+      drawLeft(ctx, hx + 24, tableY + (tableHdrH - sz) / 2, name, sz, C.TEXT_SECONDARY, true);
+      hx += w;
+    });
 
     if (allRows.length) {
       allRows.forEach((r, i) => {
-        fillRect(ctx, padX, y, tableW, rowH, i % 2 === 0 ? C.WHITE : C.SURFACE);
-        hLine(ctx, padX, y + rowH, imgW - padX, C.DIVIDER, 1);
+        const ry = tableY + tableHdrH + i * rowH;
+        fillRect(ctx, tableX, ry, tableW, rowH, i % 2 === 0 ? C.WHITE : '#FAFBFC');
+        hLine(ctx, tableX, ry + rowH, tableX + tableW, '#F0F1F3', 1);
         const values = [
           String(r.knightName),
           String(r.site),
@@ -281,39 +291,23 @@ export class ReportRenderService {
           String(r.fullFinish),
           String(r.fullValid),
         ];
-        let cx = padX;
+        let cx = tableX;
         cols.forEach(([name, w], idx) => {
           const val = values[idx];
-          if (name === '状态') {
-            pill(ctx, cx + w / 2, y + rowH / 2, val, cellF, C.DANGER_TINT, C.DANGER);
-          } else {
-            const sz = fitFontSize(ctx, val, w - 20, cellF);
-            const ty = y + (rowH - sz) / 2;
-            if (cellIsZero(idx, val)) {
-              drawLeft(ctx, idx === 0 || idx === 1 ? cx + 10 : cx + (w - textW(ctx, val, sz)) / 2, ty, val, sz, C.TEXT_TERTIARY);
-            } else if (idx === 0 || idx === 1) {
-              drawLeft(ctx, cx + 10, ty, val, sz, C.TEXT_REGULAR);
-            } else {
-              drawLeft(ctx, cx + (w - textW(ctx, val, sz)) / 2, ty, val, sz, C.TEXT_REGULAR);
-            }
-          }
+          const sz = fitFontSize(ctx, val, w - 48, 24, 14);
+          const isZero = idx >= 3 && (val === '0' || val === '0m');
+          const color = idx === 2 ? C.DANGER : isZero ? C.TEXT_TERTIARY : C.TEXT_REGULAR;
+          drawLeft(ctx, cx + 24, ry + (rowH - sz) / 2, val, sz, color, idx === 2);
+          void name;
           cx += w;
         });
-        y += rowH;
       });
     } else {
-      drawLeft(ctx, padX + 10, y + 10, '✓ 当前时段所有有排班骑手均已在线配送', 16, C.SUCCESS);
-      y += rowH;
+      drawLeft(ctx, tableX + 24, tableY + tableHdrH + 24, '✓ 当前时段所有有排班骑手均已在线配送', 24, C.SUCCESS);
     }
+    ctx.restore();
+    roundRect(ctx, tableX, tableY, tableW, tableH, 18, { stroke: '#E5E6EB', lineWidth: 2 });
 
-    drawLeft(
-      ctx,
-      padX,
-      y + 10,
-      '说明：在线(活跃)=上班/部分在线；小休=暂离(不计入在线)；下线=未在线装备。明细列出小休与下线骑手',
-      subF,
-      C.TEXT_TERTIARY,
-    );
     return savePng(canvas, out);
   }
 
@@ -629,6 +623,22 @@ export class ReportRenderService {
     drawLeft(ctx, padX, y + 12, '请相关站点负责人尽快登录风神完成申诉，逾期处罚将生效', noteF, C.TEXT_TERTIARY);
     return savePng(canvas, out);
   }
+}
+
+/**
+ * 在线率配色：90% 以下红；90%~95% 红→橙；95%~100% 橙→绿。
+ */
+function rateColor(rate: number): string {
+  const mix = (a: string, b: string, t: number): string => {
+    const hex = (v: number) => Math.round(v).toString(16).padStart(2, '0');
+    const [r1, g1, b1] = C.rgb(a);
+    const [r2, g2, b2] = C.rgb(b);
+    const k = Math.max(0, Math.min(1, t));
+    return `#${hex(r1 + (r2 - r1) * k)}${hex(g1 + (g2 - g1) * k)}${hex(b1 + (b2 - b1) * k)}`;
+  };
+  if (rate < 90) return C.DANGER;
+  if (rate < 95) return mix(C.DANGER, '#FF8C00', (rate - 90) / 5);
+  return mix('#FF8C00', C.SUCCESS, Math.min(1, (rate - 95) / 5));
 }
 
 /** 剩余时间配色（对照 Python render_tasks 的语义重写）。 */

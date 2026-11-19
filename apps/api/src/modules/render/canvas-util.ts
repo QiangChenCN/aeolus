@@ -15,16 +15,16 @@ export function newCanvas(w: number, h: number, bg = '#FFFFFF'): { canvas: Canva
   return { canvas, ctx };
 }
 
-export function fontStr(size: number): string {
-  return `${size}px ${ensureFont()}`;
+export function fontStr(size: number, bold = false): string {
+  return `${bold ? 'bold ' : ''}${size}px ${ensureFont()}`;
 }
 
-export function setFont(ctx: C2D, size: number): void {
-  ctx.font = fontStr(size);
+export function setFont(ctx: C2D, size: number, bold = false): void {
+  ctx.font = fontStr(size, bold);
 }
 
-export function textW(ctx: C2D, text: string, size: number): number {
-  setFont(ctx, size);
+export function textW(ctx: C2D, text: string, size: number, bold = false): number {
+  setFont(ctx, size, bold);
   return ctx.measureText(String(text)).width;
 }
 
@@ -40,8 +40,16 @@ export function fitFontSize(ctx: C2D, text: string, maxW: number, baseSize: numb
 }
 
 /** 左对齐 + 顶部基线绘制。 */
-export function drawLeft(ctx: C2D, x: number, yTop: number, text: string, size: number, color: string): void {
-  setFont(ctx, size);
+export function drawLeft(
+  ctx: C2D,
+  x: number,
+  yTop: number,
+  text: string,
+  size: number,
+  color: string,
+  bold = false,
+): void {
+  setFont(ctx, size, bold);
   ctx.fillStyle = color;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
@@ -49,8 +57,16 @@ export function drawLeft(ctx: C2D, x: number, yTop: number, text: string, size: 
 }
 
 /** 水平居中 + 垂直居中绘制（对应 Pillow 的 _centered_text）。 */
-export function drawCenter(ctx: C2D, cx: number, cy: number, text: string, size: number, color: string): void {
-  setFont(ctx, size);
+export function drawCenter(
+  ctx: C2D,
+  cx: number,
+  cy: number,
+  text: string,
+  size: number,
+  color: string,
+  bold = false,
+): void {
+  setFont(ctx, size, bold);
   ctx.fillStyle = color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -58,12 +74,37 @@ export function drawCenter(ctx: C2D, cx: number, cy: number, text: string, size:
 }
 
 /** 水平居中 + 顶部基线绘制。 */
-export function drawTopCenter(ctx: C2D, cx: number, yTop: number, text: string, size: number, color: string): void {
-  setFont(ctx, size);
+export function drawTopCenter(
+  ctx: C2D,
+  cx: number,
+  yTop: number,
+  text: string,
+  size: number,
+  color: string,
+  bold = false,
+): void {
+  setFont(ctx, size, bold);
   ctx.fillStyle = color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.fillText(String(text), cx, yTop);
+}
+
+/** 右对齐 + 顶部基线绘制。 */
+export function drawRight(
+  ctx: C2D,
+  xRight: number,
+  yTop: number,
+  text: string,
+  size: number,
+  color: string,
+  bold = false,
+): void {
+  setFont(ctx, size, bold);
+  ctx.fillStyle = color;
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'top';
+  ctx.fillText(String(text), xRight, yTop);
 }
 
 export function fillRect(ctx: C2D, x: number, y: number, w: number, h: number, color: string): void {
