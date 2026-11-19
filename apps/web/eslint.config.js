@@ -27,7 +27,9 @@ export default [
     },
     rules: {
       "no-undef": "error",
-      "import/no-unresolved": "error",
+      // @shared / @shared-ui 由 Vite alias 指向 apps/shared，Node resolver 无法解析；
+      // 路径正确性由 vite build 保证，这里跳过以免误报。
+      "import/no-unresolved": ["error", { ignore: ["^@shared(-ui)?/"] }],
       "import/no-duplicates": "warn",
     },
   },

@@ -3,15 +3,16 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import ElementPlus, { ElMessage, ElNotification } from 'element-plus';
 import zhCn from 'element-plus/es/locale/lang/zh-cn';
+import '@shared-ui/tokens.css';
 import 'element-plus/dist/index.css';
 import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 
 import App from './App.vue';
 import router from './router';
-import { permission } from './directives/permission.js';
-import RobotIcon from './components/icons/RobotIcon.vue';
-import './styles/element-overrides.css';
-import './styles/base.css';
+import { permission } from '@shared/directives/permission.js';
+import RobotIcon from '@shared/components/icons/RobotIcon.vue';
+import '@shared-ui/styles/element-overrides.css';
+import '@shared-ui/styles/base.css';
 import './styles/responsive.css';
 
 // 跨应用共享包（workspace 依赖）冒烟：确认 @aeolus/shared 在 web 侧可被解析与打包

@@ -43,7 +43,7 @@ export class ServeController {
     const f =     path.join(
       this.config.get<string>('PROJECT_ROOT') || path.resolve(process.cwd(), '..'),
       'apps',
-      'web',
+      'shared',
       'tokens.css',
     );
     if (!existsSync(f)) {

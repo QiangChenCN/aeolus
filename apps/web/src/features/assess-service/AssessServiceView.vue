@@ -180,7 +180,7 @@
 import { computed, onMounted, ref } from 'vue';
 import {
   fetchServiceQualityTargets, saveServiceQualityTargets,
-} from '../../api/dashboards.js';
+} from '@shared/api/dashboards.js';
 
 /** 档位（得分锚点）：按月、按考核项可配 {metricKey: [{key, score}]}；
  *  key 为阈值存储键；无固定/默认档位，空列表 = 该项未设置（由用户自行添加）。 */

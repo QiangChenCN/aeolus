@@ -2,12 +2,12 @@
 // 只有本看板使用（2026-10-21 从 DeliveryTimeoutView.vue 剥离），改这里的请求编排不会波及别的看板。
 import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { fetchTeams } from '../../api/dashboards.js';
+import { fetchTeams } from '@shared/api/dashboards.js';
 import {
   fetchDeliveryTimeout,
   refreshDeliveryTimeout,
   fetchDeliveryTimeoutTeams,
-} from '../../api/delivery-timeout.js';
+} from '@shared/api/delivery-timeout.js';
 
 const REFRESH_COOLDOWN_SEC = 60;
 

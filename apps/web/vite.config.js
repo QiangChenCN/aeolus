@@ -6,11 +6,20 @@ import { dirname, resolve } from 'node:path';
 // 配置位于 web/（与 package.json 同目录，Vite 才能自动加载并就近解析 web/node_modules）。
 // root 指向 web/：源码 web/src/、入口 web/index.html 都在其下，构建产物落到 web/dist/。
 const HERE = dirname(fileURLToPath(import.meta.url)); // web/
+const SHARED = resolve(HERE, '..', 'shared'); // apps/shared
+const ROOT = resolve(HERE, '..', '..');
 
 export default defineConfig({
   plugins: [vue()],
   root: HERE,
   base: '/',
+  resolve: {
+    alias: {
+      // 设计令牌 / 主题样式与公共代码模块为跨应用共享资产
+      '@shared-ui': SHARED,
+      '@shared': resolve(SHARED, 'src'),
+    },
+  },
   // 让 Vite 从仓库根读取 .env，使 VITE_OTEL_* 与后端共用单一 /opt/aeolusdata/.env 配置来源。
   // 只有 VITE_ 前缀的变量才会暴露给前端 bundle，密钥不会泄漏。
   envDir: resolve(HERE, '..', '..'),
@@ -26,6 +35,8 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // 源码经 @shared alias 指向 apps/shared（root 之外）
+    fs: { allow: [ROOT] },
     proxy: {
       // 开发联调：把 /api 代理到 NestJS 后端（默认 8787），由它做鉴权/会话 + 注入 x-scope 后
       // 再委托 FastAPI 计算服务（8900）。注意 /api 必须走 Nest，不能直连单体 8917

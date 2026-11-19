@@ -44,10 +44,10 @@
 <script setup>
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
-import StatusCapsule from '../../components/common/StatusCapsule.vue';
-import { useRunsStore } from '../../stores/runs.js';
-import { useAppStore } from '../../stores/app.js';
-import { STATUS_TXT } from '../../utils/tokens.js';
+import StatusCapsule from '@shared/components/common/StatusCapsule.vue';
+import { useRunsStore } from '@shared/stores/runs.js';
+import { useAppStore } from '@shared/stores/app.js';
+import { STATUS_TXT } from '@shared/utils/tokens.js';
 
 const router = useRouter();
 const runs = useRunsStore();

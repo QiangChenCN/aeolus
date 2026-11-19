@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterRiders } from '../../src/utils/riderFilter.js';
+import { filterRiders } from '@shared/utils/riderFilter.js';
 
 // 骑手看板筛选纯函数（与 python/analytics/rider_dimension.py 口径一致）。
 const rows = [

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { STATUS_TXT, STATUS_CLS, GROUP_ICONS, PARAM_CONTROL } from '../../src/utils/tokens.js';
+import { STATUS_TXT, STATUS_CLS, GROUP_ICONS, PARAM_CONTROL } from '@shared/utils/tokens.js';
 
 // 状态文案 / 色、分组图标、参数控件类型等常量映射，是 UI 渲染的单一事实来源。
 describe('tokens 常量映射', () => {

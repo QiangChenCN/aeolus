@@ -93,7 +93,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted } from 'vue';
-import { useBotConfig } from '../../composables/useBotConfig.js';
+import { useBotConfig } from '@shared/composables/useBotConfig.js';
 
 const {
   bot, savingBot, reloadingBot, status, lastUpdated, creds,

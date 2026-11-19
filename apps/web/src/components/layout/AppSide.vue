@@ -18,11 +18,11 @@
 import { computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import NavNode from './NavNode.vue';
-import { useTasksStore } from '../../stores/tasks.js';
-import { useAuthStore } from '../../stores/auth.js';
-import { useRunsStore } from '../../stores/runs.js';
-import { useAppStore } from '../../stores/app.js';
-import { openActiveAncestors } from '../../utils/nav.js';
+import { useTasksStore } from '@shared/stores/tasks.js';
+import { useAuthStore } from '@shared/stores/auth.js';
+import { useRunsStore } from '@shared/stores/runs.js';
+import { useAppStore } from '@shared/stores/app.js';
+import { openActiveAncestors } from '@shared/utils/nav.js';
 
 const route = useRoute();
 const app = useAppStore();

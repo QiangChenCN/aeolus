@@ -42,8 +42,8 @@ import { ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import AppHeader from '../components/layout/AppHeader.vue';
 import AppSide from '../components/layout/AppSide.vue';
-import { useAppStore } from '../stores/app.js';
-import { useBreakpoint } from '../composables/useBreakpoint.js';
+import { useAppStore } from '@shared/stores/app.js';
+import { useBreakpoint } from '@shared/composables/useBreakpoint.js';
 
 const route = useRoute();
 const app = useAppStore();

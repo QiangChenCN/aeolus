@@ -24,7 +24,7 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
-import { fetchPolicy, savePolicy as postPolicy } from '../../api/dashboards.js';
+import { fetchPolicy, savePolicy as postPolicy } from '@shared/api/dashboards.js';
 
 const policy = reactive({});
 const savingPolicy = ref(false);

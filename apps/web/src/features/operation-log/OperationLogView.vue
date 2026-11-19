@@ -114,7 +114,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
-import { fetchOperationLog, fetchAuthzDecisions } from '../../api/operation-log.js';
+import { fetchOperationLog, fetchAuthzDecisions } from '@shared/api/operation-log.js';
 
 const tab = ref('operation');
 

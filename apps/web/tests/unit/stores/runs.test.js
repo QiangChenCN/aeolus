@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
-import { useRunsStore } from '../../../src/stores/runs.js';
-import { useTasksStore } from '../../../src/stores/tasks.js';
+import { useRunsStore } from '@shared/stores/runs.js';
+import { useTasksStore } from '@shared/stores/tasks.js';
 
 // runs store：接收 /api/state 快照与 SSE 事件增量更新运行态。
 // 注意 SSE 层会先把事件 payload 的 .run 解开再调 evRunStart/evRunEnd，

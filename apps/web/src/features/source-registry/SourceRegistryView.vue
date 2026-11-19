@@ -125,9 +125,9 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { useAppStore } from '../../stores/app.js';
-import { useAuthStore } from '../../stores/auth.js';
-import { fetchSources, fetchSourceDetail } from '../../api/sources.js';
+import { useAppStore } from '@shared/stores/app.js';
+import { useAuthStore } from '@shared/stores/auth.js';
+import { fetchSources, fetchSourceDetail } from '@shared/api/sources.js';
 
 const app = useAppStore();
 const auth = useAuthStore();

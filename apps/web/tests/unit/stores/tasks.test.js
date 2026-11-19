@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
-import { useTasksStore } from '../../../src/stores/tasks.js';
+import { useTasksStore } from '@shared/stores/tasks.js';
 
 // tasks store：任务注册表 + 参数偏好（localStorage 持久）。
 // 偏好读写与列表筛选/排序是纯逻辑，最适合单元覆盖。

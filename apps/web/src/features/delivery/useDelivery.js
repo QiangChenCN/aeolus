@@ -1,8 +1,8 @@
 // 运单明细看板的数据层：站点目录 / 日期 / 站点 / 状态 / 关键字筛选与刷新。
 // 只有本看板使用，改这里的请求编排不会波及别的看板。
 import { computed, ref, watch } from 'vue';
-import { fetchTeams } from '../../api/dashboards.js';
-import { fetchDelivery, refreshDelivery, fetchDeliveryHistoryStatus, exportDelivery } from '../../api/delivery.js';
+import { fetchTeams } from '@shared/api/dashboards.js';
+import { fetchDelivery, refreshDelivery, fetchDeliveryHistoryStatus, exportDelivery } from '@shared/api/delivery.js';
 
 const REFRESH_COOLDOWN_SEC = 60;
 /** 关键字输入防抖：每个按键都打一次全量过滤请求太浪费。 */

@@ -275,7 +275,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 
-import { fetchTeams, fetchAssessmentStation, refreshAssessment, refreshAssessmentDelivery, fetchRefreshCooldown, markRefreshCooldown, fetchAssessmentTeams, saveAssessmentTeams, fetchServiceQualityTargets, fetchAssessmentAutoConfig, saveAssessmentAutoConfig } from '../../api/dashboards.js';
+import { fetchTeams, fetchAssessmentStation, refreshAssessment, refreshAssessmentDelivery, fetchRefreshCooldown, markRefreshCooldown, fetchAssessmentTeams, saveAssessmentTeams, fetchServiceQualityTargets, fetchAssessmentAutoConfig, saveAssessmentAutoConfig } from '@shared/api/dashboards.js';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();

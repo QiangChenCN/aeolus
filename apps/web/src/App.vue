@@ -15,16 +15,16 @@
 import { onMounted, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
-import ConfirmDialog from './components/common/ConfirmDialog.vue';
-import LogDialog from './components/common/LogDialog.vue';
-import ArtifactBrowser from './components/common/ArtifactBrowser.vue';
-import RunDrawer from './components/common/RunDrawer.vue';
-import { useAuthStore, setLoginRedirector } from './stores/auth.js';
-import { useTasksStore } from './stores/tasks.js';
-import { useRunsStore } from './stores/runs.js';
-import { useSse } from './composables/useSse.js';
-import { useCookiePoll } from './composables/useCookiePoll.js';
-import { setUnauthorizedHandler } from './api/request.js';
+import ConfirmDialog from '@shared/components/common/ConfirmDialog.vue';
+import LogDialog from '@shared/components/common/LogDialog.vue';
+import ArtifactBrowser from '@shared/components/common/ArtifactBrowser.vue';
+import RunDrawer from '@shared/components/common/RunDrawer.vue';
+import { useAuthStore, setLoginRedirector } from '@shared/stores/auth.js';
+import { useTasksStore } from '@shared/stores/tasks.js';
+import { useRunsStore } from '@shared/stores/runs.js';
+import { useSse } from '@shared/composables/useSse.js';
+import { useCookiePoll } from '@shared/composables/useCookiePoll.js';
+import { setUnauthorizedHandler } from '@shared/api/request.js';
 
 const route = useRoute();
 const router = useRouter();

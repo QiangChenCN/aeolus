@@ -97,7 +97,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { fetchTeams, fetchStandardGradeGlobal, saveStandardGradeGlobal } from '../../api/dashboards.js';
+import { fetchTeams, fetchStandardGradeGlobal, saveStandardGradeGlobal } from '@shared/api/dashboards.js';
 
 
 

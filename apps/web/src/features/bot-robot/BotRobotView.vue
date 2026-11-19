@@ -89,7 +89,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted } from 'vue';
-import { CHANNEL_META, useBotConfig } from '../../composables/useBotConfig.js';
+import { CHANNEL_META, useBotConfig } from '@shared/composables/useBotConfig.js';
 
 const {
   status, creds, credsLoading, credDialog, credEditing, savingCred, credForm,

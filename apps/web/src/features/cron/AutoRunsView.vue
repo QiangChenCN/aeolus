@@ -78,8 +78,8 @@
 import { onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Refresh, Document } from '@element-plus/icons-vue';
-import { fetchCronAutoRuns } from '../../api/dashboards.js';
-import { useRunsStore } from '../../stores/runs.js';
+import { fetchCronAutoRuns } from '@shared/api/dashboards.js';
+import { useRunsStore } from '@shared/stores/runs.js';
 
 // cron_run 状态文案（与 tokens.js 的通用任务状态集不同，独立维护）
 const STATUS_TXT = {

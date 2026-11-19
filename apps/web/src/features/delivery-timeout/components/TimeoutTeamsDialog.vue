@@ -14,7 +14,7 @@
 <script setup>
 import { ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import { saveDeliveryTimeoutTeams } from '../../../api/delivery-timeout.js';
+import { saveDeliveryTimeoutTeams } from '@shared/api/delivery-timeout.js';
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

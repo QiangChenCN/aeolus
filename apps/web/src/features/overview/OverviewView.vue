@@ -33,7 +33,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 
-import { fetchOverviewSiteOrders } from '../../api/dashboards.js';
+import { fetchOverviewSiteOrders } from '@shared/api/dashboards.js';
 
 
 const range = ref([]);

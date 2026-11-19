@@ -29,7 +29,7 @@
         />
 
         <el-alert
-          v-if="dtStatus === 'logging'"
+          v-if="dt.dtStatus === 'logging'"
           class="lf-alert"
           title="正在通过钉钉自动登录…"
           type="info"
@@ -37,17 +37,17 @@
           show-icon
         />
         <el-alert
-          v-else-if="dtStatus === 'unbound'"
+          v-else-if="dt.dtStatus === 'unbound'"
           class="lf-alert"
-          :title="dtMessage"
+          :title="dt.dtMessage"
           type="warning"
           :closable="false"
           show-icon
         />
         <el-alert
-          v-else-if="dtStatus === 'failed'"
+          v-else-if="dt.dtStatus === 'failed'"
           class="lf-alert"
-          :title="dtMessage"
+          :title="dt.dtMessage"
           type="warning"
           :closable="false"
           show-icon
@@ -91,11 +91,11 @@
             <!-- 仅在非钉钉环境（普通浏览器）显示：钉钉容器内统一走 JSAPI 免登，
                  不再额外给出 OAuth2 授权入口（扫码登录按钮对手机端无意义）。 -->
             <el-button
-              v-if="dtEnabled && !inDingtalk"
+              v-if="dt.dtEnabled && !dt.inDingtalk"
               size="large"
               class="lf-btn lf-btn--ding"
               :icon="ChatDotRound"
-              @click="openDingtalkOauth"
+              @click="dt.openOauth"
             >使用钉钉扫码登录</el-button>
           </div>
         </el-form>
@@ -109,11 +109,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { User, Lock, List, DataLine, ChatDotRound } from '@element-plus/icons-vue';
-import { useAuthStore } from '../../stores/auth.js';
-import { dingtalkConfig, dingtalkJsapi, dingtalkBind } from '../../api/auth.js';
+import { useAuthStore } from '@shared/stores/auth.js';
+import { useDingtalkLogin } from '@shared/composables/useDingtalkLogin.js';
 
 const auth = useAuthStore();
 const route = useRoute();
@@ -125,16 +125,12 @@ const remember = ref(false);
 const loading = ref(false);
 const error = ref('');
 
-// 钉钉登录相关状态
-const dtEnabled = ref(false);
-const dtCorpId = ref('');
-const dtAuthorizeUrl = ref('');
-const inDingtalk = ref(false);
-const dtLoading = ref(false);
-const dtStatus = ref(''); // idle | logging | unbound | failed
-const dtMessage = ref('');
-/** 免登返回「未绑定」时记住的一次性绑定凭证，待账密登录成功后自动绑定。 */
-const pendingBindToken = ref('');
+// 钉钉免登 / 绑定逻辑与移动端共用，跳转落点由各端自行决定
+const dt = useDingtalkLogin({
+  onSuccess: () => {
+    router.replace(auth.mustChange ? '/settings/profile' : redirectTarget());
+  },
+});
 
 function redirectTarget() {
   return typeof route.query.redirect === 'string' && route.query.redirect
@@ -153,23 +149,8 @@ async function submit() {
       router.replace('/settings/profile');
       return;
     }
-    // 登录成功后，若有「已通过钉钉验证的待绑定凭证」则自动绑定当前账号：
-    //   · 钉钉内免登未绑定（JSAPI 返回的 bindToken）
-    //   · 浏览器 OAuth 回跳未绑定（URL 上带 dingtalk=needbind&bindToken=…）
-    const bindToken =
-      pendingBindToken.value ||
-      (route.query.dingtalk === 'needbind' && typeof route.query.bindToken === 'string'
-        ? route.query.bindToken
-        : '');
-    if (bindToken) {
-      try {
-        await dingtalkBind(undefined, bindToken);
-      } catch (e) {
-        // 绑定失败不影响本次登录（下次仍会提示绑定，也可由管理员在账号管理中处理）
-        // eslint-disable-next-line no-console
-        console.warn('[钉钉绑定失败]', e);
-      }
-    }
+    // 登录成功后，若有「已通过钉钉验证的待绑定凭证」则自动绑定当前账号
+    await dt.bindAfterSignin();
     router.replace(redirectTarget());
   } catch (e) {
     error.value = e.message || '登录失败';
@@ -178,191 +159,6 @@ async function submit() {
   }
 }
 
-// ---------------- 钉钉登录 ----------------
-function isInDingtalk() {
-  if (typeof navigator !== 'undefined' && /DingTalk/i.test(navigator.userAgent)) return true;
-  return typeof window !== 'undefined' && !!window.dd;
-}
-
-function ensureDingtalkJsApi() {
-  return new Promise((resolve, reject) => {
-    if (window.dd) return resolve();
-    const s = document.createElement('script');
-    s.src = 'https://g.alicdn.com/dingding/dingtalk-jsapi/3.0.25/dingtalk.open.js';
-    // 脚本既不 onload 也不 onerror 时（网络被静默拦截等）不能无限等，否则界面永远卡住
-    const timer = setTimeout(() => reject(new Error('钉钉 JSAPI 脚本加载超时')), 10000);
-    s.onload = () => {
-      clearTimeout(timer);
-      resolve();
-    };
-    s.onerror = () => {
-      clearTimeout(timer);
-      reject(new Error('钉钉 JSAPI 脚本加载失败'));
-    };
-    document.head.appendChild(s);
-  });
-}
-
-/** 从钉钉返回结果里取出免登码（兼容 {code} / {authCode} / 直接返回字符串三种形态）。 */
-function pickAuthCode(r) {
-  const v = typeof r === 'string' ? r : (r?.code ?? r?.authCode ?? '');
-  return v ? String(v) : '';
-}
-
-// 取免登授权码：优先新版 promise 风格 dd.getAuthCode，回退到经典回调风格。
-//
-// 必须自带超时 + 能力检测：某些环境下 SDK 既不 resolve 也不 reject，或根本没有可用的
-// 免登 API（可选链会让调用静默变成 no-op），Promise 永不落定 → 页面一直卡在
-// 「正在通过钉钉自动登录……」。这两种情况都要变成明确失败，好让页面露出备用入口。
-function getAuthCode(corpId, timeoutMs = 8000) {
-  return new Promise((resolve, reject) => {
-    const dd = window.dd;
-    if (!dd) return reject(new Error('钉钉 JSAPI 未就绪'));
-
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      reject(new Error('获取免登码超时（钉钉 JSAPI 无响应）'));
-    }, timeoutMs);
-
-    // 把任意拒绝值（钉钉 SDK 常拒绝为 {errCode,errMsg} 对象而非 Error）统一转成可读字符串
-    const fail = (e) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(
-        new Error(
-          e?.errMsg || e?.errorMessage || e?.message ||
-            (typeof e === 'string' ? e : JSON.stringify(e)) || '获取免登码失败',
-        ),
-      );
-    };
-    // 成功也做收敛：拿到空码视同失败，别把空串发到后端
-    const done = (r) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      const code = pickAuthCode(r);
-      if (code) resolve(code);
-      else fail({ errMsg: '钉钉返回的免登码为空' });
-    };
-
-    const hasNew = typeof dd.getAuthCode === 'function';
-    const hasOld = !!dd.runtime?.permission?.requestAuthCode;
-    if (!hasNew && !hasOld) {
-      settled = true;
-      clearTimeout(timer);
-      return reject(new Error('当前环境不支持钉钉免登（缺少 getAuthCode / requestAuthCode）'));
-    }
-
-    if (hasNew) {
-      let p = null;
-      try {
-        p = dd.getAuthCode({ corpId });
-      } catch (e) {
-        return fail(e);
-      }
-      if (p && typeof p.then === 'function') {
-        p.then(done).catch(fail);
-        return;
-      }
-      // 非 promise 形态（老 SDK 可能直接返回 undefined）→ 继续尝试回调风格
-    }
-
-    if (hasOld) {
-      dd.runtime.permission.requestAuthCode({ corpId, onSuccess: done, onFail: fail });
-      return;
-    }
-
-    // 新版调用没产生 promise、又没有老接口 → 不能干等
-    settled = true;
-    clearTimeout(timer);
-    reject(new Error('钉钉免登调用未返回结果'));
-  });
-}
-
-async function autoDingtalkLogin() {
-  if (!dtCorpId.value) return;
-  dtLoading.value = true;
-  dtStatus.value = 'logging';
-  dtMessage.value = '正在通过钉钉自动登录…';
-  try {
-    await ensureDingtalkJsApi();
-    const authCode = await getAuthCode(dtCorpId.value);
-    const data = await dingtalkJsapi(authCode);
-    if (data && data.ok && data.token) {
-      const ok = await auth.applyDingtalkSession(data.token);
-      if (ok) {
-        router.replace(auth.mustChange ? '/settings/profile' : redirectTarget());
-        return;
-      }
-    } else if (data && data.needBind) {
-      dtStatus.value = 'unbound';
-      // 记住这个钉钉身份：用户用已分配的账号登录后会自动完成绑定，之后即可免登。
-      // 不再依赖管理员手工绑定，也不再自动开户（那样会造出 dt_<unionid> 这类无意义的账号）。
-      pendingBindToken.value = data.bindToken || '';
-      dtMessage.value =
-        '该钉钉身份尚未绑定本系统账号。请用你已分配的账号（工号）登录 —— ' +
-        '登录成功后会自动绑定当前钉钉，下次打开即可直接免登。';
-      dtLoading.value = false;
-      return;
-    }
-    dtStatus.value = 'failed';
-    dtMessage.value = '钉钉自动登录未成功：' + errText(data && data.error) + '（可用账号密码登录）';
-    dtLoading.value = false;
-  } catch (e) {
-    dtStatus.value = 'failed';
-    // eslint-disable-next-line no-console
-    console.error('[钉钉免登失败]', e);
-    dtMessage.value =
-      '钉钉自动登录失败：' + errText(e) + '（可用账号密码登录' +
-      (!inDingtalk.value && dtAuthorizeUrl.value ? '，或点击下方「使用钉钉扫码登录」' : '') + '）';
-    dtLoading.value = false;
-  }
-}
-
-/** 把错误信息统一转成可读字符串（兼容 Error / 普通对象 / 字符串）。 */
-function errText(e) {
-  if (!e) return '未知错误';
-  if (typeof e === 'string') return e;
-  if (e.message) return e.message;
-  try { return JSON.stringify(e); } catch { return String(e); }
-}
-
-onMounted(async () => {
-  // OAuth 回跳的三种结果都要落到界面上。此前只处理了 needbind，error / disabled 一律
-  // 被忽略 —— 一旦换取身份或读通讯录失败，用户看到的就是「回到登录页、毫无反应」。
-  const dt = route.query.dingtalk;
-  if (dt === 'needbind' && typeof route.query.bindToken === 'string') {
-    dtStatus.value = 'unbound';
-    dtMessage.value =
-      '钉钉已认证成功，但该钉钉身份尚未绑定本系统账号。请用工号密码登录 —— 登录成功后会自动完成绑定，之后即可直接免登。';
-  } else if (dt === 'error') {
-    dtStatus.value = 'failed';
-    const msg = typeof route.query.msg === 'string' ? route.query.msg : '';
-    dtMessage.value = '钉钉登录失败：' + (msg || '未知原因') + '（可用账号密码登录）';
-  } else if (dt === 'disabled') {
-    dtStatus.value = 'failed';
-    dtMessage.value = '钉钉登录未启用：请先在「三方集成」填写 AppKey / AppSecret 并开启开关。';
-  }
-  try {
-    const cfg = await dingtalkConfig();
-    if (cfg && cfg.enabled) {
-      dtEnabled.value = true;
-      dtCorpId.value = cfg.corpId || '';
-      dtAuthorizeUrl.value = cfg.authorizeUrl || '';
-      inDingtalk.value = isInDingtalk();
-      if (inDingtalk.value) autoDingtalkLogin();
-    }
-  } catch (e) {
-    /* 钉钉配置探测失败不影响账密登录 */
-  }
-});
-
-function openDingtalkOauth() {
-  if (dtAuthorizeUrl.value) window.location.href = dtAuthorizeUrl.value;
-}
 </script>
 
 <style scoped>

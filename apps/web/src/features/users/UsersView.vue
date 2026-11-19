@@ -85,12 +85,12 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
 import { Plus } from '@element-plus/icons-vue';
-import { useAppStore } from '../../stores/app.js';
+import { useAppStore } from '@shared/stores/app.js';
 import {
   fetchUsers, createUser, updateUser, resetUserPw, deleteUser,
   fetchRoles,
-} from '../../api/dashboards.js';
-import { dingtalkBind } from '../../api/auth.js';
+} from '@shared/api/dashboards.js';
+import { dingtalkBind } from '@shared/api/auth.js';
 
 const app = useAppStore();
 const users = ref([]);

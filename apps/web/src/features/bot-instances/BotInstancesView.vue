@@ -86,7 +86,7 @@
 
 <script setup>
 import { onMounted, onUnmounted } from 'vue';
-import { useBotConfig } from '../../composables/useBotConfig.js';
+import { useBotConfig } from '@shared/composables/useBotConfig.js';
 
 const {
   status, loadAll, toggleBot, renameInstance, setBotTimeout, setBotTyping,

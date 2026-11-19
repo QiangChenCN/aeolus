@@ -43,12 +43,12 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { useRunsStore } from '../../stores/runs.js';
-import { useTasksStore } from '../../stores/tasks.js';
+import { useRunsStore } from '@shared/stores/runs.js';
+import { useTasksStore } from '@shared/stores/tasks.js';
 
-import { useDrawerStore } from '../../stores/drawer.js';
-import { fetchHistory } from '../../api/dashboards.js';
-import { STATUS_TXT } from '../../utils/tokens.js';
+import { useDrawerStore } from '@shared/stores/drawer.js';
+import { fetchHistory } from '@shared/api/dashboards.js';
+import { STATUS_TXT } from '@shared/utils/tokens.js';
 
 const runs = useRunsStore();
 const tasks = useTasksStore();

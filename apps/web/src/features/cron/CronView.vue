@@ -140,10 +140,10 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { Plus, Edit, Delete, Loading, StarFilled } from '@element-plus/icons-vue';
-import { useAppStore } from '../../stores/app.js';
-import { useTasksStore } from '../../stores/tasks.js';
+import { useAppStore } from '@shared/stores/app.js';
+import { useTasksStore } from '@shared/stores/tasks.js';
 import ParamForm from '../../components/tasks/ParamForm.vue';
-import { fetchCron, postCronItem, setCronAutoPaused } from '../../api/dashboards.js';
+import { fetchCron, postCronItem, setCronAutoPaused } from '@shared/api/dashboards.js';
 
 const app = useAppStore();
 const tasks = useTasksStore();

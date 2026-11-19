@@ -21,7 +21,7 @@
 <script setup>
 import { ref, computed } from 'vue';
 import ParamForm from './ParamForm.vue';
-import { useTasksStore } from '../../stores/tasks.js';
+import { useTasksStore } from '@shared/stores/tasks.js';
 
 const tasks = useTasksStore();
 

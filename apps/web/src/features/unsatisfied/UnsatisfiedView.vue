@@ -256,7 +256,7 @@ import {
   fetchViolationMonthRange,
   fetchViolationRangeDb,
   saveViolationRows,
-} from '../../api/unsatisfied.js';
+} from '@shared/api/unsatisfied.js';
 
 const route = useRoute();
 

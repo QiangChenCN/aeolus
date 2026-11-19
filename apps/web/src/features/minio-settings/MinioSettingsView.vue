@@ -130,7 +130,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import { fetchMinioConfig, saveMinioConfig, testMinioConfig } from '../../api/dashboards.js';
+import { fetchMinioConfig, saveMinioConfig, testMinioConfig } from '@shared/api/dashboards.js';
 
 // 「编辑配置」展开时预填当前已保存的配置（密码/密钥留空）
 

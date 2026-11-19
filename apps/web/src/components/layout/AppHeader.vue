@@ -12,16 +12,17 @@
     <StatusCapsule label="服务" :dot="connDot" :text="connText" :title="connTitle" />
     <StatusCapsule label="Cookie" :dot="cookieDot" :text="cookieText" :title="cookieTitle" />
     <StatusCapsule label="Quark" :dot="quarkDot" :text="quarkText" :title="quarkTitle" />
+    <a class="hd-mobile" href="/m/" title="前往移动版">移动版</a>
     <UserChip />
   </div>
 </template>
 
 <script setup>
 import { computed, defineEmits } from 'vue';
-import StatusCapsule from '../common/StatusCapsule.vue';
-import UserChip from '../common/UserChip.vue';
-import { useAppStore } from '../../stores/app.js';
-import { useBreakpoint } from '../../composables/useBreakpoint.js';
+import StatusCapsule from '@shared/components/common/StatusCapsule.vue';
+import UserChip from '@shared/components/common/UserChip.vue';
+import { useAppStore } from '@shared/stores/app.js';
+import { useBreakpoint } from '@shared/composables/useBreakpoint.js';
 
 defineEmits(['toggle-nav']);
 
@@ -96,4 +97,13 @@ const quarkTitle = computed(() => {
 .hd-logo { width: 24px; height: 24px; display: block; border-radius: 6px; }
 .hd-title { font-weight: var(--fw-bold); font-size: var(--el-font-size-medium); }
 .hd-spacer { flex: 1; }
+.hd-mobile {
+  flex: none;
+  padding: 4px 8px;
+  border-radius: var(--el-border-radius-base);
+  font-size: var(--el-font-size-extra-small);
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+.hd-mobile:hover { background: var(--el-fill-color-light); color: var(--el-color-primary); }
 </style>

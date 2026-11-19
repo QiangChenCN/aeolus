@@ -148,7 +148,7 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { fetchWeatherLayering, saveWeatherLayering } from '../../api/dashboards.js';
+import { fetchWeatherLayering, saveWeatherLayering } from '@shared/api/dashboards.js';
 
 /* 天气标签配色（按严重度循环）：与考核看板 WEATHER_TAG 的四级配色一致 */
 const TAG_TYPE = ['success', 'info', 'warning', 'danger'];

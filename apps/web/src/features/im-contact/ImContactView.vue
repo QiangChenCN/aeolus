@@ -234,12 +234,12 @@
 import { computed, onMounted, onUnmounted, ref, watch, nextTick } from 'vue';
 import { Refresh, Setting } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
-import { fetchTeams } from '../../api/dashboards.js';
+import { fetchTeams } from '@shared/api/dashboards.js';
 // 本看板自有接口（/im-contact/* 数据 + /im-contact-fetch/* 取数）
 import {
   fetchImContact, refreshImContact, fetchImContactStatus,
   fetchImContactTeams, saveImContactTeams,
-} from '../../api/im-contact.js';
+} from '@shared/api/im-contact.js';
 
 /* ── 站点 ─────────────────────────────────────────────────────────────── */
 const teams = ref([]);

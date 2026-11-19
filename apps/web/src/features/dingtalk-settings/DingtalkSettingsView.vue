@@ -143,7 +143,7 @@
 
 <script setup>
 import { onMounted, onUnmounted, reactive, ref, computed } from 'vue';
-import { useAppStore } from '../../stores/app.js';
+import { useAppStore } from '@shared/stores/app.js';
 import {
   dingAuthStart,
   dingAuthStatus,
@@ -152,7 +152,7 @@ import {
   saveDingConfig,
   getSsoConfig,
   saveSsoConfig,
-} from '../../api/dashboards.js';
+} from '@shared/api/dashboards.js';
 
 const app = useAppStore();
 

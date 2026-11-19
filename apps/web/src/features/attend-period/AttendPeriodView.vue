@@ -239,7 +239,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import { fetchAttendTeams, saveAttendTeams, fetchAttendDataset } from '../../api/dashboards.js';
+import { fetchAttendTeams, saveAttendTeams, fetchAttendDataset } from '@shared/api/dashboards.js';
 
 
 const teamsAll = ref([]);   // 全部可选站点 [{id, name}]

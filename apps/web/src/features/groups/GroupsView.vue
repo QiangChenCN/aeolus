@@ -37,7 +37,7 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import { Search } from '@element-plus/icons-vue';
-import { fetchGroups, markGroupUsed, forgetGroup } from '../../api/dashboards.js';
+import { fetchGroups, markGroupUsed, forgetGroup } from '@shared/api/dashboards.js';
 
 const q = ref('');
 const groups = ref([]);

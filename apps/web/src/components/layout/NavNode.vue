@@ -31,9 +31,9 @@
 
 <script setup>
 import { computed } from 'vue';
-import { useAppStore } from '../../stores/app.js';
+import { useAppStore } from '@shared/stores/app.js';
 import NavNode from './NavNode.vue';
-import { navTo, navIsActive, navBusy, navParentOn } from '../../utils/nav.js';
+import { navTo, navIsActive, navBusy, navParentOn } from '@shared/utils/nav.js';
 
 const props = defineProps({
   node: { type: Object, required: true },

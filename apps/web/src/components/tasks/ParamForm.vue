@@ -42,7 +42,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { useTasksStore } from '../../stores/tasks.js';
+import { useTasksStore } from '@shared/stores/tasks.js';
 import DateRangePicker from './DateRangePicker.vue';
 
 const props = defineProps({

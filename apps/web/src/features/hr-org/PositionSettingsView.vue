@@ -80,8 +80,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { fetchOrgStructure, fetchPositions, createPosition, updatePosition, deletePosition, renamePosition } from '../../api/staff.js';
-import { useAuthStore } from '../../stores/auth.js';
+import { fetchOrgStructure, fetchPositions, createPosition, updatePosition, deletePosition, renamePosition } from '@shared/api/staff.js';
+import { useAuthStore } from '@shared/stores/auth.js';
 
 const auth = useAuthStore();
 const canMgrWrite = computed(() => auth.hasPerm('config:write'));

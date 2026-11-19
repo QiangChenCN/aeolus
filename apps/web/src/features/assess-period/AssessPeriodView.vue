@@ -98,7 +98,7 @@ import { onMounted, ref } from 'vue';
 import { ElMessageBox } from 'element-plus';
 import {
   fetchPeriodConfig, savePeriodConfig,
-} from '../../api/dashboards.js';
+} from '@shared/api/dashboards.js';
 
 const month = ref(currentMonth());
 const rows = ref([]);

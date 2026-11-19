@@ -1,0 +1,13 @@
+:root {
+  /* design tokens 中少量语义令牌依赖 Element Plus 变量，uni-app 端给出兜底 */
+  --el-color-info: #909399;
+  --el-color-primary-light-9: var(--c-brand-soft);
+  --el-color-success-light-9: #f0f9eb;
+  --el-color-danger-light-9: #fef0f0;
+}
+
+/* Wot UI 主题对齐统一设计令牌 */
+:root,
+page {
+  --wd-color-primary: var(--c-brand);
+}

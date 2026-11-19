@@ -135,10 +135,10 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Plus } from '@element-plus/icons-vue';
-import { fetchStaff, createStaff, updateStaff, deleteStaff, fetchPositions } from '../../api/staff.js';
-import { fetchTeams } from '../../api/dashboards.js';
-import { useAuthStore } from '../../stores/auth.js';
-import PersonnelChangesDrawer from '../../components/common/PersonnelChangesDrawer.vue';
+import { fetchStaff, createStaff, updateStaff, deleteStaff, fetchPositions } from '@shared/api/staff.js';
+import { fetchTeams } from '@shared/api/dashboards.js';
+import { useAuthStore } from '@shared/stores/auth.js';
+import PersonnelChangesDrawer from '@shared/components/common/PersonnelChangesDrawer.vue';
 
 const auth = useAuthStore();
 const canWrite = computed(() => auth.hasPerm('config:write'));

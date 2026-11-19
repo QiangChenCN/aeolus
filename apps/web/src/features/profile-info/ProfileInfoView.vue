@@ -126,8 +126,8 @@
 <script setup>
 import { computed, ref, reactive } from 'vue';
 import { ElMessage } from 'element-plus';
-import { useAuthStore } from '../../stores/auth.js';
-import { changePw } from '../../api/dashboards.js';
+import { useAuthStore } from '@shared/stores/auth.js';
+import { changePw } from '@shared/api/dashboards.js';
 
 const auth = useAuthStore();
 const roleLabel = computed(() => (auth.role === 'admin' ? '管理员' : '普通用户'));

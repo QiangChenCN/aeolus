@@ -164,12 +164,12 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { Search, Refresh, Setting, Clock } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
-import { filterRiders } from '../../utils/riderFilter.js';
+import { filterRiders } from '@shared/utils/riderFilter.js';
 import {
   fetchTeams, fetchStandardStationReport, fetchStandardRiders,
   refreshStandard, fetchRefreshStatus,
   fetchStandardGradeGlobal,
-} from '../../api/dashboards.js';
+} from '@shared/api/dashboards.js';
 
 
 const teams = ref([]);

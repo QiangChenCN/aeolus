@@ -26,8 +26,8 @@
 <script setup>
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { useTasksStore } from '../../stores/tasks.js';
-import { useRunsStore } from '../../stores/runs.js';
+import { useTasksStore } from '@shared/stores/tasks.js';
+import { useRunsStore } from '@shared/stores/runs.js';
 
 
 const router = useRouter();

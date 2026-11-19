@@ -285,9 +285,9 @@ import { computed, h, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { onBeforeRouteLeave } from 'vue-router';
 import { OfficeBuilding, Location, Shop } from '@element-plus/icons-vue';
-import { fetchOrgStructure, saveOrgStructure, fetchStaff, fetchPositions } from '../../api/staff.js';
-import { fetchStationManagers, saveStationManagers } from '../../api/dashboards.js';
-import { useAuthStore } from '../../stores/auth.js';
+import { fetchOrgStructure, saveOrgStructure, fetchStaff, fetchPositions } from '@shared/api/staff.js';
+import { fetchStationManagers, saveStationManagers } from '@shared/api/dashboards.js';
+import { useAuthStore } from '@shared/stores/auth.js';
 
 const auth = useAuthStore();
 const canWrite = computed(() => auth.hasPerm('admin:data-perm'));

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
-import StatusCapsule from '../../../src/components/common/StatusCapsule.vue';
+import StatusCapsule from '@shared/components/common/StatusCapsule.vue';
 
 // 组件渲染测试：状态胶囊把语义 dot 映射到 el-tag type，并渲染 label / text。
 // 验证「圆点语义 -> Element 视觉状态色」这一层不会因重构而错位。

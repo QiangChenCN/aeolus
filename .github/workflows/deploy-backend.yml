@@ -18,6 +18,8 @@ on:
     paths:
       - 'apps/api/**'
       - 'apps/web/**'
+      - 'apps/mobile/**'
+      - 'apps/shared/**'
       - 'config/**'
       - 'packages/**'
       - 'services/compute/**'
@@ -103,6 +105,11 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             apps/api/dist/ \
             "$ECS_USER@$ECS_HOST:/opt/aeolusdata/apps/api/dist/"
+          # /tokens.css 端点读取 apps/shared/tokens.css（令牌已迁出 web/），需显式同步
+          rsync -az \
+            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            apps/shared/tokens.css \
+            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/apps/shared/tokens.css"
           # 任务注册表：TaskRegistryService 读 WORKBENCH_DIR/tasks.json（服务器默认即
           # /opt/aeolusdata/apps/api/tasks.json），且按 mtime 热加载（改完刷新页面即生效）。
           # tasks.json 不属于 dist 产物，不同步的话服务器任务中心永远停留在旧列表
@@ -129,6 +136,21 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             apps/web/dist/ \
             "$ECS_USER@$ECS_HOST:/opt/aeolusdata/apps/web/dist/"
+
+      # ---------- Mobile（uni-app H5，静态由 nginx /m/ 托管）----------
+      - name: Build & Deploy Mobile
+        env:
+          ECS_HOST: ${{ secrets.ECS_HOST }}
+          ECS_USER: ${{ secrets.ECS_USER }}
+          ECS_SSH_KEY: ${{ secrets.ECS_SSH_KEY }}
+        run: |
+          eval "$(ssh-agent -s)"
+          echo "$ECS_SSH_KEY" | tr -d '\r' | ssh-add -
+          pnpm --filter aeolus-mobile-web build
+          rsync -az --delete \
+            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            apps/mobile/dist/build/h5/ \
+            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/apps/mobile/dist/"
 
       # ---------- Compute (Python) ----------
       # 注意：services/compute/ 内含服务器本地运行时数据（dashboard/standard/*.json、logs/ 等，均 gitignore），

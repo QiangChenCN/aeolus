@@ -83,7 +83,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import { fetchAeolusCreds, saveAeolusCreds, logoutAeolus, testAeolusCreds } from '../../api/dashboards.js';
+import { fetchAeolusCreds, saveAeolusCreds, logoutAeolus, testAeolusCreds } from '@shared/api/dashboards.js';
 
 
 const masked = reactive({ ok: true, hasAccount: false, hasPassword: false, account: '', accountHint: undefined, source: 'none' });

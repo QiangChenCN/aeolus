@@ -50,8 +50,8 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
 import { Plus } from '@element-plus/icons-vue';
-import { useAppStore } from '../../stores/app.js';
-import { fetchRoles, saveRole as apiSaveRole } from '../../api/dashboards.js';
+import { useAppStore } from '@shared/stores/app.js';
+import { fetchRoles, saveRole as apiSaveRole } from '@shared/api/dashboards.js';
 
 const app = useAppStore();
 const roles = ref([]);

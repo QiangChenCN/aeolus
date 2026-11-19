@@ -41,7 +41,7 @@ import StationConfigView from '../features/hr-org/StationConfigView.vue';
 import PositionSettingsView from '../features/hr-org/PositionSettingsView.vue';
 import NotFoundView from '../features/not-found/NotFoundView.vue';
 import OperationLogView from '../features/operation-log/OperationLogView.vue';
-import { useAuthStore } from '../stores/auth.js';
+import { useAuthStore } from '@shared/stores/auth.js';
 
 // 单一出口架构：所有受保护页挂在 MainLayout 之下（壳 + 内部 router-view），
 // 登录页为顶层独立路由。避免同一组件内出现多个未命名 router-view 导致匹配错乱。

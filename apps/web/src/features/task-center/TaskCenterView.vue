@@ -123,10 +123,10 @@ import { ref, computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowRight } from '@element-plus/icons-vue';
 import TaskConfigDialog from '../../components/tasks/TaskConfigDialog.vue';
-import { useTasksStore } from '../../stores/tasks.js';
-import { useRunsStore } from '../../stores/runs.js';
-import { useArtifactStore } from '../../stores/artifact.js';
-import { STATUS_TXT, GROUP_ICONS } from '../../utils/tokens.js';
+import { useTasksStore } from '@shared/stores/tasks.js';
+import { useRunsStore } from '@shared/stores/runs.js';
+import { useArtifactStore } from '@shared/stores/artifact.js';
+import { STATUS_TXT, GROUP_ICONS } from '@shared/utils/tokens.js';
 
 const tasks = useTasksStore();
 const runs = useRunsStore();

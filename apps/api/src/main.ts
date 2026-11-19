@@ -114,6 +114,28 @@ async function bootstrap(): Promise<void> {
 
   const config = loadAppConfig();
 
+  // 移动端软跳转：手机访问站点根路径时 302 到 /m/，让移动用户无需手动记路径前缀。
+  // 用 302 而非 301：301 会被浏览器/CDN 强缓存，用户换设备后会被锁死在错误版本。
+  // 只处理根路径（不含 /index.html 与深链），深链保持原样以便用户手动分享的链接正常工作。
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const method = (req.method || 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD') return next();
+    // 只处理根路径；深链保持原样，避免用户分享的链接被改写
+    if (req.path !== '/') return next();
+    // 根路径按 UA + 视图偏好区分，通知代理/CDN 分开缓存
+    res.setHeader('Vary', 'User-Agent, Cookie');
+    // 用户主动要求留在桌面端（显式切换入口写入的 cookie），覆盖 UA 误判
+    const mode = String(req.headers.cookie || '')
+      .split(';')
+      .map((c) => c.trim())
+      .find((c) => c.startsWith('wb_view='));
+    if (mode === 'wb_view=desktop') return next();
+    const ua = String(req.headers['user-agent'] || '');
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    if (!isMobile) return next();
+    return res.redirect(302, '/m/');
+  });
+
   // 静态资源托管（替代 @nestjs/serve-static 挂在 `/` 的整站拦截）：
   // serve-static 默认 fallthrough:false，会把 `/api` 的 POST（找不到同名文件）误判成 404，
   // 导致「标准达成刷新」等所有写接口在网关层即 404，永远不出结果。
