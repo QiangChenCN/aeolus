@@ -101,6 +101,11 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             config/ \
             "$ECS_USER@$ECS_HOST:/opt/aeolusdata/config/"
+          # deploy/ 配置需在服务器可读取（nginx 从 /opt/aeolusdata/deploy/ 拷贝生效配置）
+          rsync -az \
+            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            deploy/ \
+            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/deploy/"
           rsync -az --delete \
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             apps/api/dist/ \
