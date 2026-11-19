@@ -43,39 +43,35 @@
 
     <el-tabs v-model="tab" type="card" class="dv-tabs">
       <el-tab-pane label="站点看板" name="station">
-        <div class="dv-filter">
-          <span class="dv-filter-count">共 {{ stationRows.length }} 个站点</span>
-        </div>
-        <div v-if="summaryCards.length" class="dv-cards">
-          <el-card v-for="c in summaryCards" :key="c.label" class="dv-card" shadow="never">
-            <span class="dv-card-num">{{ c.value }}</span>
-            <span class="dv-card-label">{{ c.label }}</span>
-          </el-card>
-        </div>
         <el-card class="dv-table-wrap" shadow="never">
-          <el-table v-loading="loading" :data="stationRows" stripe border class="dv-table" height="100%">
-            <el-table-column prop="team_name" label="站点" min-width="120" fixed sortable show-overflow-tooltip />
-            <el-table-column prop="scale_target" label="天应排" min-width="90" align="center" sortable />
-            <el-table-column label="门槛" min-width="90" align="center" sortable>
+          <el-table v-loading="loading" :data="stationRows" stripe border class="dv-table" height="100%" :row-class-name="stationRowClass" @sort-change="onStationSort">
+            <el-table-column prop="team_name" label="站点" min-width="120" fixed sortable="custom" show-overflow-tooltip />
+            <el-table-column prop="scale_target" label="天应排" min-width="90" align="center" sortable="custom" />
+            <el-table-column label="门槛" min-width="90" align="center" sortable="custom">
               <template #default="{ row }">
-                <span v-if="row.threshold_count == null" class="dv-warn" :title="row.data_note || '未设置门槛'">未设置</span>
+                <span v-if="row._isTotal">{{ row.threshold_count == null ? '—' : row.threshold_count }}</span>
+                <span v-else-if="row.threshold_count == null" class="dv-warn" :title="row.data_note || '未设置门槛'">未设置</span>
                 <span v-else>{{ row.threshold_count }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="封顶" min-width="90" align="center" sortable>
+            <el-table-column label="封顶" min-width="90" align="center" sortable="custom">
               <template #default="{ row }">
-                <span v-if="row.cap_count == null" class="dv-warn" :title="row.data_note || '未设置封顶'">未设置</span>
+                <span v-if="row._isTotal">{{ row.cap_count == null ? '—' : row.cap_count }}</span>
+                <span v-else-if="row.cap_count == null" class="dv-warn" :title="row.data_note || '未设置封顶'">未设置</span>
                 <span v-else>{{ row.cap_count }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="scheduled_num" label="排班" min-width="90" align="center" sortable />
-            <el-table-column prop="rider_with_order" label="有单" min-width="90" align="center" sortable />
-            <el-table-column prop="achieved_num" label="达标" min-width="90" align="center" sortable />
-            <el-table-column prop="achieved_rate" label="达标率" min-width="110" align="center" sortable show-overflow-tooltip>
+            <el-table-column prop="scheduled_num" label="排班" min-width="90" align="center" sortable="custom" />
+            <el-table-column prop="schedule_rate" label="排班满足率" min-width="110" align="center" sortable="custom" show-overflow-tooltip>
+              <template #default="{ row }"><span :class="rateCls(row.schedule_rate)">{{ fmtPct(row.schedule_rate) }}</span></template>
+            </el-table-column>
+            <el-table-column prop="rider_with_order" label="有单" min-width="90" align="center" sortable="custom" />
+            <el-table-column prop="achieved_num" label="达标" min-width="90" align="center" sortable="custom" />
+            <el-table-column prop="achieved_rate" label="达标率" min-width="110" align="center" sortable="custom" show-overflow-tooltip>
               <template #default="{ row }"><span :class="rateCls(row.achieved_rate)">{{ fmtPct(row.achieved_rate) }}</span></template>
             </el-table-column>
-            <el-table-column prop="expected_achievable_num" label="预计达成" min-width="110" align="center" sortable show-overflow-tooltip />
-            <el-table-column prop="expected_achievable_rate" label="预计达成率" min-width="120" align="center" sortable show-overflow-tooltip>
+            <el-table-column prop="expected_achievable_num" label="预计达成" min-width="110" align="center" sortable="custom" show-overflow-tooltip />
+            <el-table-column prop="expected_achievable_rate" label="预计达成率" min-width="120" align="center" sortable="custom" show-overflow-tooltip>
               <template #default="{ row }"><span :class="rateCls(row.expected_achievable_rate)">{{ fmtPct(row.expected_achievable_rate) }}</span></template>
             </el-table-column>
           </el-table>
@@ -245,24 +241,54 @@ const dataStale = computed(() => {
   return t.slice(0, 10) < effDate.value;       // 取数日期 < 所选日期 → 过期
 });
 
-/* 站点看板：按名称筛选 */
-const stationRows = computed(() => rows.value);
-/* 站点汇总卡片（基于当前筛选后的行聚合） */
-const summaryCards = computed(() => {
-  const list = stationRows.value;
-  if (!list.length) return [];
+/* 站点看板：合计行固定在第一行；自定义排序只作用于站点行，合计行始终置顶 */
+const stationSortProp = ref('');
+const stationSortOrder = ref('');
+function onStationSort({ prop, order }) {
+  stationSortProp.value = prop || '';
+  stationSortOrder.value = order || '';
+}
+const stationDataRows = computed(() => rows.value);
+const stationTotalRow = computed(() => {
+  const list = stationDataRows.value;
   const sum = (k) => list.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+  /* 门槛/封顶是各站点按天应排算出的人数，跨站点可求和；未配置的站点跳过，全无配置则显示 — */
+  const sumConfigured = (k) => {
+    const vals = list.map((r) => r[k]).filter((v) => v != null).map(Number);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+  };
   const target = sum('scale_target');
+  const scheduled = sum('scheduled_num');
   const achieved = sum('achieved_num');
   const exp = sum('expected_achievable_num');
-  return [
-    { label: '站点数', value: list.length },
-    { label: '天应排', value: target || '—' },
-    { label: '达标数', value: achieved || '—' },
-    { label: '达标率', value: target ? Math.round((achieved / target) * 1000) / 10 + '%' : '—' },
-    { label: '预计达成', value: exp || '—' },
-  ];
+  /* 后端 rate 字段是百分数（如 85.5 表示 85.5%），合计行按分子/分母汇总后须同口径换算 */
+  const pct = (n, d) => (d ? Math.round((n / d) * 1000) / 10 : null);
+  return {
+    team_name: '合计',
+    scale_target: target,
+    threshold_count: sumConfigured('threshold_count'),
+    cap_count: sumConfigured('cap_count'),
+    scheduled_num: scheduled,
+    schedule_rate: pct(scheduled, target),
+    rider_with_order: sum('rider_with_order'),
+    achieved_num: achieved,
+    achieved_rate: pct(achieved, target),
+    expected_achievable_num: exp,
+    expected_achievable_rate: pct(exp, target),
+    _isTotal: true,
+  };
 });
+const stationRows = computed(() => {
+  const list = stationDataRows.value.slice();
+  const p = stationSortProp.value;
+  const o = stationSortOrder.value;
+  if (p && o) {
+    const mul = o === 'ascending' ? 1 : -1;
+    list.sort((a, b) => mul * cmpVal(a[p], b[p]));
+  }
+  return list.length ? [stationTotalRow.value, ...list] : [];
+});
+function stationRowClass({ row }) { return row._isTotal ? 'dv-total-row' : ''; }
 
 function fmtPct(v) { return v == null ? '—' : (Math.round(v * 10) / 10) + '%'; }
 function rateCls(v) {
@@ -650,10 +676,6 @@ onUnmounted(() => {
 .dv-data-time.is-stale { color: var(--el-color-warning); font-weight: var(--fw-semibold); }
 .dv-bar .sp { flex: 1; }
 .dv-hint { margin-bottom: var(--sp-12); }
-.dv-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--sp-12); margin-bottom: var(--sp-16); }
-.dv-card :deep(.el-card__body) { display: flex; flex-direction: column; gap: 4px; padding: var(--sp-16); }
-.dv-card-num { font-size: 24px; font-weight: var(--fw-bold); color: var(--el-color-primary); }
-.dv-card-label { font-size: var(--el-font-size-extra-small); color: var(--el-text-color-secondary); }
 /* 表格根元素作为 flex item：min-width:0 破除 flex 默认的 min-width:auto，
    否则内部列宽之和(骑手看板 14 列)会把表格撑出容器，导致两个 tab 宽度不一致 */
 .dv-table { border-radius: var(--el-border-radius-base); width: 100%; min-width: 0; flex: 1; }
@@ -679,8 +701,23 @@ onUnmounted(() => {
 .dv-table :deep(.caret-wrapper) { display: none; }
 .dv-table :deep(.ascending .caret-wrapper),
 .dv-table :deep(.descending .caret-wrapper) { display: inline-flex; }
+/* 表头统一为主题色底 + 白字（与「时段出勤」看板一致）；CSS 变量可被固定列的表头继承 */
+.dv-table {
+  --el-table-header-bg-color: var(--el-color-primary);
+  --el-table-header-text-color: #fff;
+}
+/* 排序箭头在主题色表头上改白，保证未激活/激活两态都清晰可见 */
+.dv-table :deep(.el-table__header .sort-caret.ascending) { border-bottom-color: #fff; }
+.dv-table :deep(.el-table__header .sort-caret.descending) { border-top-color: #fff; }
 /* 表头防折行：列名与排序图标始终同一行；长列名由 nowrap + 自适应列宽兜底（列宽已按表头文本实测） */
 .dv-table :deep(.el-table__header .cell) { white-space: nowrap; }
+/* 站点看板合计行（首行）：主题浅底 + 加粗，与站点行区分（!important 压过 stripe 交替底色） */
+.dv-table :deep(.el-table__body tr.dv-total-row > td.el-table__cell) {
+  background: var(--el-color-primary-light-9) !important;
+  font-weight: var(--fw-bold);
+}
+/* 合计行所有单元格居中（站点列默认左对齐，这里统一改为居中；含 fixed 列） */
+.dv-table :deep(tr.dv-total-row > td.el-table__cell > .cell) { text-align: center; }
 /* 未设置门槛/封顶时的报错提醒（红字） */
 .dv-warn { color: var(--danger, #f56c6c); font-weight: var(--fw-semibold); }
 /* 骑手姓名前的排班状态标签与姓名间距 */
