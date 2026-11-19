@@ -73,7 +73,7 @@ const navItems = computed(() => {
   sysSubs.push({ type: 'leaf', kind: 'profile', id: '', key: 'profile', name: '个人中心', icon: 'User' });
   const adminEntries = [
     { type: 'leaf', kind: 'sys-dingtalk', id: '', name: '钉钉集成', icon: 'ChatDotRound', perm: 'admin:bot' },
-    { type: 'leaf', kind: 'sys-credentials', id: '', name: '外部服务凭证', icon: 'Key', perms: ['admin:aeolus', 'admin:minio'] },
+    { type: 'leaf', kind: 'sys-credentials', id: '', name: '外部凭证', icon: 'Key', perms: ['admin:aeolus', 'admin:minio'] },
     { type: 'leaf', kind: 'rbac', id: '', name: '权限管理', icon: 'Tools', perm: 'admin:users' },
     { type: 'leaf', kind: 'operationLog', id: '', key: 'operationLog', name: '操作日志', icon: 'Document', perm: 'admin:roles' },
   ];

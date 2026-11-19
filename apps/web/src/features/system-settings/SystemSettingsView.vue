@@ -12,7 +12,7 @@
       </RouterLink>
       <RouterLink to="/settings/credentials" class="card">
         <div>
-          <div class="card-t">外部服务凭证</div>
+          <div class="card-t">外部凭证</div>
           <div class="card-d">风神（Aeolus）登录账号与 MinIO 图床连接（endpoint / bucket / 密钥），保存后热生效</div>
         </div>
         <el-icon class="card-arw"><ArrowRight /></el-icon>

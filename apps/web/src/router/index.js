@@ -103,7 +103,7 @@ const routes = [
         component: SettingsTabShell,
         redirect: { name: 'credentials-aeolus' },
         meta: {
-          title: '外部服务凭证', kind: 'sys-credentials', perms: ['admin:aeolus', 'admin:minio'],
+          title: '外部凭证', kind: 'sys-credentials', perms: ['admin:aeolus', 'admin:minio'],
           tabs: [
             { label: '风神凭证', to: '/settings/credentials/aeolus' },
             { label: 'MinIO 凭证', to: '/settings/credentials/minio' },
