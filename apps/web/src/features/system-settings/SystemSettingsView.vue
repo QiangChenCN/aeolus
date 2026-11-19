@@ -17,6 +17,13 @@
         </div>
         <el-icon class="card-arw"><ArrowRight /></el-icon>
       </RouterLink>
+      <RouterLink to="/settings/sources" class="card">
+        <div>
+          <div class="card-t">取数基座</div>
+          <div class="card-d">当前全部取数服务的只读盘点：状态、入口与关联看板</div>
+        </div>
+        <el-icon class="card-arw"><ArrowRight /></el-icon>
+      </RouterLink>
       <RouterLink to="/settings/rbac" class="card">
         <div>
           <div class="card-t">权限管理</div>

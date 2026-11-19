@@ -31,6 +31,7 @@ export function navTo(it) {
     case 'syscfg': return '/settings';
     case 'sys-dingtalk': return '/settings/dingtalk';
     case 'sys-credentials': return '/settings/credentials';
+    case 'sys-sources': return '/settings/sources';
     case 'sys-managers': return '/hr/org';
     case 'riders': return '/riders';
     case 'staff': return '/staff';

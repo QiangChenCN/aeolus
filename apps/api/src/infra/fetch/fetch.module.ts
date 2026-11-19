@@ -11,6 +11,7 @@ import { AeolusCredentialsService } from './creds/aeolus-credentials.service';
 import { OrdersFetchService } from './sources/orders-fetch.service';
 import { RefreshAllService } from './runners/refresh-all.service';
 import { FetchController } from './fetch.controller';
+import { SourceRegistryController } from './source-registry.controller';
 import { OrangeStormFetchService } from './sources/orange-storm-fetch.service';
 import { RuledocFetchService } from './sources/ruledoc-fetch.service';
 import { BoardFetchService } from './sources/board-fetch.service';
@@ -52,7 +53,7 @@ import { RawCacheService } from './storage/raw-cache.service';
  */
 @Module({
   imports: [AuthModule, ComputeModule],
-  controllers: [FetchController],
+  controllers: [FetchController, SourceRegistryController],
   providers: [
     FetchPaceService,
     DeliveryQueryService,

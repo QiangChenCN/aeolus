@@ -26,6 +26,7 @@ import RolesView from '../features/roles/RolesView.vue';
 import PolicyView from '../features/policy/PolicyView.vue';
 import SystemSettingsView from '../features/system-settings/SystemSettingsView.vue';
 import SettingsTabShell from '../features/system-settings/SettingsTabShell.vue';
+import SourceRegistryView from '../features/source-registry/SourceRegistryView.vue';
 import RbacView from '../features/rbac/RbacView.vue';
 import DingtalkSettingsView from '../features/dingtalk-settings/DingtalkSettingsView.vue';
 import AeolusSettingsView from '../features/aeolus-settings/AeolusSettingsView.vue';
@@ -113,6 +114,8 @@ const routes = [
           { path: 'aeolus', name: 'credentials-aeolus', component: AeolusSettingsView, meta: { title: '风神凭证', kind: 'sys-aeolus', id: '', perm: 'admin:aeolus' } },
           { path: 'minio', name: 'credentials-minio', component: MinioSettingsView, meta: { title: 'MinIO 凭证', kind: 'sys-minio', id: '', perm: 'admin:minio' } },
         ] },
+      // 取数基座目录：只读盘点页，所有登录用户可看（详情内部信息由后端按权限收敛）
+      { path: 'settings/sources', name: 'sources', component: SourceRegistryView, meta: { title: '取数基座', kind: 'sys-sources', perm: 'view' } },
       // 旧路径深链兼容：重定向到合并后的新地址
       { path: 'settings/aeolus', redirect: { name: 'credentials-aeolus' } },
       { path: 'settings/minio', redirect: { name: 'credentials-minio' } },

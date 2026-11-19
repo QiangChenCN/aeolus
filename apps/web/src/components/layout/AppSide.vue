@@ -71,13 +71,15 @@ const navItems = computed(() => {
   // 例如 operator 有 config:write 可见站点负责人设置（已提升为一级），但看不到风神/MinIO/权限等管理员项。
   const sysSubs = [];
   sysSubs.push({ type: 'leaf', kind: 'profile', id: '', key: 'profile', name: '个人中心', icon: 'User' });
-  const adminEntries = [
+  // 取数基座为只读盘点页，所有登录用户可见；其余管理项按权限点逐项收敛。
+  const sysEntries = [
     { type: 'leaf', kind: 'sys-dingtalk', id: '', name: '钉钉集成', icon: 'ChatDotRound', perm: 'admin:bot' },
     { type: 'leaf', kind: 'sys-credentials', id: '', name: '外部凭证', icon: 'Key', perms: ['admin:aeolus', 'admin:minio'] },
+    { type: 'leaf', kind: 'sys-sources', id: '', name: '取数基座', icon: 'Connection', perm: 'view' },
     { type: 'leaf', kind: 'rbac', id: '', name: '权限管理', icon: 'Tools', perm: 'admin:users' },
     { type: 'leaf', kind: 'operationLog', id: '', key: 'operationLog', name: '操作日志', icon: 'Document', perm: 'admin:roles' },
   ];
-  sysSubs.push(...adminEntries.filter((e) =>
+  sysSubs.push(...sysEntries.filter((e) =>
     Array.isArray(e.perms) ? e.perms.some((p) => auth.hasPerm(p)) : auth.hasPerm(e.perm)));
   items.push({ type: 'parent', key: 'sys', name: '系统设置', icon: 'Setting', kind: 'syscfg', children: sysSubs });
   return items;

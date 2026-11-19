@@ -13,7 +13,7 @@ import { netError } from '../../../common/net-error';
  * 彻底绕开分页限流。与 violation 的 download/1.0 同构（下载免 cookie）。
  *
  * 三段式（均为纯 HTTP）：
- *   1. exportTracking/2.0     触发导出（body 同 queryTracking 查询条件，无 teamId=全站）
+ *   1. exportTracking/2.0     触发导出（body 同 queryTracking 查询条件；可选 teamIds 按站点过滤，不传=全站）
  *   2. queryExportTask/2.0    轮询导出任务列表（**双 agencyTrackingFs 前缀**，单形式 404）
  *   3. queryTaskUrl/2.0       用 taskId 取 OSS 签名 fileUrl（约1h有效期）
  *   4. 下载 fileUrl（无 cookie，免鉴权）
@@ -221,15 +221,16 @@ export class DeliveryExportService {
     endMs: number,
     timeField?: string,
     cookie?: string,
+    teamIds: number[] = [],
   ): Promise<Record<string, unknown>[]> {
     let ck = cookie || (await this.cookies.ensure());
     try {
-      return await this.run(ck, startMs, endMs, timeField);
+      return await this.run(ck, startMs, endMs, timeField, teamIds);
     } catch (e) {
       if (e instanceof AuthError) {
         this.logger.warn('运单导出会话失效，重登后重试一次');
         ck = await this.cookies.relogin();
-        return await this.run(ck, startMs, endMs, timeField);
+        return await this.run(ck, startMs, endMs, timeField, teamIds);
       }
       throw e;
     }
@@ -240,6 +241,7 @@ export class DeliveryExportService {
     startMs: number,
     endMs: number,
     timeField?: string,
+    teamIds: number[] = [],
   ): Promise<Record<string, unknown>[]> {
     const f = checkTimeField(timeField);
     // 1) 记录当前最大 taskId，用于认领本次导出（历史任务 id<=max_id 自动排除）
@@ -254,7 +256,7 @@ export class DeliveryExportService {
       maxId = 0;
     }
     // 2) 触发导出
-    const body = this.buildExportBody(startMs, endMs, f);
+    const body = this.buildExportBody(startMs, endMs, f, teamIds);
     if (!(await this.triggerExport(body, cookie))) {
       throw new Error('运单导出触发未受理（data 非 true）');
     }
@@ -283,12 +285,13 @@ export class DeliveryExportService {
     return parseXlsxBytes(buf);
   }
 
-  private buildExportBody(startMs: number, endMs: number, f: string) {
+  private buildExportBody(startMs: number, endMs: number, f: string, teamIds: number[] = []) {
     return {
       params: {
         request: {
           [`${f}Start`]: startMs,
           [`${f}End`]: endMs,
+          ...(teamIds.length ? { teamIds } : {}),
           merchantConsumerDistanceStart: '0',
           merchantConsumerDistanceEnd: '999999',
           payAmountStart: '0',

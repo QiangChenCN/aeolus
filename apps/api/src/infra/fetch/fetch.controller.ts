@@ -78,20 +78,21 @@ export class FetchController {
   }
 
   /**
-   * 拉取指定日期的全部运单明细（不落盘，用于验证取数链路）。
-   * 接口本身没有站点维度，按 trackingFinish 时间窗取全量，再按 teamId 分组统计。
+   * 拉取指定日期的运单明细（不落盘，用于验证取数链路）。
+   * 可选 team_ids（逗号分隔的风神站点 ID）按站点导出；不传则全站。
    */
   @RequirePerm('view')
   @Get('orders')
   async fetchOrders(
     @Query('date') date?: string,
     @Query('time_field') timeField?: string,
+    @Query('team_ids') teamIds?: string,
   ) {
     const d = date || new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
     const [startMs, endMs] = dayRangeMs(d);
     this.pace.statsReset();
     const t0 = Date.now();
-    const rows = await this.orders.fetchOrders(startMs, endMs, timeField || TIME_FIELD);
+    const rows = await this.orders.fetchOrders(startMs, endMs, timeField || TIME_FIELD, teamIds);
     const elapsed = (Date.now() - t0) / 1000;
 
     const byTeam: Record<string, number> = {};
@@ -112,7 +113,7 @@ export class FetchController {
   }
 
   /**
-   * 全量刷新「阶段 0」：一次拉全量运单 → 按站点分组 → 写 apps/api/runtime/raw/orders_*.json。
+   * 刷新「阶段 0」：按 teams 指定站点导出运单 → 逐站写 apps/api/runtime/raw/orders_*.json。
    * 后续阶段（sched 排班 / att 考勤 / violation 违规 / 结果计算）仍在 Python，
    * 通过保留的委托接口调用 —— 见 FetchModule 头部说明。
    */
@@ -135,7 +136,13 @@ export class FetchController {
   @RequirePerm('view')
   @Post('orders-raw')
   async ordersRaw(
-    @Body() b: { start_ms?: number; end_ms?: number; date?: string; time_field?: string },
+    @Body() b: {
+      start_ms?: number;
+      end_ms?: number;
+      date?: string;
+      time_field?: string;
+      team_ids?: Array<string | number> | string;
+    },
   ) {
     let s = b.start_ms;
     let e = b.end_ms;
@@ -147,7 +154,7 @@ export class FetchController {
     }
     this.pace.statsReset();
     const t0 = Date.now();
-    const rows = await this.orders.fetchOrders(Number(s), Number(e), b.time_field || TIME_FIELD);
+    const rows = await this.orders.fetchOrders(Number(s), Number(e), b.time_field || TIME_FIELD, b.team_ids);
     return {
       ok: true,
       rows,

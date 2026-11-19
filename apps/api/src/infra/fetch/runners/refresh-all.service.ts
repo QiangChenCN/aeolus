@@ -8,9 +8,9 @@ import { AttendanceFetchService } from '../sources/attendance-fetch.service';
 /**
  * 全量刷新编排（移植自 dashboard/standard/refresh_all.py 的阶段 0）。
  *
- * 阶段 0 的关键事实：运单明细接口**请求体没有站点参数**，返回的是当前账号权限下的
- * 全部站点数据。所以「每个站点各拉一遍」拉的是同一批数据 —— 3 个站点就是 3 倍请求数、
- * 3 倍耗时、3 倍限流风险。故改为：一次拉全量 + 内存按 teamId 分组 + 逐站落盘。
+ * 阶段 0：按传入站点一次性导出运单（teamIds 过滤，替代原先「全量导出再分组」），
+ * 再按 teamId 分组逐站落盘。不传站点时仍导出当前账号可见的全站数据。
+ * 导出是异步生成 xlsx，比分页拉全量（约 125 页）省请求、避开分钟配额限流。
  *
  * 落盘本身（路径 / 格式 / 非空判定 / 结果缓存失效通知）在 `RawCacheService` —— 它是原始层
  * 的唯一写入方；本服务只负责「运单」这一类数据的生产与分组。
@@ -89,7 +89,7 @@ export class RefreshAllService {
     private readonly att: AttendanceFetchService,
   ) {}
 
-  /** 阶段 0：一次拉全量运单 → 按 teamId 分组 → 逐站落盘 → 通知 Python 失效缓存。 */
+  /** 阶段 0：按指定站点导出运单 → 按 teamId 分组 → 逐站落盘 → 通知 Python 失效缓存。 */
   async refreshOrders(
     teams: string[],
     date: string,
@@ -106,7 +106,7 @@ export class RefreshAllService {
     this.pace.statsReset();
     this.logger.log(`开始阶段 0：站点 ${teams.join(',')}，日期 ${date}`);
 
-    const rows = await this.orders.fetchOrders(startMs, endMs, 'trackingFinish');
+    const rows = await this.orders.fetchOrders(startMs, endMs, 'trackingFinish', teams);
 
     const grouped = new Map<string, OrderRow[]>();
     for (const r of rows) {

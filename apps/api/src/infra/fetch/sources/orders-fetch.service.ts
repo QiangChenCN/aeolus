@@ -1,15 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { FetchPaceService, MAX_RETRIES, RELOGIN_MAX, RELOGIN_BACKOFF_BASE, BACKOFF_BASE } from '../runners/fetch-pace.service';
-import { DeliveryQueryService, AuthError, PAGE_SIZE } from './delivery-query.service';
+import { DeliveryQueryService, AuthError, PAGE_SIZE, normalizeTeamIds } from './delivery-query.service';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
 import { DeliveryExportService } from './delivery-export.service';
 
-/** 单站单日超过此量则按时段切片（避免单段页码超限 / 长时间占用配额）。 */
-export const SEG_SPLIT_THRESHOLD = 8000;
+/** 全天时段（仅用于导出后对账的那一次第 1 页请求）。 */
 export const FULL_DAY = '0-86400';
-export const SEGMENTS_4 = ['0-21600', '21600-43200', '43200-64800', '64800-86400'];
-/** current*50 需 <10000，留余量。 */
-export const PAGE_INDEX_CAP = 190;
 
 // ---- 完整性校验（对应 Python 的 VERIFY_EXPORT_TOTAL / TOTAL_SHORT_TOLERANCE*）----
 // 为什么必须有：运单接口**成功不等于完整**。2026-09-17 实测导出拿回 5793 行、
@@ -30,8 +26,8 @@ export type OrderRow = Record<string, unknown>;
 /**
  * 运单抓取编排层（移植自 dashboard/standard/orders_fetch.py 的 Session + fetch_orders）。
  *
- * 职责边界：分页循环、时段切片、去重、页间节奏、限流退避、会话重登 —— 全在这里；
- * 单次 HTTP 在 DeliveryQueryService（只打 1 次，不连冲）。
+ * 职责边界：只走异步导出取数；导出结果的去重、完整性对账在这里；
+ * 单次 HTTP 在 DeliveryQueryService（仅对账时打 1 次第 1 页，不分页拉全量）。
  */
 @Injectable()
 export class OrdersFetchService {
@@ -106,38 +102,6 @@ export class OrdersFetchService {
     }
   }
 
-  /** 抓单个时段切片的全部页，页间 pageSleep。 */
-  private async fetchSegment(
-    startMs: number,
-    endMs: number,
-    period: string,
-    timeField?: string,
-    firstRows?: OrderRow[],
-    firstTotal?: number,
-  ): Promise<{ rows: OrderRow[]; total: number }> {
-    let rows: OrderRow[] = [];
-    let total = firstTotal;
-    let first = firstRows;
-    if (first == null || total == null) {
-      const p1 = await this.call(startMs, endMs, 1, PAGE_SIZE, period, timeField);
-      first = p1.rows;
-      total = p1.total;
-    }
-    if (!total || !first || !first.length) return { rows: [], total: total || 0 };
-    rows = rows.concat(first);
-    const pages = Math.ceil(total / PAGE_SIZE);
-    if (pages > PAGE_INDEX_CAP) {
-      this.logger.warn(`时段 ${period} total=${total} 超页码上限(${PAGE_INDEX_CAP})，需更细切片`);
-    }
-    for (let cur = 2; cur <= Math.min(pages, PAGE_INDEX_CAP); cur++) {
-      const p = await this.call(startMs, endMs, cur, PAGE_SIZE, period, timeField);
-      if (!p.rows || !p.rows.length) break;
-      rows = rows.concat(p.rows);
-      await this.pace.pageSleep();
-    }
-    return { rows, total };
-  }
-
   /** 按 trackingId 去重（时段切片边界可能重复）。 */
   private dedup(rows: OrderRow[]): OrderRow[] {
     const seen = new Set<string>();
@@ -157,55 +121,57 @@ export class OrdersFetchService {
   }
 
   /**
-   * 拉时间窗内全部运单明细（自动切片 + 去重），返回去重后的行。
+   * 拉时间窗内全部运单明细：只走异步导出，**无分页兜底**。
    *
-   * **导出优先**：先走风神异步导出（一次性拿全站全量，零分页请求、无限流风险）；
-   * 导出失败 / 返回空 / 完整性核对发现残缺，才回落到分页 fetchOrdersViaQuery。
-   * 两种来源产出结构一致（dict 列表，teamId/trackingId 等英文键齐备），下游零改动。
+   * 导出失败 / 返回空 / 完整性核对发现残缺，一律抛错 —— 绝不静默返回空或部分数据：
+   * 下游看板是整日覆盖写 PG 或 raw 文件，拿到残缺结果会直接污染数据。
    */
-  async fetchOrders(startMs: number, endMs: number, timeField?: string): Promise<OrderRow[]> {
+  async fetchOrders(
+    startMs: number,
+    endMs: number,
+    timeField?: string,
+    rawTeamIds?: Array<string | number> | string,
+  ): Promise<OrderRow[]> {
     this.pace.reset(); // 新一次抓取重置节奏，不继承上次的惩罚/加速状态
     await this.ensureCookie(); // 登录是异步的（探针 + 必要时 SSO），在抓取前拿到会话
+    const teamIds = normalizeTeamIds(rawTeamIds);
 
-    // ── 导出优先（异步导出，替代 ~125 页分页，零限流风险）──
+    this.logger.log(
+      `运单取数：异步导出（无分页兜底）${teamIds.length ? `，站点 ${teamIds.join(',')}` : '，全站'}...`,
+    );
+    let rows: OrderRow[];
     try {
-      this.logger.log('尝试运单导出（异步导出，替代分页，零限流风险）...');
-      const rows = await this.exportSvc.exportOrders(startMs, endMs, timeField, this.cookie);
-      if (rows.length) {
-        const deduped = this.dedup(rows);
-        this.logger.log(`导出成功：拿回 ${deduped.length} 行（0 次分页请求）`);
-        // 完整性核对（与接口 total 对账）：导出成功 ≠ 数据完整，残缺则回落分页。
-        try {
-          const total = await this.queryTotal(startMs, endMs, timeField);
-          if (total != null) {
-            const gap = Math.max(0, total - deduped.length);
-            const tol = shortTolerance(total);
-            this.logger.log(
-              `完整性核对：导出 ${deduped.length} 行 / 接口 total=${total}，差 ${gap} 行`,
-            );
-            if (gap > tol) {
-              this.logger.warn(`导出残缺（少 ${gap} 行），回落分页重取`);
-              return this.fetchOrdersViaQuery(startMs, endMs, timeField);
-            }
-            this.logger.log(`差 ${gap} 行在容忍范围内（≤${tol}），沿用导出结果`);
-          }
-        } catch (e) {
-          this.logger.warn(`导出后 total 核对失败，沿用导出结果：${(e as Error).message}`);
-        }
-        this.pace.bump('requests');
-        this.pace.bump('ok');
-        this.pace.persistFloor(); // 本次学到的下限存下来，下次刷新直接沿用
-        return deduped;
-      }
-      this.logger.warn('导出返回空，回落分页取数');
+      rows = await this.exportSvc.exportOrders(startMs, endMs, timeField, this.cookie, teamIds);
     } catch (e) {
-      this.logger.warn(
-        `导出失败，回落分页取数：${(e as Error).name}: ${(e as Error).message}`,
-      );
+      throw new Error(`运单导出失败（已禁用分页兜底）：${(e as Error).message}`);
+    }
+    if (!rows.length) {
+      throw new Error('运单导出返回空（已禁用分页兜底）');
     }
 
-    // ── 兜底：分页路径（带 AIMD 限流退避 + 自动重登）──
-    return this.fetchOrdersViaQuery(startMs, endMs, timeField);
+    const deduped = this.dedup(rows);
+    this.logger.log(`导出成功：拿回 ${deduped.length} 行（无分页请求）`);
+
+    // 完整性核对：仅全站导出时做。按站点导出时 queryTracking 的 total 口径无法保证与
+    // teamIds 一致（若忽略该参数会返回全站 total），差行会误判残缺，故跳过。
+    const total = teamIds.length ? null : await this.queryTotal(startMs, endMs, timeField);
+    if (VERIFY_TOTAL && total != null) {
+      const gap = Math.max(0, total - deduped.length);
+      const tol = shortTolerance(total);
+      this.logger.log(`完整性核对：导出 ${deduped.length} 行 / 接口 total=${total}，差 ${gap} 行`);
+      if (gap > tol) {
+        throw new Error(
+          `运单导出残缺：导出 ${deduped.length} 行 / 接口 total=${total}，少 ${gap} 行` +
+            `（容忍 ${tol}，已禁用分页兜底）`,
+        );
+      }
+      this.logger.log(`差 ${gap} 行在容忍范围内（≤${tol}），沿用导出结果`);
+    }
+
+    this.pace.bump('requests');
+    this.pace.bump('ok');
+    this.pace.persistFloor();
+    return deduped;
   }
 
   /** 只拿接口 total（一次第 1 页请求），供导出后完整性核对。失败返回 null。 */
@@ -222,47 +188,4 @@ export class OrdersFetchService {
     }
   }
 
-  /** 分页拉全量运单（原 fetchOrders 主体）：自动切片 + 去重 + 完整性对账。 */
-  private async fetchOrdersViaQuery(
-    startMs: number,
-    endMs: number,
-    timeField?: string,
-  ): Promise<OrderRow[]> {
-    const first = await this.call(startMs, endMs, 1, PAGE_SIZE, FULL_DAY, timeField);
-    const total = first.total;
-    this.logger.log(`接口 total=${total}`);
-    if (!total) return [];
-
-    const segs = total > SEG_SPLIT_THRESHOLD ? SEGMENTS_4 : [FULL_DAY];
-    let allRows: OrderRow[] = [];
-    if (segs.length > 1) {
-      this.logger.log(`单量超 ${SEG_SPLIT_THRESHOLD}，按 ${segs.length} 时段切片抓取`);
-      for (const seg of segs) {
-        const r = await this.fetchSegment(startMs, endMs, seg, timeField);
-        allRows = allRows.concat(r.rows);
-        await this.pace.coarseSleep(); // 时段之间
-      }
-    } else {
-      // 单段：第 1 页（探总数那次）已拿到，直接续拉，不重复请求
-      const r = await this.fetchSegment(startMs, endMs, FULL_DAY, timeField, first.rows, total);
-      allRows = allRows.concat(r.rows);
-    }
-    const rows = this.dedup(allRows);
-    this.logger.log(`抓取完成 ${rows.length}/${total} 条`);
-    this.pace.persistFloor(); // 本次学到的下限存下来，下次刷新直接沿用
-
-    // 完整性对账：行数比接口 total 少到容忍之外，必须显式告警 —— 静默少行会让
-    // 下游按单量判定系统性少计（见文件头注释），绝不能悄悄放行。
-    if (VERIFY_TOTAL) {
-      const tol = shortTolerance(total);
-      const shortBy = total - rows.length;
-      if (shortBy > tol) {
-        this.logger.warn(
-          `!! 数据可能残缺：抓到 ${rows.length} 行，接口 total=${total}，` +
-            `缺 ${shortBy} 行（超过容忍 ${tol} 行）`,
-        );
-      }
-    }
-    return rows;
-  }
 }

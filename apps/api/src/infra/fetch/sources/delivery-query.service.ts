@@ -43,6 +43,24 @@ function checkTimeField(f?: string): string {
   return t;
 }
 
+/**
+ * 站点 ID 归一化：接受数字数组、字符串数组或逗号分隔字符串（GET 查询参数）。
+ * 风神接口要数字 ID，这里统一过滤非法值并去重；空数组表示不按站点过滤（全站）。
+ */
+export function normalizeTeamIds(input?: Array<string | number> | string): number[] {
+  if (input == null) return [];
+  const arr = Array.isArray(input) ? input : String(input).split(',');
+  const out: number[] = [];
+  for (const v of arr) {
+    const s = String(v).trim();
+    if (!s) continue;
+    const n = Number(s);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) continue;
+    if (!out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
 /** 组装单次分页请求体（与 Python build_body 逐字段一致）。 */
 export function buildBody(
   startMs: number,
