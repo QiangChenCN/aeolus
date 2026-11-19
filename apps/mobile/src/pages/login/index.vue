@@ -1,71 +1,133 @@
 <template>
-  <view class="m-login">
-    <view class="lg-hero">
-      <view class="lg-mark">A</view>
-      <view class="lg-title-brand">Aeolus WorkBench</view>
-      <view class="lg-tag">任务编排与数据看板</view>
-    </view>
+  <view class="phone">
+    <!-- 顶部品牌区 -->
+    <header class="hero">
+      <view class="speed-lines" />
+      <view class="brand-badge">
+        <image class="badge-logo" src="@shared-ui/assets/aeolus-workbench.svg" mode="aspectFit" />
+        <text>Aeolus Workbench</text>
+      </view>
+      <view class="hero-title">欢迎回来，</view>
+      <view class="hero-title accent">工作正当时</view>
+      <view class="hero-sub">登录工作台，数据与任务一站管理</view>
+    </header>
 
-    <view class="lg-panel">
-      <view class="lg-title">登录工作台</view>
-      <view class="lg-sub">使用工作台账号登录以继续</view>
-
-      <wd-notice-bar
-        v-if="notice"
-        :text="notice"
-        :type="noticeType"
-        custom-class="lg-notice"
-      />
-
-      <wd-input
-        v-model="username"
-        label="用户名"
-        placeholder="请输入用户名"
-        :prefix-icon="null"
-        clearable
-      />
-      <wd-input
-        v-model="password"
-        label="密码"
-        placeholder="请输入密码"
-        type="password"
-        clearable
-      />
-
-      <view class="lg-remember">
-        <wd-checkbox v-model="remember" shape="square">记住我（7 天内免登录）</wd-checkbox>
+    <!-- 表单面板 -->
+    <main class="panel">
+      <!-- 登录方式 Tab -->
+      <view class="tabs">
+        <view class="tab" :class="{ active: mode === 'pwd' }" @click="mode = 'pwd'">密码登录</view>
+        <view class="tab" :class="{ active: mode === 'sms' }" @click="mode = 'sms'">验证码登录</view>
       </view>
 
-      <wd-button
-        type="primary"
-        block
-        :loading="loading"
-        custom-class="lg-submit"
-        @click="submit"
-      >登录</wd-button>
+      <wd-notice-bar v-if="notice" :text="notice" :type="noticeType" custom-class="login-notice" />
 
-      <view class="lg-hint">登录即代表您同意相关使用规范；如忘记密码或无法登录，请联系系统管理员。</view>
-    </view>
+      <!-- 验证码登录 -->
+      <view v-if="mode === 'sms'">
+        <view class="field">
+          <wd-icon name="phone" size="20px" color="#c2b4ab" />
+          <input v-model="phone" class="field-input" type="number" maxlength="11" placeholder="手机号" />
+        </view>
+        <view class="field">
+          <wd-icon name="lock" size="20px" color="#c2b4ab" />
+          <input v-model="smsCode" class="field-input" type="number" maxlength="6" placeholder="验证码" />
+          <text class="link-btn" @click="sendCode">{{ codeText }}</text>
+        </view>
+        <view v-if="smsError" class="field-error">{{ smsError }}</view>
+        <view class="aux-row">
+          <text @click="toast('请联系管理员重置手机号登录')">换手机号登录？</text>
+          <text @click="toast('验证码已重发')">收不到验证码</text>
+        </view>
+        <view class="btn-main" :class="{ shake: shakeBtn }" @click="submitSms">登 录</view>
+      </view>
 
-    <SwitchToDesktop />
+      <!-- 密码登录 -->
+      <view v-else>
+        <view class="field">
+          <wd-icon name="lock" size="20px" color="#c2b4ab" />
+          <input v-model="username" class="field-input" type="text" placeholder="手机号 / 工号" autocomplete="username" />
+        </view>
+        <view class="field">
+          <wd-icon name="lock" size="20px" color="#c2b4ab" />
+          <input
+            v-model="password"
+            class="field-input"
+            :type="showPassword ? 'text' : 'password'"
+            placeholder="密码"
+            autocomplete="current-password"
+          />
+          <image
+            v-show="showPassword"
+            class="eye-icon"
+            src="@shared-ui/assets/eye-open.svg"
+            mode="aspectFit"
+            @click="showPassword = !showPassword"
+          />
+          <image
+            v-show="!showPassword"
+            class="eye-icon"
+            src="@shared-ui/assets/eye-closed.svg"
+            mode="aspectFit"
+            @click="showPassword = !showPassword"
+          />
+        </view>
+        <view class="aux-row">
+          <view class="remember" @click="remember = !remember">
+            <view class="remember-box" :class="{ checked: remember }">
+              <wd-icon v-if="remember" name="check" size="11px" color="#fff" />
+            </view>
+            <text>七天内免登录</text>
+          </view>
+          <text @click="toast('请联系管理员重置密码')">忘记密码</text>
+        </view>
+        <view class="btn-main" :class="{ shake: shakeBtn }" @click="submitPwd">登 录</view>
+      </view>
+
+      <!-- 协议 -->
+      <view class="agreement" @click="agreed = !agreed">
+        <view class="agreement-radio" :class="{ checked: agreed }">
+          <wd-icon v-if="agreed" name="check" size="11px" color="#fff" />
+        </view>
+        <view class="agreement-text">
+          我已阅读并同意 <text class="link">《用户服务协议》</text>与<text class="link">《隐私政策》</text>，知晓工作台数据仅用于内部管理
+        </view>
+      </view>
+
+      <!-- 其他登录方式 -->
+      <view class="divider">其他登录方式</view>
+      <view class="oauth">
+        <view class="oauth-btn" @click="dingtalkLogin"><image class="oauth-icon" src="@/static/icons/dingtalk.svg" mode="aspectFit" /></view>
+        <view class="oauth-btn" @click="toast('微信授权登录暂未开放')"><image class="oauth-icon" src="@/static/icons/wechat.svg" mode="aspectFit" /></view>
+        <view class="oauth-btn" @click="toast('支付宝授权登录暂未开放')"><image class="oauth-icon" src="@/static/icons/alipay.svg" mode="aspectFit" /></view>
+      </view>
+
+      <view class="footer">遇到问题？<text class="footer-link" @click="toast('已通知管理员协助')">联系管理员</text></view>
+      <view class="desktop-entry" @click="toDesktop">切换桌面版</view>
+    </main>
   </view>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue';
 import { useAuthStore } from '@shared/stores/auth.js';
-import SwitchToDesktop from '../../components/SwitchToDesktop.vue';
 import { useDingtalkLogin } from '@shared/composables/useDingtalkLogin.js';
 
 const auth = useAuthStore();
 
+const mode = ref('pwd');
 const username = ref('');
 const password = ref('');
+const phone = ref('');
+const smsCode = ref('');
 const remember = ref(false);
+const agreed = ref(false);
+const showPassword = ref(false);
 const loading = ref(false);
+const shakeBtn = ref(false);
+const smsError = ref('');
+const codeText = ref('获取验证码');
 const error = ref('');
 
-// 钉钉登录逻辑与桌面端共用；uni-app H5 容器内会自动免登，小程序端暂不提供扫码入口
 const dt = useDingtalkLogin({
   onSuccess: () => uni.reLaunch({ url: '/pages/index/index' }),
   query: {},
@@ -79,9 +141,49 @@ const notice = computed(() => {
 });
 const noticeType = computed(() => (error.value || dt.dtStatus.value === 'failed' ? 'error' : 'warning'));
 
-async function submit() {
+function toast(msg) {
+  uni.showToast({ title: msg, icon: 'none' });
+}
+
+function shake() {
+  shakeBtn.value = false;
+  setTimeout(() => { shakeBtn.value = true; }, 10);
+  setTimeout(() => { shakeBtn.value = false; }, 400);
+}
+
+function checkAgreement() {
+  if (!agreed.value) {
+    shake();
+    toast('请先勾选同意服务协议');
+    return false;
+  }
+  return true;
+}
+
+function sendCode() {
+  if (!/^1\d{10}$/.test(phone.value)) { smsError.value = '请输入正确的 11 位手机号'; return; }
+  smsError.value = '';
+  let left = 60;
+  codeText.value = left + 's 后重发';
+  const timer = setInterval(() => {
+    left--;
+    if (left <= 0) { clearInterval(timer); codeText.value = '重新获取'; }
+    else codeText.value = left + 's 后重发';
+  }, 1000);
+  toast('验证码已发送');
+}
+
+async function submitSms() {
+  if (!/^1\d{10}$/.test(phone.value)) { smsError.value = '请输入正确的 11 位手机号'; return; }
+  if (smsCode.value.length < 4) { smsError.value = '请输入 6 位验证码'; return; }
+  if (!checkAgreement()) return;
+  toast('验证码登录暂未接入，请使用密码登录');
+}
+
+async function submitPwd() {
   error.value = '';
-  if (!username.value || !password.value) { error.value = '请输入用户名和密码'; return; }
+  if (!username.value || !password.value) { error.value = '请输入手机号 / 工号和密码'; return; }
+  if (!checkAgreement()) return;
   loading.value = true;
   try {
     await auth.signin(username.value, password.value, remember.value);
@@ -93,38 +195,252 @@ async function submit() {
     loading.value = false;
   }
 }
+
+function dingtalkLogin() {
+  toast('钉钉免登请在钉钉客户端内打开本应用');
+}
+
+function toDesktop() {
+  const oneYear = 365 * 24 * 60 * 60;
+  document.cookie = `wb_view=desktop; path=/; max-age=${oneYear}; SameSite=Lax`;
+  window.location.href = '/';
+}
 </script>
 
 <style scoped>
-.m-login { min-height: 100vh; padding-top: env(safe-area-inset-top); }
+.phone {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  padding-top: env(safe-area-inset-top);
+}
 
-.lg-hero {
-  padding: clamp(48px, 12vh, 96px) 24px 56px;
+/* 顶部品牌区 */
+.hero {
+  position: relative;
+  flex: none;
+  padding: 44px 28px 52px;
+  overflow: hidden;
+  background:
+    radial-gradient(340px 220px at 110% -30%, rgba(255, 255, 255, 0.22) 0%, transparent 60%),
+    linear-gradient(145deg, var(--brand-500) 0%, var(--brand-600) 88%);
   color: #fff;
-  background: linear-gradient(155deg, var(--c-brand) 0%, var(--c-brand-dark) 100%);
-  border-bottom-left-radius: 28px;
-  border-bottom-right-radius: 28px;
+  border-bottom-right-radius: 36px;
 }
-.lg-mark {
-  width: 52px; height: 52px;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.2);
-  font-size: 26px; font-weight: var(--fw-bold);
+.speed-lines {
+  position: absolute;
+  right: -14px;
+  bottom: -8px;
+  width: 120px;
+  height: 120px;
+  background: repeating-linear-gradient(-35deg, transparent 0 14px, rgba(255, 255, 255, 0.18) 14px 18px);
+  border-radius: 50% 50% 0 60%;
 }
-.lg-title-brand { margin-top: var(--sp-16); font-size: 22px; font-weight: var(--fw-bold); }
-.lg-tag { margin-top: var(--sp-6); font-size: 13px; opacity: 0.9; }
+.brand-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px 5px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.badge-logo {
+  width: 22px;
+  height: 22px;
+  display: block;
+  border-radius: 50%;
+  overflow: hidden;
+}
+.hero-title {
+  position: relative;
+  margin-top: 22px;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+}
+.hero-title.accent {
+  display: inline-block;
+  border-bottom: 5px solid rgba(255, 255, 255, 0.45);
+  padding-bottom: 1px;
+}
+.hero-sub {
+  position: relative;
+  margin-top: 10px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+}
 
-.lg-panel {
-  margin: -28px 16px 0;
-  padding: 24px 20px calc(28px + env(safe-area-inset-bottom));
+/* 表单面板 */
+.panel {
+  flex: 1;
+  margin-top: -28px;
+  padding: 30px 26px 20px;
   background: #fff;
-  border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(20, 30, 60, 0.08);
+  border-radius: 28px 28px 0 0;
+  box-shadow: 0 -12px 30px rgba(140, 60, 15, 0.1);
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
 }
-.lg-title { font-size: 20px; font-weight: var(--fw-bold); }
-.lg-sub { margin: var(--sp-6) 0 var(--sp-20); color: #969799; font-size: 13px; }
-.lg-remember { margin: var(--sp-16) 0; font-size: 13px; }
-.lg-submit { height: 48px; }
-.lg-hint { margin-top: var(--sp-20); font-size: 12px; line-height: 1.6; color: #969799; }
+
+.tabs { display: flex; gap: 26px; margin-bottom: 26px; }
+.tab {
+  position: relative;
+  padding: 6px 2px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink-500);
+}
+.tab.active { color: var(--ink-900); }
+.tab.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  width: 22px;
+  height: 3.5px;
+  border-radius: 2px;
+  background: var(--brand-500);
+  transform: translateX(-50%);
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  margin-bottom: 14px;
+  padding: 0 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+}
+.field-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  font-size: 16px;
+  color: var(--ink-900);
+  background: transparent;
+}
+.field-input::placeholder { color: var(--ink-300); }
+.link-btn { flex: none; font-size: 14px; font-weight: 600; color: var(--brand-600); }
+.eye-icon { flex: none; width: 22px; height: 22px; }
+.field-error { color: #d93025; font-size: 12px; margin: -8px 4px 12px; }
+
+.aux-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 2px 2px 22px;
+  font-size: 13px;
+  color: var(--ink-500);
+}
+.remember { display: flex; align-items: center; gap: 6px; }
+.remember-box {
+  width: 15px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ink-300);
+  border-radius: 3px;
+  background: #fff;
+}
+.remember-box.checked { background: var(--brand-500); border-color: var(--brand-500); }
+
+.btn-main {
+  width: 100%;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: linear-gradient(180deg, var(--brand-500) 0%, var(--brand-600) 100%);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  box-shadow: 0 10px 22px -8px rgba(255, 80, 0, 0.55);
+}
+.btn-main.shake { animation: shake 380ms cubic-bezier(0.25, 1, 0.5, 1); }
+@keyframes shake {
+  20% { transform: translateX(-6px); }
+  45% { transform: translateX(5px); }
+  70% { transform: translateX(-3px); }
+  100% { transform: translateX(0); }
+}
+
+.agreement {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 18px;
+  font-size: 12px;
+  color: var(--ink-500);
+  line-height: 1.6;
+}
+.agreement-radio {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--ink-300);
+  border-radius: 50%;
+}
+.agreement-radio.checked { border-color: var(--brand-500); background: var(--brand-500); }
+.agreement-text { flex: 1; }
+.link { color: var(--brand-600); font-weight: 600; }
+
+.divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin: 26px 0 18px;
+  color: var(--ink-300);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+.divider::before, .divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 30%;
+  height: 1px;
+  background: var(--line);
+}
+.divider::before { left: 0; }
+.divider::after { right: 0; }
+
+.oauth { display: flex; align-items: center; justify-content: center; gap: 48px; }
+.oauth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.oauth-icon { width: 33px; height: 33px; }
+
+.footer {
+  margin-top: auto;
+  padding-top: 18px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-300);
+}
+.footer-link { color: var(--ink-500); font-weight: 600; }
+.desktop-entry { margin-top: 10px; text-align: center; font-size: 11px; color: var(--ink-300); text-decoration: underline; }
+
+/* 登录提示条与 Wot UI 覆盖统一在全局 */
 </style>

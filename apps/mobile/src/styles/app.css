@@ -6,8 +6,20 @@
   --el-color-danger-light-9: #fef0f0;
 }
 
-/* Wot UI 主题对齐统一设计令牌 */
 :root,
 page {
-  --wd-color-primary: var(--c-brand);
+  /* Wot UI 主题根变量 --wot-color-theme，所有组件主色由它派生 */
+  --wot-color-theme: var(--c-brand);
+
+  /* 设计稿暖调色系（与登录页一致，后续其他页面可共用） */
+  --brand-500: #ff5000;
+  --brand-600: #e64800;
+  --brand-50: #fff3ec;
+  --brand-100: #ffe4d4;
+  --ink-900: #2b1d15;
+  --ink-700: #5a4a40;
+  --ink-500: #8a7a70;
+  --ink-300: #c2b4ab;
+  --line: #efe3da;
+  --paper: #fff9f4;
 }
