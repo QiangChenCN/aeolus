@@ -20,8 +20,6 @@
         <view class="tab" :class="{ active: mode === 'sms' }" @click="mode = 'sms'">验证码登录</view>
       </view>
 
-      <wd-notice-bar v-if="notice" :text="notice" :type="noticeType" custom-class="login-notice" />
-
       <!-- 验证码登录 -->
       <view v-if="mode === 'sms'">
         <view class="field">
@@ -35,8 +33,8 @@
         </view>
         <view v-if="smsError" class="field-error">{{ smsError }}</view>
         <view class="aux-row">
-          <text @click="toast('请联系管理员重置手机号登录')">换手机号登录？</text>
-          <text @click="toast('验证码已重发')">收不到验证码</text>
+          <text @click="toast.show('请联系管理员重置手机号登录')">换手机号登录？</text>
+          <text @click="toast.show('验证码已重发')">收不到验证码</text>
         </view>
         <view class="btn-main" :class="{ shake: shakeBtn }" @click="submitSms">登 录</view>
       </view>
@@ -78,7 +76,7 @@
             </view>
             <text>七天内免登录</text>
           </view>
-          <text @click="toast('请联系管理员重置密码')">忘记密码</text>
+          <text @click="toast.show('请联系管理员重置密码')">忘记密码</text>
         </view>
         <view class="btn-main" :class="{ shake: shakeBtn }" @click="submitPwd">登 录</view>
       </view>
@@ -97,18 +95,22 @@
       <view class="divider">其他登录方式</view>
       <view class="oauth">
         <view class="oauth-btn" @click="dingtalkLogin"><image class="oauth-icon" src="@/static/icons/dingtalk.svg" mode="aspectFit" /></view>
-        <view class="oauth-btn" @click="toast('微信授权登录暂未开放')"><image class="oauth-icon" src="@/static/icons/wechat.svg" mode="aspectFit" /></view>
-        <view class="oauth-btn" @click="toast('支付宝授权登录暂未开放')"><image class="oauth-icon" src="@/static/icons/alipay.svg" mode="aspectFit" /></view>
+        <view class="oauth-btn" @click="toast.show('微信授权登录暂未开放')"><image class="oauth-icon" src="@/static/icons/wechat.svg" mode="aspectFit" /></view>
+        <view class="oauth-btn" @click="toast.show('支付宝授权登录暂未开放')"><image class="oauth-icon" src="@/static/icons/alipay.svg" mode="aspectFit" /></view>
       </view>
 
-      <view class="footer">遇到问题？<text class="footer-link" @click="toast('已通知管理员协助')">联系管理员</text></view>
+      <view class="footer">遇到问题？<text class="footer-link" @click="toast.show('已通知管理员协助')">联系管理员</text></view>
       <view class="desktop-entry" @click="toDesktop">切换桌面版</view>
     </main>
+
+    <!-- 轻提示组件：登录失败/操作反馈用 toast.error / toast.show -->
+    <wd-toast />
   </view>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { ref, watch } from 'vue';
+import { useToast } from 'wot-design-uni';
 import { useAuthStore } from '@shared/stores/auth.js';
 import { useDingtalkLogin } from '@shared/composables/useDingtalkLogin.js';
 
@@ -126,24 +128,19 @@ const loading = ref(false);
 const shakeBtn = ref(false);
 const smsError = ref('');
 const codeText = ref('获取验证码');
-const error = ref('');
 
 const dt = useDingtalkLogin({
   onSuccess: () => uni.reLaunch({ url: '/pages/index/index' }),
   query: {},
 });
 
-const notice = computed(() => {
-  if (error.value) return error.value;
-  if (dt.dtStatus.value === 'logging') return '正在通过钉钉自动登录…';
-  if (dt.dtStatus.value === 'unbound' || dt.dtStatus.value === 'failed') return dt.dtMessage.value;
-  return '';
-});
-const noticeType = computed(() => (error.value || dt.dtStatus.value === 'failed' ? 'error' : 'warning'));
+const toast = useToast();
 
-function toast(msg) {
-  uni.showToast({ title: msg, icon: 'none' });
-}
+// 钉钉免登状态用轻提示承接（原 notice-bar 已移除）
+watch(() => dt.dtStatus.value, (status) => {
+  if (status === 'logging') toast.show('正在通过钉钉自动登录…');
+  else if (status === 'unbound' || status === 'failed') toast.error(dt.dtMessage.value || '钉钉登录未成功');
+});
 
 function shake() {
   shakeBtn.value = false;
@@ -154,7 +151,7 @@ function shake() {
 function checkAgreement() {
   if (!agreed.value) {
     shake();
-    toast('请先勾选同意服务协议');
+    toast.show('请先勾选同意服务协议');
     return false;
   }
   return true;
@@ -170,19 +167,18 @@ function sendCode() {
     if (left <= 0) { clearInterval(timer); codeText.value = '重新获取'; }
     else codeText.value = left + 's 后重发';
   }, 1000);
-  toast('验证码已发送');
+  toast.show('验证码已发送');
 }
 
 async function submitSms() {
   if (!/^1\d{10}$/.test(phone.value)) { smsError.value = '请输入正确的 11 位手机号'; return; }
   if (smsCode.value.length < 4) { smsError.value = '请输入 6 位验证码'; return; }
   if (!checkAgreement()) return;
-  toast('验证码登录暂未接入，请使用密码登录');
+  toast.show('验证码登录暂未接入，请使用密码登录');
 }
 
 async function submitPwd() {
-  error.value = '';
-  if (!username.value || !password.value) { error.value = '请输入手机号 / 工号和密码'; return; }
+  if (!username.value || !password.value) { toast.error('请输入手机号 / 工号和密码'); return; }
   if (!checkAgreement()) return;
   loading.value = true;
   try {
@@ -190,14 +186,14 @@ async function submitPwd() {
     await dt.bindAfterSignin();
     uni.reLaunch({ url: '/pages/index/index' });
   } catch (e) {
-    error.value = e.message || '登录失败';
+    toast.error(e.message || '登录失败');
   } finally {
     loading.value = false;
   }
 }
 
 function dingtalkLogin() {
-  toast('钉钉免登请在钉钉客户端内打开本应用');
+  toast.show('钉钉免登请在钉钉客户端内打开本应用');
 }
 
 function toDesktop() {

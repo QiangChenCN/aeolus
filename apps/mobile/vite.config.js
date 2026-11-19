@@ -29,5 +29,17 @@ export default defineConfig({
   root: HERE,
   server: {
     fs: { allow: [ROOT] },
+    proxy: {
+      // uni-app H5 dev 的 public base 为 /m/，API 请求需带该前缀才能被 Vite 接收
+      '/m/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/m\/api/, '/api'),
+      },
+      '/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+      },
+    },
   },
 });
