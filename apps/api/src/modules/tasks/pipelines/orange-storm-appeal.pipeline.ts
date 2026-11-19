@@ -8,6 +8,7 @@ import { TaskHandlersService } from '../task-handlers.service';
 import { OrangeStormFetchService } from '../../../infra/fetch/sources/orange-storm-fetch.service';
 import { DingtalkService } from '../../dingtalk/dingtalk.service';
 import { StationManagersService } from '../../notify/station-managers.service';
+import { DingtalkIdBaseService } from '../../dingtalk-id/dingtalk-id-base.service';
 import { ReportRenderService } from '../../render/report-render.service';
 import { MinioService } from '../../media/minio.service';
 import { PRODUCTION_GROUP_NAME } from '../../notify/notify-config';
@@ -107,6 +108,7 @@ export class OrangeStormAppealPipeline implements TaskHandler {
     private readonly minio: MinioService,
     private readonly dingtalk: DingtalkService,
     private readonly stationManagers: StationManagersService,
+    private readonly dingtalkIds: DingtalkIdBaseService,
     config: ConfigService,
   ) {
     this.handlers.register(this);
@@ -349,7 +351,7 @@ export class OrangeStormAppealPipeline implements TaskHandler {
       for (const st of byStation.keys()) {
         for (const m of this.stationManagers.managersForTeam(st)) allNames.add(m);
       }
-      const { resolved, missing } = await this.stationManagers.resolveNamesAuto(allNames);
+      const { resolved, missing } = await this.dingtalkIds.resolveNamesAuto(allNames);
       if (missing.length && !noAt) {
         ctx.log(`[warn] 以下负责人未解析到 openDingTalkId，已跳过 @：${missing.join('、')}`);
       }

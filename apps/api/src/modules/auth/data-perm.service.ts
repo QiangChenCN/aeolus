@@ -31,6 +31,8 @@ export interface DataRule {
 export interface OrgTree {
   cities: Record<string, unknown>;
   business_lines: Record<string, unknown>;
+  /** {业务线: [站点id]} 业务线直挂站点：显式归属优先于城市继承（2026-11 模型升级）。 */
+  bl_stations: Record<string, unknown>;
   default_new_site: 'include' | 'exclude';
 }
 
@@ -55,13 +57,14 @@ export class DataPermService implements OnModuleInit {
   private loadOrg(): OrgTree {
     try {
       const obj = JSON.parse(fs.readFileSync(this.orgFile, 'utf-8'));
-      if (!obj || typeof obj !== 'object') return { cities: {}, business_lines: {}, default_new_site: 'exclude' };
+      if (!obj || typeof obj !== 'object') return { cities: {}, business_lines: {}, bl_stations: {}, default_new_site: 'exclude' };
       obj.cities = obj.cities || {};
       obj.business_lines = obj.business_lines || {};
+      obj.bl_stations = obj.bl_stations || {};
       obj.default_new_site = obj.default_new_site || 'exclude';
       return obj;
     } catch {
-      return { cities: {}, business_lines: {}, default_new_site: 'exclude' };
+      return { cities: {}, business_lines: {}, bl_stations: {}, default_new_site: 'exclude' };
     }
   }
   private saveOrg(obj: OrgTree): void {
@@ -138,17 +141,72 @@ export class DataPermService implements OnModuleInit {
     }
     return null;
   }
-  teamsOfBusinessLine(bl: string): Set<string> {
-    const s = new Set<string>();
-    for (const c of this.citiesOfBusinessLine(bl)) for (const t of this.teamsOfCity(c)) s.add(t);
-    return s;
+  /**
+   * 一个城市可挂**多条**业务线（存储结构 {业务线:[城市]} 本就是 N:M），
+   * 单值投影 businessLineOf/blOfCity 仅保留给展示用途；
+   * 权限解析与组织架构回显必须用本方法，否则第二条业务线的归属会被静默丢弃。
+   */
+  businessLinesOfCity(city: string): string[] {
+    const c = String(city);
+    const out: string[] = [];
+    for (const [bl, info] of Object.entries(this.loadOrg().business_lines)) {
+      if (this.blCities(info).includes(c)) out.push(bl);
+    }
+    return out;
   }
-  businessLineOfTeam(team: string): string | null {
+  /** {业务线: [城市]}——组织树存储的权威结构，供编辑页整棵回显。 */
+  blCitiesMap(): Record<string, string[]> {
+    const out: Record<string, string[]> = {};
+    for (const [bl, info] of Object.entries(this.loadOrg().business_lines)) {
+      out[bl] = this.blCities(info);
+    }
+    return out;
+  }
+  teamsOfBusinessLine(bl: string): Set<string> {
+    const out = new Set(this.blStationSets()[bl] || []); // 直挂站点无条件属于该业务线
+    for (const c of this.citiesOfBusinessLine(bl)) {
+      for (const t of this.teamsOfCity(c)) {
+        // 显式直挂优先：已被任一业务线直挂的站点不再通过城市继承进其他业务线
+        if (!this.explicitBlsOfTeam(t).length) out.add(t);
+      }
+    }
+    return out;
+  }
+  /** {业务线: [站点id]} 直挂归属原始结构（org_tree.bl_stations）。 */
+  blStationsMap(): Record<string, string[]> {
+    const out: Record<string, string[]> = {};
+    for (const [bl, set] of Object.entries(this.blStationSets())) out[bl] = [...set];
+    return out;
+  }
+  private blStationSets(): Record<string, Set<string>> {
+    const raw = (this.loadOrg().bl_stations || {}) as Record<string, unknown>;
+    const out: Record<string, Set<string>> = {};
+    for (const [bl, arr] of Object.entries(raw)) {
+      out[bl] = new Set((Array.isArray(arr) ? arr : []).map((x) => String(x).trim()).filter(Boolean));
+    }
+    return out;
+  }
+  /** 站点显式直挂的业务线集合（归属判定优先级最高）。 */
+  private explicitBlsOfTeam(team: string): string[] {
+    const t = String(team);
+    const out: string[] = [];
+    for (const [bl, set] of Object.entries(this.blStationSets())) if (set.has(t)) out.push(bl);
+    return out;
+  }
+  /** 站点 → 业务线（多值）：显式直挂优先，未直挂时继承城市（城市多归属时站点属多条业务线）。 */
+  businessLinesOfTeam(team: string): string[] {
+    const explicit = this.explicitBlsOfTeam(team);
+    if (explicit.length) return explicit;
     const c = this.cityOf(team);
-    return c ? this.businessLineOf(c) : null;
+    return c ? this.businessLinesOfCity(c) : [];
   }
 
-  setOrg(citiesMap: Record<string, string[]>, defaultNewSite?: string, businessLinesMap?: Record<string, string[]>): void {
+  setOrg(
+    citiesMap: Record<string, string[]>,
+    defaultNewSite?: string,
+    businessLinesMap?: Record<string, string[]>,
+    blStationsMap?: Record<string, string[]>,
+  ): void {
     const normCities: Record<string, string[]> = {};
     for (const [c, ts] of Object.entries(citiesMap || {})) {
       const cc = String(c).trim();
@@ -161,9 +219,16 @@ export class DataPermService implements OnModuleInit {
       if (!b) continue;
       normBl[b] = (cs || []).map((x) => String(x).trim()).filter(Boolean);
     }
+    const normBlStations: Record<string, string[]> = {};
+    for (const [bl, ts] of Object.entries(blStationsMap || {})) {
+      const b = String(bl).trim();
+      if (!b) continue;
+      normBlStations[b] = (ts || []).map((x) => String(x).trim()).filter(Boolean);
+    }
     const obj = this.loadOrg();
     obj.cities = normCities;
     obj.business_lines = normBl;
+    obj.bl_stations = normBlStations;
     if (defaultNewSite === 'include' || defaultNewSite === 'exclude') obj.default_new_site = defaultNewSite as 'include' | 'exclude';
     this.saveOrg(obj);
   }
@@ -261,9 +326,9 @@ export class DataPermService implements OnModuleInit {
     for (const c of rule.cities) for (const t of this.teamsOfCity(c)) ids.add(t);
     for (const t of rule.teams) ids.add(String(t));
     if (rule.inherit_new) {
+      // 城市可挂多条业务线：逐条展开，不用单值投影（会丢第二条业务线的站点）
       for (const c of rule.cities) {
-        const bl = this.businessLineOf(c);
-        if (bl) for (const t of this.teamsOfBusinessLine(bl)) ids.add(t);
+        for (const bl of this.businessLinesOfCity(c)) for (const t of this.teamsOfBusinessLine(bl)) ids.add(t);
       }
       for (const t of rule.teams) {
         const c = this.cityOf(t);
@@ -279,22 +344,18 @@ export class DataPermService implements OnModuleInit {
     const ids = new Set<string>();
     for (const bl of rule.business_lines) ids.add(bl);
     for (const c of rule.cities) {
-      const bl = this.businessLineOf(c);
-      if (bl) ids.add(bl);
+      for (const bl of this.businessLinesOfCity(c)) ids.add(bl);
     }
+    // 站点级归属：显式直挂优先，未直挂继承城市
     for (const t of rule.teams) {
-      const bl = this.businessLineOfTeam(t);
-      if (bl) ids.add(bl);
+      for (const bl of this.businessLinesOfTeam(t)) ids.add(bl);
     }
     if (rule.inherit_new) {
       for (const c of rule.cities) {
-        const bl = this.businessLineOf(c);
-        if (bl) ids.add(bl);
+        for (const bl of this.businessLinesOfCity(c)) ids.add(bl);
       }
       for (const t of rule.teams) {
-        const c = this.cityOf(t);
-        const bl = c ? this.businessLineOf(c) : null;
-        if (bl) ids.add(bl);
+        for (const bl of this.businessLinesOfTeam(t)) ids.add(bl);
       }
     }
     return ids;

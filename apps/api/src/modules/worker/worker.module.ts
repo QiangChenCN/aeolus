@@ -8,6 +8,7 @@ import { WorkerService } from '../jobs/worker.service';
 // （流水线依赖 Fetch/Dingtalk/Media/Render 等模块，TasksModule 已装配好）。
 // TasksController / TaskRunnerService(产物) 一并被实例化但本进程不监听 HTTP，无副作用。
 import { TasksModule } from '../tasks/tasks.module';
+import { DingtalkIdModule } from '../dingtalk-id/dingtalk-id.module';
 
 /**
  * worker 进程装配体：只含「抢任务 + 执行」所需依赖，不暴露 HTTP、不含 CronModule
@@ -17,7 +18,7 @@ import { TasksModule } from '../tasks/tasks.module';
  * 缺了它 PgService 等依赖注入 ConfigService 会直接 DI 失败。
  */
 @Module({
-  imports: [RootConfigModule, PgModule, JobsModule, TasksModule],
+  imports: [RootConfigModule, PgModule, JobsModule, DingtalkIdModule, TasksModule],
   providers: [TaskExecutorService, WorkerService],
 })
 export class WorkerModule {}

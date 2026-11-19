@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { UpstreamHttpException } from '../exceptions/upstream-http.exception';
+import { BizError } from '../biz.error';
 
 /**
  * 全局异常过滤器：归一输出 { code, message, path, timestamp }。
@@ -27,15 +28,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
 
     const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+      exception instanceof BizError
+        ? HttpStatus.BAD_REQUEST
+        : exception instanceof HttpException
+          ? exception.getStatus()
+          : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    // 关键修复：当 HttpException 传入「对象响应」（如频控 429、数据权限 403 的
-    // { ok:false, error:'...', code:'...' }）时，Nest 会把 exception.message 默认置为
-    // 字面量 'Http Exception'，真正的错误信息在那个对象里。必须读 getResponse() 提取，
-    // 否则前端只会看到无意义的 'Http Exception'。
-    const message = HttpExceptionFilter.realMessage(exception);
+    // 业务校验错误（BizError）消息必须原样下发——此前普通 Error 被压成
+    // 'Internal server error'，前端看不到「姓名不能为空」这类提示。
+    const message =
+      exception instanceof BizError
+        ? exception.message
+        : HttpExceptionFilter.realMessage(exception);
 
     response.status(status).json({
       code: status,

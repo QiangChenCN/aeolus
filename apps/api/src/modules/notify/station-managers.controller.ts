@@ -3,19 +3,26 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { StationManagersService } from './station-managers.service';
 
 /**
- * 站点负责人映射（系统设置 → 站点负责人设置）。
- * 供实时在线播报等任务「按站点 @ 负责人」使用；全部端点限 config:write 权限
- * （见 modules/auth/permissions.ts）。
+ * 站点负责人映射（人事管理 → 组织架构 → 负责人路由页签维护）。
+ * 供实时在线播报等任务「按站点 @ 负责人」使用。
+ * 权限：GET 限 view（只读用户可看配置），写入/解析限 config:write。
  */
 @Controller('api/notify')
 export class StationManagersController {
   constructor(private readonly svc: StationManagersService) {}
 
-  /** 当前映射（文件不存在时返回硬编码默认，configured=false 提示前端）。 */
-  @RequirePerm('config:write')
+  /** 当前映射 + 一致性巡检（文件不存在时返回空配置，configured=false 提示前端）。 */
+  @RequirePerm('view')
   @Get('station-managers')
-  get() {
-    return this.svc.get();
+  async get() {
+    const base = this.svc.get();
+    let consistency;
+    try {
+      consistency = await this.svc.consistency();
+    } catch {
+      /* 巡检失败不阻塞配置展示 */
+    }
+    return { ...base, consistency };
   }
 
   /** 保存映射（整体覆盖 stations；openDingTalkId 无需手动填，自动解析）。 */

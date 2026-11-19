@@ -112,7 +112,10 @@ export class TeamsFetchService {
       out.source = 'fallback';
       out.error = err || '风神接口未返回任何站点';
       // 不再硬编码兜底清单：读上次落盘的站点目录文件。
+      // 同时回填 teams：所有调用方（组织架构 / 配置 / 任务）普遍只读 payload.teams，
+      // 若只给 fallback 字段，调用方会拿到空清单，把目录内站点误判为「已失效」。
       out.fallback = readKnownTeams();
+      out.teams = out.fallback;
     } else {
       // 每次成功获取站点目录后落盘，供计算层 / 前端在接口不可达时读取。
       this.persist(out.teams);

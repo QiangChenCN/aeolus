@@ -10,6 +10,7 @@ import { ReportRenderService } from '../../render/report-render.service';
 import { MinioService } from '../../media/minio.service';
 import { DingtalkService } from '../../dingtalk/dingtalk.service';
 import { StationManagersService } from '../../notify/station-managers.service';
+import { DingtalkIdBaseService } from '../../dingtalk-id/dingtalk-id-base.service';
 
 /** 默认目标群（tasks.json 亦可给 cid）。 */
 const DEFAULT_GROUP = '台账安全处理群';
@@ -60,6 +61,7 @@ export class TaskEquipmentPipeline implements TaskHandler {
     private readonly minio: MinioService,
     private readonly dingtalk: DingtalkService,
     private readonly stationManagers: StationManagersService,
+    private readonly dingtalkIds: DingtalkIdBaseService,
     config: ConfigService,
   ) {
     this.handlers.register(this);
@@ -203,7 +205,7 @@ export class TaskEquipmentPipeline implements TaskHandler {
       for (const r of kept) {
         for (const m of this.stationManagers.managersForTeam(String(r['站点名称'] ?? ''))) names.add(m);
       }
-      const { resolved, missing } = await this.stationManagers.resolveNamesAuto(names);
+      const { resolved, missing } = await this.dingtalkIds.resolveNamesAuto(names);
       const ids = resolved.map(([, oid]) => oid);
       const atIds = ids.length && !noAt ? ids : [];
       const dateStr = start;

@@ -28,14 +28,16 @@ export function navTo(it) {
     case 'rbac-pw': return '/settings/rbac/pw';
     case 'rbac': return '/settings/rbac';
     case 'profile': return '/settings/profile';
-    case 'bots': return '/bot';
     case 'syscfg': return '/settings';
     case 'sys-dingtalk': return '/settings/dingtalk';
-    case 'sys-aeolus': return '/settings/aeolus';
-    case 'sys-minio': return '/settings/minio';
-    case 'sys-managers': return '/settings/managers';
+    case 'sys-credentials': return '/settings/credentials';
+    case 'sys-managers': return '/hr/org';
+    case 'riders': return '/riders';
+    case 'staff': return '/staff';
+    case 'hr-org': return '/hr/org';
+    case 'hr-org-positions': return '/hr/positions';
     case 'operationLog': return '/operation-log';
-    case 'botcfg': return '/bot/' + it.id;
+    case 'botcfg': return '/settings/dingtalk/' + (it.id || 'global');
     default: return '/';
   }
 }
@@ -63,11 +65,17 @@ export function navIsActive(it) {
     const k = r.meta && r.meta.kind;
     return k === 'assess' || k === 'assessService' || k === 'assessStandard' || k === 'assessPeriod' || k === 'assessWeather';
   }
-  // 机器人配置（侧栏叶子项，位于系统设置下）：其下任一 botcfg 子页命中即高亮
-  if (it.kind === 'bots') {
+  // 钉钉集成（侧栏叶子项）：其下任一子页（钉钉授权 / botcfg 各子页）命中即高亮
+  if (it.kind === 'sys-dingtalk') {
     const r = useRoute();
     const k = r.meta && r.meta.kind;
-    return k === 'bots' || k === 'botcfg';
+    return k === 'sys-dingtalk' || k === 'dingtalk-auth' || k === 'botcfg';
+  }
+  // 外部服务凭证（侧栏叶子项）：其下任一子页（风神 / MinIO）命中即高亮
+  if (it.kind === 'sys-credentials') {
+    const r = useRoute();
+    const k = r.meta && r.meta.kind;
+    return k === 'sys-credentials' || k === 'sys-aeolus' || k === 'sys-minio';
   }
   // 个人中心（侧栏叶子项，位于系统设置下）：profile 单页命中即高亮
   if (it.kind === 'profile') {

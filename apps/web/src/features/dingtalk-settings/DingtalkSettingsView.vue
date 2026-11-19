@@ -1,6 +1,6 @@
 <template>
   <div class="dt">
-    <h2 class="v-title">钉钉设置</h2>
+    <h2 class="v-title">钉钉集成</h2>
 
     <!-- 钉钉授权 -->
     <el-card class="blk" shadow="never">

@@ -5,22 +5,15 @@
     <div class="cards">
       <RouterLink to="/settings/dingtalk" class="card">
         <div>
-          <div class="card-t">钉钉设置</div>
-          <div class="card-d">钉钉授权与 dws CLI 配置项（共 32 项，分 8 类）</div>
+          <div class="card-t">钉钉集成</div>
+          <div class="card-d">钉钉授权 / SSO 与机器人调度（全局、凭证、实例配置），dws CLI 配置项（共 32 项，分 8 类）</div>
         </div>
         <el-icon class="card-arw"><ArrowRight /></el-icon>
       </RouterLink>
-      <RouterLink to="/settings/aeolus" class="card">
+      <RouterLink to="/settings/credentials" class="card">
         <div>
-          <div class="card-t">风神设置</div>
-          <div class="card-d">风神（Aeolus）登录账号与密码，由「风神设置」页写入后端 credentials.json（无需在 .env 中存储）</div>
-        </div>
-        <el-icon class="card-arw"><ArrowRight /></el-icon>
-      </RouterLink>
-      <RouterLink to="/settings/minio" class="card">
-        <div>
-          <div class="card-t">MinIO 设置</div>
-          <div class="card-d">MinIO 图床连接配置（endpoint / bucket / 密钥），保存后热生效，支持连通性验证</div>
+          <div class="card-t">外部服务凭证</div>
+          <div class="card-d">风神（Aeolus）登录账号与 MinIO 图床连接（endpoint / bucket / 密钥），保存后热生效</div>
         </div>
         <el-icon class="card-arw"><ArrowRight /></el-icon>
       </RouterLink>

@@ -18,6 +18,7 @@ import { DingtalkModule } from './modules/dingtalk/dingtalk.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { MediaModule } from './modules/media/media.module';
 import { NotifyModule } from './modules/notify/notify.module';
+import { DingtalkIdModule } from './modules/dingtalk-id/dingtalk-id.module';
 import { RenderModule } from './modules/render/render.module';
 import { TeamsModule } from './modules/teams/teams.module';
 import { StatusModule } from './modules/status/status.module';
@@ -28,6 +29,10 @@ import { StandardModule } from './modules/standard/standard.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { PgModule } from './modules/pg/pg.module';
 import { OperationLogModule } from './modules/operation-log/operation-log.module';
+import { RidersModule } from './modules/riders/riders.module';
+import { StaffModule } from './modules/staff/staff.module';
+import { HrOrgModule } from './modules/hr-org/hr-org.module';
+import { PersonnelModule } from './modules/personnel/personnel.module';
 import { OperationLogMiddleware } from './modules/operation-log/operation-log.middleware';
 
 @Module({
@@ -37,6 +42,7 @@ import { OperationLogMiddleware } from './modules/operation-log/operation-log.mi
     ScheduleModule.forRoot(),
     // 频控（内存态；多实例需换 Redis 存储）
     ThrottlerModule.forRoot({ throttlers: [{ ttl: 60000, limit: 60 }] }),
+    DingtalkIdModule,
     AuthModule,
     ComputeModule,
     StreamingModule,
@@ -61,6 +67,10 @@ import { OperationLogMiddleware } from './modules/operation-log/operation-log.mi
     DeliveryModule,
     PgModule,
     OperationLogModule,
+    RidersModule,
+    StaffModule,
+    HrOrgModule,
+    PersonnelModule,
   ],
   // 统一访问闸门：机器令牌闸门 + RBAC 会话鉴权（见 AccessGuard）
   providers: [{ provide: APP_GUARD, useClass: AccessGuard }],

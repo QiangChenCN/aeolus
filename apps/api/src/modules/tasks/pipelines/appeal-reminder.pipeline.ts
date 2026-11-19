@@ -10,6 +10,7 @@ import { ReportRenderService } from '../../render/report-render.service';
 import { MinioService } from '../../media/minio.service';
 import { DingtalkService } from '../../dingtalk/dingtalk.service';
 import { StationManagersService } from '../../notify/station-managers.service';
+import { DingtalkIdBaseService } from '../../dingtalk-id/dingtalk-id-base.service';
 import { APPEAL_GROUP_NAME, teamToStation } from '../../notify/notify-config';
 import { csvToRecords } from '../../../common/csv';
 
@@ -59,6 +60,7 @@ export class AppealReminderPipeline implements TaskHandler {
     private readonly minio: MinioService,
     private readonly dingtalk: DingtalkService,
     private readonly stationManagers: StationManagersService,
+    private readonly dingtalkIds: DingtalkIdBaseService,
     config: ConfigService,
   ) {
     this.handlers.register(this);
@@ -130,7 +132,7 @@ export class AppealReminderPipeline implements TaskHandler {
     for (const r of rows) {
       for (const m of this.stationManagers.managersForTeam(r['站点'])) names.add(m);
     }
-    const { resolved, missing } = await this.stationManagers.resolveNamesAuto(names);
+    const { resolved, missing } = await this.dingtalkIds.resolveNamesAuto(names);
     return { ids: resolved.map(([, oid]) => oid), missing: [...missing].sort(), resolved };
   }
 

@@ -11,6 +11,7 @@ import { MinioService } from '../../media/minio.service';
 import { DingtalkService } from '../../dingtalk/dingtalk.service';
 import { PRODUCTION_GROUP_NAME } from '../../notify/notify-config';
 import { StationManagersService } from '../../notify/station-managers.service';
+import { DingtalkIdBaseService } from '../../dingtalk-id/dingtalk-id-base.service';
 
 /** 测试目标群名（运行时按群名解析，不写死 cid）。 */
 const TEST_GROUP_QUERY = '机器人测试';
@@ -61,6 +62,7 @@ export class TaskBoardPipeline implements TaskHandler {
     private readonly minio: MinioService,
     private readonly dingtalk: DingtalkService,
     private readonly stationManagers: StationManagersService,
+    private readonly dingtalkIds: DingtalkIdBaseService,
     config: ConfigService,
   ) {
     this.handlers.register(this);
@@ -213,7 +215,7 @@ export class TaskBoardPipeline implements TaskHandler {
         state.missing = [];
         return;
       }
-      const { resolved, missing } = await this.stationManagers.resolveNamesAuto(names);
+      const { resolved, missing } = await this.dingtalkIds.resolveNamesAuto(names);
       state.resolved = resolved;
       state.missing = missing;
     });

@@ -55,8 +55,6 @@ export interface StationManagerEntry {
   mobile?: string;
   /** 职位（可空，仅信息展示）。 */
   title?: string;
-  /** 是否在播报/@ 名单中排除此人（true = 只挂名不 @，默认 false）。 */
-  no_at?: boolean;
   /** 钉钉 openDingTalkId（@ 占位符用的真实 ID）。 */
   open_id: string;
 }

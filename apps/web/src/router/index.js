@@ -25,16 +25,19 @@ import UsersView from '../features/users/UsersView.vue';
 import RolesView from '../features/roles/RolesView.vue';
 import PolicyView from '../features/policy/PolicyView.vue';
 import SystemSettingsView from '../features/system-settings/SystemSettingsView.vue';
+import SettingsTabShell from '../features/system-settings/SettingsTabShell.vue';
 import RbacView from '../features/rbac/RbacView.vue';
 import DingtalkSettingsView from '../features/dingtalk-settings/DingtalkSettingsView.vue';
 import AeolusSettingsView from '../features/aeolus-settings/AeolusSettingsView.vue';
 import MinioSettingsView from '../features/minio-settings/MinioSettingsView.vue';
-import StationManagersView from '../features/station-managers/StationManagersView.vue';
 import BotGlobalView from '../features/bot-global/BotGlobalView.vue';
 import BotRobotView from '../features/bot-robot/BotRobotView.vue';
 import BotInstanceView from '../features/bot-instance/BotInstanceView.vue';
-import BotView from '../features/bot/BotView.vue';
 import ProfileInfoView from '../features/profile-info/ProfileInfoView.vue';
+import RiderManageView from '../features/rider-manage/RiderManageView.vue';
+import StaffManageView from '../features/staff-manage/StaffManageView.vue';
+import StationConfigView from '../features/hr-org/StationConfigView.vue';
+import PositionSettingsView from '../features/hr-org/PositionSettingsView.vue';
 import NotFoundView from '../features/not-found/NotFoundView.vue';
 import OperationLogView from '../features/operation-log/OperationLogView.vue';
 import { useAuthStore } from '../stores/auth.js';
@@ -72,10 +75,58 @@ const routes = [
       { path: 'operation-log', name: 'operation-log', component: OperationLogView, meta: { title: '操作日志', kind: 'operationLog', id: '', perm: 'admin:roles' } },
       { path: 'groups', name: 'groups', component: GroupsView, meta: { title: '群组' } },
       { path: 'settings', name: 'system-settings', component: SystemSettingsView, meta: { title: '系统设置', kind: 'syscfg' } },
-      { path: 'settings/dingtalk', name: 'dingtalk-settings', component: DingtalkSettingsView, meta: { title: '钉钉设置', kind: 'sys-dingtalk', perm: 'admin:bot' } },
-      { path: 'settings/aeolus', name: 'aeolus-settings', component: AeolusSettingsView, meta: { title: '风神设置', kind: 'sys-aeolus', perm: 'admin:aeolus' } },
-      { path: 'settings/minio', name: 'minio-settings', component: MinioSettingsView, meta: { title: 'MinIO 设置', kind: 'sys-minio', perm: 'admin:minio' } },
-      { path: 'settings/managers', name: 'station-managers', component: StationManagersView, meta: { title: '站点负责人设置', kind: 'sys-managers', perm: 'config:write' } },
+      // 钉钉集成：原「钉钉设置 + 调度设置」合并（共享 admin:bot 权限、同一维护人/生态），子页 tab 化
+      {
+        path: 'settings/dingtalk',
+        name: 'dingtalk-settings',
+        component: SettingsTabShell,
+        redirect: { name: 'dingtalk-auth' },
+        meta: {
+          title: '钉钉集成', kind: 'sys-dingtalk', perm: 'admin:bot',
+          tabs: [
+            { label: '钉钉授权', to: '/settings/dingtalk/auth' },
+            { label: '全局配置', to: '/settings/dingtalk/global' },
+            { label: '凭证配置', to: '/settings/dingtalk/robot' },
+            { label: '实例配置', to: '/settings/dingtalk/instance' },
+          ],
+        },
+        children: [
+          { path: 'auth', name: 'dingtalk-auth', component: DingtalkSettingsView, meta: { title: '钉钉授权', kind: 'dingtalk-auth', id: '', perm: 'admin:bot' } },
+          { path: 'global', name: 'dingtalk-bot-global', component: BotGlobalView, meta: { title: '全局配置', kind: 'botcfg', id: 'global', perm: 'admin:bot' } },
+          { path: 'robot', name: 'dingtalk-bot-robot', component: BotRobotView, meta: { title: '凭证配置', kind: 'botcfg', id: 'robot', perm: 'admin:bot' } },
+          { path: 'instance', name: 'dingtalk-bot-instance', component: BotInstanceView, meta: { title: '实例配置', kind: 'botcfg', id: 'instance', perm: 'admin:bot' } },
+        ] },
+      // 外部服务凭证：原「风神设置 + MinIO 设置」合并（均为一次性外部凭证写入，极低频）
+      {
+        path: 'settings/credentials',
+        name: 'credentials-settings',
+        component: SettingsTabShell,
+        redirect: { name: 'credentials-aeolus' },
+        meta: {
+          title: '外部服务凭证', kind: 'sys-credentials', perms: ['admin:aeolus', 'admin:minio'],
+          tabs: [
+            { label: '风神凭证', to: '/settings/credentials/aeolus' },
+            { label: 'MinIO 凭证', to: '/settings/credentials/minio' },
+          ],
+        },
+        children: [
+          { path: 'aeolus', name: 'credentials-aeolus', component: AeolusSettingsView, meta: { title: '风神凭证', kind: 'sys-aeolus', id: '', perm: 'admin:aeolus' } },
+          { path: 'minio', name: 'credentials-minio', component: MinioSettingsView, meta: { title: 'MinIO 凭证', kind: 'sys-minio', id: '', perm: 'admin:minio' } },
+        ] },
+      // 旧路径深链兼容：重定向到合并后的新地址
+      { path: 'settings/aeolus', redirect: { name: 'credentials-aeolus' } },
+      { path: 'settings/minio', redirect: { name: 'credentials-minio' } },
+      { path: 'bot', redirect: { name: 'dingtalk-auth' } },
+      { path: 'bot/global', redirect: { name: 'dingtalk-bot-global' } },
+      { path: 'bot/robot', redirect: { name: 'dingtalk-bot-robot' } },
+      { path: 'bot/instance', redirect: { name: 'dingtalk-bot-instance' } },
+      // 站点负责人设置已并入「人事管理→组织架构」，旧地址重定向保证收藏链接可用
+      { path: 'settings/managers', redirect: '/hr/org' },
+      { path: 'riders', name: 'riders', component: RiderManageView, meta: { title: '骑手管理', kind: 'riders', id: '' } },
+      { path: 'staff', name: 'staff', component: StaffManageView, meta: { title: '人员管理', kind: 'staff', id: '' } },
+      // 原组织架构页四页签拆分：站点配置（业务线/城市/站点归属 + 负责人通知路由）、岗位设置（独立二级菜单）
+      { path: 'hr/org', name: 'hr-org', component: StationConfigView, meta: { title: '站点配置', kind: 'hr-org', id: '' } },
+      { path: 'hr/positions', name: 'hr-org-positions', component: PositionSettingsView, meta: { title: '岗位设置', kind: 'hr-org-positions', id: '' } },
       {
         path: 'settings/rbac',
         name: 'rbac',
@@ -94,12 +145,6 @@ const routes = [
         component: ProfileInfoView,
         meta: { title: '个人中心', kind: 'profile' },
       },
-      { path: 'bot', name: 'bots', component: BotView, redirect: { name: 'bot-global' }, meta: { title: '调度设置', kind: 'bots', perm: 'admin:bot' },
-        children: [
-          { path: 'global', name: 'bot-global', component: BotGlobalView, meta: { title: '全局配置', kind: 'botcfg', id: 'global' } },
-          { path: 'robot', name: 'bot-robot', component: BotRobotView, meta: { title: '凭证配置', kind: 'botcfg', id: 'robot' } },
-          { path: 'instance', name: 'bot-instance', component: BotInstanceView, meta: { title: '实例配置', kind: 'botcfg', id: 'instance' } },
-        ] },
     ],
   },
   // 兜底：未知路径（含拼写错误/已删除路由）渲染 404 页面，而非空白或静默跳首页
@@ -144,7 +189,11 @@ router.beforeEach(async (to) => {
   }
   // 权限点守卫：仅体验层收敛，真正的越权防护在后端 AccessGuard。
   // 无权限时回首页，而不是跳登录页（会话仍有效，跳登录会造成"反复登录"错觉）。
+  // meta.perms 为「任一满足即可」的权限点数组（用于合并后的设置页，如外部服务凭证）。
   if (to.meta && to.meta.perm && !auth.hasPerm(to.meta.perm)) {
+    return { path: '/' };
+  }
+  if (to.meta && Array.isArray(to.meta.perms) && to.meta.perms.length && !to.meta.perms.some((p) => auth.hasPerm(p))) {
     return { path: '/' };
   }
   return true;

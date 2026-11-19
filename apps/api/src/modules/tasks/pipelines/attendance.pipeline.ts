@@ -11,6 +11,7 @@ import { ReportRenderService, TeamItem } from '../../render/report-render.servic
 import { MinioService } from '../../media/minio.service';
 import { DingtalkService } from '../../dingtalk/dingtalk.service';
 import { StationManagersService } from '../../notify/station-managers.service';
+import { DingtalkIdBaseService } from '../../dingtalk-id/dingtalk-id-base.service';
 import { PRODUCTION_GROUP_NAME } from '../../notify/notify-config';
 import { readKnownTeams } from '../../../infra/fetch/sources/teams-fetch.service';
 
@@ -136,6 +137,7 @@ export class AttendancePipeline implements TaskHandler {
     private readonly minio: MinioService,
     private readonly dingtalk: DingtalkService,
     private readonly stationManagers: StationManagersService,
+    private readonly dingtalkIds: DingtalkIdBaseService,
     config: ConfigService,
   ) {
     this.handlers.register(this);
@@ -450,7 +452,7 @@ export class AttendancePipeline implements TaskHandler {
       for (const [site, count] of siteCounts) {
         const names = this.stationManagers.managersForTeam(site);
         // 按姓名自动解析 openDingTalkId（缓存命中零成本，未命中拉目标群成员解析并落缓存）
-        const { resolved, missing } = await this.stationManagers.resolveNamesAuto(names);
+        const { resolved, missing } = await this.dingtalkIds.resolveNamesAuto(names);
         for (const m of missing) missingNames.add(m);
         if (!resolved.length) {
           unmappedSites.push(site);

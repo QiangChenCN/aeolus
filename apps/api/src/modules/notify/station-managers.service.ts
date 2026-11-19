@@ -2,39 +2,35 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { StationManagersCfg, PRODUCTION_GROUP_NAME } from './notify-config';
-import { DingtalkService } from '../../modules/dingtalk/dingtalk.service';
+import { StationManagersCfg } from './notify-config';
+import { DingtalkIdBaseService, ResolvedNames } from '../dingtalk-id/dingtalk-id-base.service';
+import { PgService } from '../pg/pg.service';
 
-export interface ResolvedNames {
-  /** [姓名, openDingTalkId]，已按姓名去重、剔除「不参与 @」的负责人。 */
-  resolved: [string, string][];
-  /** 未解析到 openid 的姓名。 */
-  missing: string[];
-}
+export type { ResolvedNames };
 
-/** 自动解析缓存的落盘结构（与 UI 维护的 station_managers.json 分离）。 */
-interface IdCacheFile {
-  /** 缓存来源群（openDingTalkId 只在群成员语义下稳定）。 */
-  group: string;
-  ids: Record<string, string>;
-  updated_at: string;
+/** 一致性巡检报告（路由姓名字符串 vs 人员花名册的**客观事实**比对，无岗位语义判定）。 */
+export interface ManagersConsistency {
+  /** 配置引用但花名册查无此人的姓名（拼写不一致或花名册缺人，任务将无法 @ 到） */
+  unknown: string[];
+  /** 花名册中已离职/停用但仍被配置引用的姓名 */
+  inactive: { name: string; status: string }[];
+  /** 未配置任何负责人的站点展示名 */
+  no_manager: string[];
 }
 
 /**
- * 站点负责人映射的**唯一**运行时存储：由「系统设置 → 站点负责人设置」UI 维护，
- * 落盘 `apps/api/runtime/station_managers.json`（与 credentials.json / minio_config.json
- * 同目录，gitignored 运行时产物）。保存后立即热生效，无需重启。
+ * 站点负责人映射的**唯一**运行时存储：由组织架构页维护，
+ * 落盘 `apps/api/runtime/station_managers.json`（gitignored 运行时产物）。保存后立即热生效，无需重启。
  *
  * 存在意义：实时在线播报 / 申诉提醒 / 装备点亮等任务需要「按站点 @ 对应负责人」，
  * 而站点负责人会随人事变动更换——不允许再改代码常量。
  *
- * openDingTalkId **不需要手动维护**：
- *  · UI 只维护「站点 → 负责人姓名」；
- *  · 发送时按姓名走通讯录搜索（dws contact +search-user 直接返回 openDingTalkId），
- *    与消息发到哪个群无关；通讯录不可用时降级从默认生产群群成员解析；
- *  · 解析成功的结果缓存到 `manager_ids_cache.json`（同目录），命中缓存不再请求；
- *  · 唯一来源：UI 文件显式填写的 managers（含保存时自动回填的 ID）→ 自动解析缓存。
- *    **没有任何内置兜底表**——未配置/解析不到就不 @（任务日志告警）。
+ * **职责分离**：本服务只负责「站点 → 负责人姓名」映射；
+ * 姓名 → openDingTalkId 的解析全部由「钉钉ID 取数基座」（DingtalkIdBaseService）承担，
+ * 由任务管线在发送前直接调用基座：
+ *  · 解析缓存 → 通讯录搜索（同名手机号消歧，花名册手机号辅助）；
+ *  · 解析成功自动落缓存（不写花名册）。
+ * 未配置/解析不到就不 @（任务日志告警）。
  *
  * 站点映射同理：station_managers.json 是唯一事实来源，不存在时所有站点都视为未配置。
  */
@@ -42,18 +38,16 @@ interface IdCacheFile {
 export class StationManagersService {
   private readonly logger = new Logger(StationManagersService.name);
   private readonly file: string;
-  private readonly cacheFile: string;
 
   constructor(
     private readonly config: ConfigService,
-    private readonly dingtalk: DingtalkService,
+    private readonly dingtalkIds: DingtalkIdBaseService,
+    private readonly pg: PgService,
   ) {
     const root = path.resolve(
       config.get<string>('PROJECT_ROOT') || path.resolve(process.cwd(), '..'),
     );
-    const runtime = path.join(root, 'apps', 'api', 'runtime');
-    this.file = path.join(runtime, 'station_managers.json');
-    this.cacheFile = path.join(runtime, 'manager_ids_cache.json');
+    this.file = path.join(root, 'apps', 'api', 'runtime', 'station_managers.json');
   }
 
   // ── UI 配置文件（station_managers.json）──
@@ -92,30 +86,6 @@ export class StationManagersService {
     return this.readFile() || { managers: [], stations: [] };
   }
 
-  // ── 自动解析缓存（manager_ids_cache.json）──
-
-  private readCache(): IdCacheFile {
-    try {
-      const d = JSON.parse(fs.readFileSync(this.cacheFile, 'utf-8'));
-      if (d && typeof d === 'object' && d.ids && typeof d.ids === 'object') return d as IdCacheFile;
-    } catch {
-      /* 无缓存 */
-    }
-    return { group: '', ids: {}, updated_at: '' };
-  }
-
-  private writeCache(c: IdCacheFile): void {
-    const tmp = `${this.cacheFile}.tmp`;
-    fs.mkdirSync(path.dirname(this.cacheFile), { recursive: true });
-    fs.writeFileSync(tmp, JSON.stringify(c, null, 2), { encoding: 'utf-8', mode: 0o600 });
-    fs.renameSync(tmp, this.cacheFile);
-    try {
-      fs.chmodSync(this.cacheFile, 0o600);
-    } catch {
-      /* 权限微调失败不影响写入 */
-    }
-  }
-
   // ── 站点 → 负责人姓名 ──
 
   /**
@@ -141,152 +111,63 @@ export class StationManagersService {
     return [];
   }
 
-  // ── 姓名 → openDingTalkId ──
-
-  /** 姓名 -> openDingTalkId（UI 显式配置 → 自动解析缓存；无内置兜底）。 */
-  openIdFor(name: string): string | undefined {
-    const cfg = this.readFile();
-    if (cfg) {
-      for (const m of cfg.managers) if (m.name === name && m.open_id) return m.open_id;
-    }
-    const cache = this.readCache();
-    if (cache.ids[name]) return cache.ids[name];
-    return undefined;
-  }
-
-  /** 同步解析（显式配置/缓存内命中），不发网络请求；跳过「不参与 @」的负责人。 */
-  resolveNames(names: Iterable<string>): ResolvedNames {
-    const resolved: [string, string][] = [];
-    const missing: string[] = [];
-    for (const n of [...new Set(names)].filter(Boolean).sort()) {
-      if (this.isNoAt(n)) continue;
-      const oid = this.openIdFor(n);
-      if (oid) resolved.push([n, oid]);
-      else missing.push(n);
-    }
-    return { resolved, missing };
-  }
-
-  /** 该姓名是否被标记为「不参与 @」（仅 UI 配置，无内置名单）。 */
-  private isNoAt(name: string): boolean {
-    const cfg = this.readFile();
-    if (!cfg) return false;
-    return cfg.managers.some((m) => m.name === name && m.no_at);
-  }
-
-  /**
-   * 异步自动解析 openDingTalkId，与发送目标群**无关**（发哪个群都能 @ 对）：
-   *  1. 缓存/内置常量命中 → 直接用；
-   *  2. 未命中 → 通讯录按姓名搜索（dws contact +search-user，直接返回 openDingTalkId），
-   *     要求返回结果中**姓名精确相等且唯一**才采用；
-   *     若同名多人（歧义），且该负责人在 UI 配置了手机号 → 用 `contact +by-mobile`
-   *     反查 userId，与候选人 userId 比对唯一定位，消除「同名就拒绝解析」的限制；
-   *  3. 通讯录搜索整体失败（网络/权限）→ 降级拉「站点日常管理通知群」群成员匹配。
-   * 解析成功即落缓存，下次零成本命中。
-   */
-  async resolveNamesAuto(names: Iterable<string>): Promise<ResolvedNames> {
-    const first = this.resolveNames(names);
-    if (!first.missing.length) return first;
-
-    const cache = this.readCache();
-    let dirty = false;
-    let dirFailed = false; // 通讯录搜索是否整体不可用（只降级一次，不逐名重试）
-    let members: { name: string; openDingTalkId: string }[] | null = null; // 降级用的群成员，懒加载一次
-    const still: string[] = [];
-
-    // UI 配置里的姓名 → 手机号（同名歧义时反查消歧用）
-    const cfgNow = this.readFile();
-    const mobiles = new Map<string, string>();
-    for (const m of cfgNow?.managers || []) {
-      if (m.mobile && !mobiles.has(m.name)) mobiles.set(m.name, m.mobile.trim());
-    }
-
-    for (const n of first.missing) {
-      let candidates: { name: string; openDingTalkId?: string; userId?: string }[] = [];
-      if (!dirFailed) {
-        try {
-          const all = await this.dingtalk.searchUserByName(n);
-          candidates = all.filter((u) => u.name === n && u.openDingTalkId); // 精确匹配，拒绝前缀/包含式误伤
-        } catch (e) {
-          dirFailed = true;
-          this.logger.warn(`通讯录搜索不可用（${(e as Error).message.slice(0, 120)}），尝试降级群成员解析`);
-        }
-      }
-      if (!candidates.length && dirFailed) {
-        // 降级：从默认生产群群成员里找（整轮只拉一次，内存比对）
-        if (members === null) {
-          try {
-            members = await this.dingtalk.listMembers(PRODUCTION_GROUP_NAME);
-          } catch (e) {
-            this.logger.warn(`群成员解析也失败：${(e as Error).message.slice(0, 120)}`);
-            members = [];
-          }
-        }
-        candidates = (members || []).filter((u) => u.name === n);
-      }
-      // 同名多人 → 手机号反查 userId 消歧（有 openDingTalkId 的候选才能比对）
-      if (candidates.length > 1) {
-        const mobile = mobiles.get(n);
-        if (mobile) {
-          try {
-            const uid = await this.dingtalk.searchUserIdByMobile(mobile);
-            if (uid) {
-              const matched = candidates.filter((c) => c.userId === uid);
-              if (matched.length === 1) {
-                this.logger.log(`姓名「${n}」同名 ${candidates.length} 人，经手机号反查（userId=${uid}）唯一确定`);
-                candidates = matched;
-              }
-            }
-          } catch (e) {
-            this.logger.warn(`手机号反查失败（${mobile.slice(0, 4)}****）：${(e as Error).message.slice(0, 100)}`);
-          }
-        }
-      }
-      if (candidates.length === 1) {
-        const id = candidates[0].openDingTalkId as string;
-        cache.ids[n] = id;
-        dirty = true;
-        first.resolved.push([n, id]);
-        this.logger.log(`自动解析 openDingTalkId：${n} → ${id.slice(0, 12)}…`);
-      } else if (candidates.length > 1) {
-        this.logger.warn(
-          `姓名「${n}」在通讯录匹配到 ${candidates.length} 人${mobiles.has(n) ? '（手机号反查仍无法唯一确定）' : '（可在负责人设置里填手机号辅助消歧）'}，跳过 @`,
-        );
-        still.push(n);
-      } else {
-        still.push(n);
-      }
-    }
-    if (dirty) {
-      cache.group = '通讯录';
-      cache.updated_at = new Date().toISOString();
-      this.writeCache(cache);
-    }
-    first.resolved.sort((a, b) => a[0].localeCompare(b[0], 'zh'));
-    first.missing = still.sort();
-    return first;
-  }
-
   /** 立即解析：把配置里引用到的全部负责人姓名都跑一遍自动解析（UI「一键解析」用）。 */
   async resolveAll(): Promise<ResolvedNames & { group: string }> {
     const cfg = this.readFile() || { managers: [], stations: [] };
     const names = new Set<string>();
     for (const s of cfg.stations) for (const m of s.managers) names.add(m);
     for (const m of cfg.managers) names.add(m.name);
-    const r = await this.resolveNamesAuto([...names]);
+    // 姓名解析委托钉钉ID 取数基座（本服务只收集映射里引用到的姓名）
+    const r = await this.dingtalkIds.resolveNamesAuto([...names]);
     return { ...r, group: '通讯录' };
   }
 
-  /** 全量 @ 名单（UI 配置的负责人去重、剔除「不参与 @」者），供「一个站点都没匹配到负责人」时兜底。 */
+  /** 全量 @ 名单（UI 配置的负责人去重），供「一个站点都没匹配到负责人」时兜底。 */
   allManagerIds(): string[] {
     const cfg = this.readFile();
     const ids: string[] = [];
     if (!cfg) return ids;
     for (const m of cfg.managers) {
-      if (!m.open_id || m.no_at || ids.includes(m.open_id)) continue;
+      if (!m.open_id || ids.includes(m.open_id)) continue;
       ids.push(m.open_id);
     }
     return ids;
+  }
+
+  // ── 一致性巡检（双事实来源风险点的对冲） ──
+
+  /**
+   * 路由配置姓名 vs 人员花名册的客观比对：查无此人 / 已离职停用 / 站点无负责人。
+   * 只报事实不做岗位语义判定（「这个人是不是站长」归岗位字典/人事口径）；
+   * 花名册不可用时返回空报告（巡检是辅助展示，绝不阻塞路由功能与任务发送）。
+   */
+  async consistency(): Promise<ManagersConsistency> {
+    const out: ManagersConsistency = { unknown: [], inactive: [], no_manager: [] };
+    const cfg = this.read();
+    out.no_manager = cfg.stations
+      .filter((s) => !(s.managers || []).length)
+      .map((s) => s.name || s.station_name || s.station_id || '(未命名站点)');
+    const names = new Set<string>();
+    for (const s of cfg.stations) for (const m of s.managers || []) if (m.trim()) names.add(m.trim());
+    for (const m of cfg.managers || []) if (m.name?.trim()) names.add(m.name.trim());
+    if (!names.size) return out;
+    let rows: { name: string; status: string }[] = [];
+    try {
+      rows = await this.pg.query<{ name: string; status: string }>(
+        'SELECT name, status FROM staff_roster WHERE name = ANY($1)',
+        [[...names]],
+      );
+    } catch (e) {
+      this.logger.warn(`负责人一致性巡检跳过（花名册不可用）：${(e as Error).message.slice(0, 120)}`);
+      return { unknown: [], inactive: [], no_manager: out.no_manager };
+    }
+    const byName = new Map(rows.map((r) => [String(r.name), String(r.status)]));
+    for (const n of names) {
+      const st = byName.get(n);
+      if (!st) out.unknown.push(n);
+      else if (st !== 'active') out.inactive.push({ name: n, status: st });
+    }
+    return out;
   }
 
   // ── UI 读写 ──
@@ -301,7 +182,7 @@ export class StationManagersService {
     cache: { name: string; open_id: string }[];
   } & StationManagersCfg {
     const cfg = this.isConfigured() ? this.read() : { managers: [], stations: [] };
-    const cache = this.readCache();
+    const cache = this.dingtalkIds.cacheSnapshot(); // 解析缓存由取数基座持有
     return {
       ok: true,
       configured: this.isConfigured(),
@@ -316,11 +197,11 @@ export class StationManagersService {
 
   /**
    * 保存（整体覆盖 stations；managers 可选：不传则沿用现有值）。
-   * 保存成功后**自动解析**缺失的 openDingTalkId（结果落缓存），并在响应中返回未解析名单。
+   * 钉钉ID 不在保存时解析——由取数基座在任务发送时统一解析（只落解析缓存）。
    */
   async save(
     input: Record<string, unknown>,
-  ): Promise<{ ok: boolean; error?: string; warning?: string; missing?: string[] } & ReturnType<StationManagersService['get']>> {
+  ): Promise<{ ok: boolean; error?: string; warning?: string; missing?: string[]; consistency?: ManagersConsistency } & ReturnType<StationManagersService['get']>> {
     const stationsRaw = Array.isArray(input?.stations) ? input.stations : null;
     if (!stationsRaw) {
       return { ...this.get(), ok: false, error: 'stations 必须是数组' };
@@ -336,7 +217,6 @@ export class StationManagersService {
       const name = typeof m?.name === 'string' ? m.name.trim() : '';
       const mobile = typeof m?.mobile === 'string' ? m.mobile.trim() : '';
       const title = typeof m?.title === 'string' ? m.title.trim() : '';
-      const noAt = m?.no_at === true;
       const openId = typeof m?.open_id === 'string' ? m.open_id.trim() : '';
       if (!name) continue; // 只填姓名即可，openDingTalkId 留空由自动解析补齐
       if (nameSet.has(name)) return { ...this.get(), ok: false, error: `负责人姓名重复：${name}` };
@@ -351,7 +231,6 @@ export class StationManagersService {
         name,
         ...(mobile ? { mobile } : {}),
         ...(title ? { title } : {}),
-        ...(noAt ? { no_at: true } : {}),
         open_id: openId,
       });
     }
@@ -371,8 +250,10 @@ export class StationManagersService {
         : [];
       if (!name && !stationName && !stationId && !teams.length && !ms.length) continue; // 空行跳过
       if (!name && !stationName) return { ...this.get(), ok: false, error: '站点简称/站点名称至少填一个' };
-      if (stationSeen.has(name)) return { ...this.get(), ok: false, error: `站点重复：${name || stationName}` };
-      stationSeen.add(name);
+      // 判重键 = 简称优先、全称兜底（两行都留空简称只填全称时，按全称判重而不是空串误报）
+      const dedupeKey = name || stationName;
+      if (stationSeen.has(dedupeKey)) return { ...this.get(), ok: false, error: `站点重复：${dedupeKey}` };
+      stationSeen.add(dedupeKey);
       // 站点名称并入 teams，兼容仅按全称匹配的任务数据（ teams 仍保留以兼容旧文件）
       const allTeams = Array.from(new Set([...teams, ...(stationName ? [stationName] : [])]));
       stations.push({
@@ -392,34 +273,28 @@ export class StationManagersService {
       ? '有站点未配置任何负责人：该站点有未上线骑手时将无法 @ 到人（任务日志会给出提示）'
       : undefined;
 
-    // 保存后自动解析：只针对缓存/常量未命中的姓名，结果落缓存供任务发送使用
-    let missing: string[] = [];
+    // 保存后立即做一致性巡检（花名册比对）：查无此人/已离职引用合并进 warning 一次性透出
+    let consistency: ManagersConsistency | null = null;
     try {
-      const r = await this.resolveAll();
-      missing = r.missing;
-      // 把解析出的 ID 回填到显式配置里 open_id 为空的负责人上（无论来源是缓存、
-      // 通讯录还是内置常量），保证 UI 上能直接看到解析结果
-      if (r.resolved.length) {
-        const byName = new Map(r.resolved);
-        const cur = this.readFile();
-        if (cur) {
-          let changed = false;
-          for (const m of cur.managers) {
-            if (!m.open_id && byName.has(m.name)) {
-              m.open_id = byName.get(m.name) as string;
-              changed = true;
-            }
-          }
-          if (changed) this.writeFile(cur);
-        }
-      }
-      if (r.resolved.length) {
-        this.logger.log(`保存后自动解析 openDingTalkId：成功 ${r.resolved.length} 人${missing.length ? `，未解析 ${missing.length} 人` : ''}`);
-      }
-    } catch (e) {
-      this.logger.warn(`保存后自动解析 openDingTalkId 失败（任务发送时会重试）：${(e as Error).message.slice(0, 160)}`);
+      consistency = await this.consistency();
+    } catch {
+      /* 巡检失败不影响保存结果 */
+    }
+    const warns: string[] = [];
+    if (warning) warns.push(warning);
+    if (consistency?.unknown.length) {
+      warns.push(`负责人姓名不在人员花名册中（请核对拼写或在「人事管理 → 人员管理」补充）：${consistency.unknown.join('、')}`);
+    }
+    if (consistency?.inactive.length) {
+      warns.push(`以下负责人已离职/停用，建议更换：${consistency.inactive.map((x) => x.name).join('、')}`);
     }
 
-    return { ...this.get(), ok: true, ...(warning ? { warning } : {}), ...(missing.length ? { missing } : {}) };
+    // 钉钉ID 解析不在这里做：由「钉钉ID 取数基座」在任务发送时统一解析（缓存 → 通讯录搜索），只落解析缓存
+    return {
+      ...this.get(),
+      ok: true,
+      ...(consistency ? { consistency } : {}),
+      ...(warns.length ? { warning: warns.join('；') } : {}),
+    };
   }
 }
