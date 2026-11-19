@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { BOTS, Bot, BotReply, IncomingMessage } from './bot.interface';
 import { BOT_MANIFEST } from './bots.manifest';
 import { BotManifestService } from './bot-manifest.service';
+import { BotConfigService, normalizeChannelType } from './bot-config.service';
 
 /**
  * bot 注册表：把清单里启用的 bot 实例收集进来，并负责按渠道 + 凭据分组分发入站消息。
@@ -23,6 +24,7 @@ export class BotRegistryService {
   constructor(
     @Inject(BOTS) private readonly bots: Bot[],
     private readonly manifest: BotManifestService,
+    private readonly cfg: BotConfigService,
   ) {
     for (const b of bots) {
       this.all.set(b.botId, b);
@@ -40,21 +42,51 @@ export class BotRegistryService {
     return this.manifest.getCredentialsRef(botId);
   }
 
-  /** 某连接(ref)对应的查询超时：取绑定该 ref 的首个实例的设置，否则回落默认。 */
+  /**
+   * 渠道一致性：凭据分组的渠道必须与 bot 实例渠道相同，否则拒绝分发/建连。
+   * 这是多渠道扩展的安全闸门——防止把企微/飞书凭据拿去建钉钉连接（或反之）。
+   * 凭据不存在时不拦截（由网关侧标记 missingCredential）。
+   */
+  channelMismatch(bot: Bot, ref: string): boolean {
+    const group = this.cfg.getGroup(ref);
+    if (!group) return false;
+    return normalizeChannelType(group.type) !== normalizeChannelType(bot.type);
+  }
+
+  /** 按 botId 取实例（供控制面做渠道绑定校验）。 */
+  get(botId: string): Bot | undefined {
+    return this.all.get(botId);
+  }
+
+  /** 某连接(ref)对应的查询超时：取绑定该 ref、且渠道一致的启用的实例设置，否则回落默认。 */
   timeoutForRef(ref: string): number {
     for (const b of this.active.values()) {
-      if (b.type !== 'dingtalk') continue;
-      if (this.refOf(b.botId) === ref) return this.manifest.getQueryTimeout(b.botId);
+      if (this.refOf(b.botId) !== ref) continue;
+      if (this.channelMismatch(b, ref)) continue;
+      return this.manifest.getQueryTimeout(b.botId);
     }
     return this.manifest.getDefaultQueryTimeout();
   }
 
-  /** 按类型 + 凭据分组路由分发；只交给「绑定该 ref 且已启用」的 bot。 */
+  /** 某连接(ref)对应的 AI 卡片打字开关：取绑定该 ref、且渠道一致的首个实例设置，缺省开。 */
+  typingEnabledForRef(ref: string): boolean {
+    for (const b of this.active.values()) {
+      if (this.refOf(b.botId) !== ref) continue;
+      if (this.channelMismatch(b, ref)) continue;
+      return this.manifest.getAiCardTyping(b.botId);
+    }
+    return true;
+  }
+
+  /** 按凭据分组路由分发；只交给「绑定该 ref、渠道一致且已启用」的 bot。 */
   async dispatch(msg: IncomingMessage, ref: string): Promise<BotReply | void> {
     let reply: BotReply | undefined;
     for (const b of this.active.values()) {
-      if (b.type !== 'dingtalk') continue;
       if (this.refOf(b.botId) !== ref) continue;
+      if (this.channelMismatch(b, ref)) {
+        this.logger.warn('bot %s 渠道与凭据 %s 不一致，跳过分发', b.botId, ref);
+        continue;
+      }
       try {
         const r = await b.onMessage(msg);
         if (r) reply = r;
@@ -83,12 +115,12 @@ export class BotRegistryService {
     return this.manifest.setCredentialsRef(botId, ref);
   }
 
-  /** 启用 bot 所引用的凭据分组集合（供网关决定建连）。 */
+  /** 启用 bot 所引用的凭据分组集合（供网关决定建连）；渠道不一致的绑定被排除。 */
   activeRefs(): string[] {
     const refs = new Set<string>();
     for (const b of this.active.values()) {
       const r = this.refOf(b.botId);
-      if (r) refs.add(r);
+      if (r && !this.channelMismatch(b, r)) refs.add(r);
     }
     return [...refs];
   }
@@ -100,6 +132,8 @@ export class BotRegistryService {
     type: string;
     enabled: boolean;
     credentialsRef?: string;
+    queryTimeout?: number;
+    aiCardTyping?: boolean;
   }[] {
     return [...this.all.values()].map((b) => ({
       botId: b.botId,
@@ -108,6 +142,7 @@ export class BotRegistryService {
       enabled: this.manifest.getEnabled(b.botId),
       credentialsRef: this.manifest.getCredentialsRef(b.botId),
       queryTimeout: this.manifest.getQueryTimeout(b.botId),
+      aiCardTyping: this.manifest.getAiCardTyping(b.botId),
     }));
   }
 }

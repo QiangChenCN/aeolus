@@ -35,7 +35,11 @@ describe('navTo', () => {
   });
 
   it('botcfg 带 id 拼接路径', () => {
-    expect(navTo({ kind: 'botcfg', id: '42' })).toBe('/settings/dingtalk/42');
+    expect(navTo({ kind: 'botcfg', id: '42' })).toBe('/bot/42');
+  });
+
+  it('botcfg 无 id 回落到实例管理页', () => {
+    expect(navTo({ kind: 'botcfg' })).toBe('/bot/instances');
   });
 
   it('未知 kind 回落到首页', () => {

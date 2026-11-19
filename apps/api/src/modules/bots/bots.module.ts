@@ -7,6 +7,8 @@ import { DingtalkClientProvider } from './dingtalk-client.provider';
 import { BotRegistryService } from './bot-registry.service';
 import { BotManifestService } from './bot-manifest.service';
 import { DingtalkStreamGateway } from './dingtalk/dingtalk-stream.gateway';
+import { BotGatewayService } from './bot-gateway.service';
+import { ChannelGateway, GATEWAYS } from './channel.interface';
 import { DingtalkAiCardService } from './dingtalk/dingtalk-card.service';
 import { BotController } from './bot.controller';
 import { StdAchievementBot } from './impls/std-achievement/std-achievement.bot';
@@ -34,7 +36,10 @@ import { RiderQueryService } from './impls/std-achievement/rider-query.service';
     DingtalkClientProvider,
     BotManifestService,
     BotRegistryService,
+    BotGatewayService,
     DingtalkStreamGateway,
+    // 渠道网关注册表：新增渠道时在此追加实现即可，控制面/控制器无需改动。
+    { provide: GATEWAYS, useFactory: (dingtalk: DingtalkStreamGateway): ChannelGateway[] => [dingtalk], inject: [DingtalkStreamGateway] },
     DingtalkAiCardService,
     RiderQueryService,
     // bot 实例：先作为普通 provider 注册，再用工厂把启用的 bot 收集成数组注入注册表。

@@ -344,7 +344,7 @@ onMounted(async () => {
     dtMessage.value = '钉钉登录失败：' + (msg || '未知原因') + '（可用账号密码登录）';
   } else if (dt === 'disabled') {
     dtStatus.value = 'failed';
-    dtMessage.value = '钉钉登录未启用：请先在「钉钉集成」填写 AppKey / AppSecret 并开启开关。';
+    dtMessage.value = '钉钉登录未启用：请先在「三方集成」填写 AppKey / AppSecret 并开启开关。';
   }
   try {
     const cfg = await dingtalkConfig();

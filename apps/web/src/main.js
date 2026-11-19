@@ -9,6 +9,7 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 import App from './App.vue';
 import router from './router';
 import { permission } from './directives/permission.js';
+import RobotIcon from './components/icons/RobotIcon.vue';
 import './styles/element-overrides.css';
 import './styles/base.css';
 import './styles/responsive.css';
@@ -65,6 +66,8 @@ const app = createApp(App);
 for (const [key, comp] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, comp);
 }
+// 自定义图标：Element Plus 无 Robot 图标，机器人菜单以字符串名 'Robot' 动态渲染
+app.component('Robot', RobotIcon);
 
 app.use(createPinia());
 app.directive('perm', permission);

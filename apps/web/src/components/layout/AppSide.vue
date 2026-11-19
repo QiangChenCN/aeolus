@@ -56,6 +56,18 @@ const navItems = computed(() => {
   ];
   items.push({ type: 'parent', key: 'work', name: '工作任务', icon: 'List', children: workChildren });
 
+  // 机器人：全局配置（绑定组装与整体状态）置首，其后是凭证管理（凭据定义）与实例管理（实例参数）。
+  // 钉钉授权 / SSO / DWS 仍归在系统设置下。
+  const botEntries = [
+    { type: 'leaf', kind: 'botcfg', id: 'assembly', name: '全局配置', icon: 'Monitor', perm: 'admin:bot' },
+    { type: 'leaf', kind: 'botcfg', id: 'credentials', name: '凭证管理', icon: 'Key', perm: 'admin:bot' },
+    { type: 'leaf', kind: 'botcfg', id: 'instances', name: '实例管理', icon: 'Cpu', perm: 'admin:bot' },
+  ];
+  const visibleBotSubs = botEntries.filter((e) => auth.hasPerm(e.perm));
+  if (visibleBotSubs.length) {
+    items.push({ type: 'parent', key: 'bot', name: 'Bot 管理', icon: 'Robot', children: visibleBotSubs });
+  }
+
   // 人事管理：骑手花名册 + 人员花名册（除骑手）+ 站点配置（业务线/城市/站点归属 + 负责人通知路由）
   // + 岗位设置（人员花名册「岗位」口径；与站点的地理/业务维度分属不同数据域，故独立二级菜单）
   const hrSubs = [
@@ -73,7 +85,7 @@ const navItems = computed(() => {
   sysSubs.push({ type: 'leaf', kind: 'profile', id: '', key: 'profile', name: '个人中心', icon: 'User' });
   // 取数基座为只读盘点页，所有登录用户可见；其余管理项按权限点逐项收敛。
   const sysEntries = [
-    { type: 'leaf', kind: 'sys-dingtalk', id: '', name: '钉钉集成', icon: 'ChatDotRound', perm: 'admin:bot' },
+    { type: 'leaf', kind: 'sys-dingtalk', id: '', name: '三方集成', icon: 'ChatDotRound', perm: 'admin:bot' },
     { type: 'leaf', kind: 'sys-credentials', id: '', name: '外部凭证', icon: 'Key', perms: ['admin:aeolus', 'admin:minio'] },
     { type: 'leaf', kind: 'sys-sources', id: '', name: '取数基座', icon: 'Connection', perm: 'view' },
     { type: 'leaf', kind: 'rbac', id: '', name: '权限管理', icon: 'Tools', perm: 'admin:users' },

@@ -6,6 +6,7 @@ const PROTECTED = [
   '/tasks',
   '/assessment',
   '/settings/dingtalk',
+  '/bot/instances',
   '/settings/rbac/users',
   '/overview',
 ];
@@ -20,9 +21,9 @@ test.describe('路由守卫', () => {
   }
 
   test('重定向保留原始目标到 redirect 参数', async ({ page }) => {
-    await page.goto('/settings/dingtalk');
+    await page.goto('/bot/instances');
     await page.waitForURL('**/login');
-    expect(new URL(page.url()).searchParams.get('redirect')).toBe('/settings/dingtalk');
+    expect(new URL(page.url()).searchParams.get('redirect')).toBe('/bot/instances');
   });
 });
 

@@ -100,10 +100,10 @@ systemctl restart aeolusdata-backend aeolusdata-compute aeolusdata-worker
 journalctl -u aeolusdata-backend -n 30 --no-pager
 
 # 5) 验证深链接回退（History 路由生效的关键）
-#    前端已去掉 URL 里的 #，页面路径（/tasks、/bot/global …）会直接打到服务器。
+#    前端已去掉 URL 里的 #，页面路径（/tasks、/bot/instances …）会直接打到服务器。
 #    下列请求都应返回 200 且 Content-Type 为 text/html；返回 404 说明 nginx 拦了。
 curl -s -o /dev/null -w "%{http_code} %{content_type}\n" -H "Accept: text/html" http://127.0.0.1:8787/tasks
-curl -s -o /dev/null -w "%{http_code} %{content_type}\n" -H "Accept: text/html" http://127.0.0.1:8787/bot/global
+curl -s -o /dev/null -w "%{http_code} %{content_type}\n" -H "Accept: text/html" http://127.0.0.1:8787/bot/instances
 #    健康检查必须仍是 JSON（不能被回退规则吞掉）
 curl -s -o /dev/null -w "%{http_code} %{content_type}\n" http://127.0.0.1:8787/health
 ```
@@ -185,11 +185,11 @@ curl -X POST -H "X-Token: $TOKEN" -H "Content-Type: application/json" \
 
 ---
 
-## 7. 钉钉机器人配置（多凭据）
+## 7. 机器人配置（多渠道 / 多凭据）
 
-运力达成等钉钉机器人由 NestJS 的 `bot` 模块承载，与服务器上 `/opt/dingbot` 的旧 Python 机器人**是两套独立系统**，互不相干，不要混淆。
+运力达成等机器人由 NestJS 的 `bot` 模块承载，与服务器上 `/opt/dingbot` 的旧 Python 机器人**是两套独立系统**，互不相干，不要混淆。
 
-管理入口是前端「机器人配置」菜单（仅 `admin:bot` 权限可见）。
+管理入口分两处（均需 `admin:bot`）：**系统设置 → 三方集成**承载钉钉授权 / SSO / DWS（内容标题仍为「钉钉集成」）；**一级模块「Bot 管理」**承载渠道无关的凭证管理、实例管理与全局配置。当前仅钉钉有真实网关实现，企微 / 飞书已在权限、表单与渠道抽象层预留扩展位，接入新渠道需在 `bots.module.ts` 的 `GATEWAYS` 注册对应 `ChannelGateway` 实现。
 
 ### 7.1 落盘配置文件（均位于仓库根，已被 `.gitignore` 忽略，服务器上是独立一份）
 
@@ -209,14 +209,14 @@ curl -X POST -H "X-Token: $TOKEN" -H "Content-Type: application/json" \
 
 > **向后兼容**：老格式的单组字段 `dingClientId` / `dingClientSecret` 会被**读取时自动迁移**为 `dingtalk:default` 凭据组，历史部署升级无需手动改文件；首次在前端保存凭据组即会落盘为新结构（老字段被清掉）。建议升级后到「凭据分组」补一份 `dingtalk:default` 组以固化。
 
-### 7.2 前端操作（「机器人配置」菜单）
+### 7.2 前端操作（「Bot 管理」模块）
 
-1. **凭据分组卡片**：列出所有钉钉应用凭据，可新增 / 编辑 / 删除（Secret 脱敏，编辑时留空表示不修改）。被实例引用的凭据**不可删除**（需先在实例中解绑）。
-2. **机器人实例与状态卡片**：
-   - 每行「启用」开关 = 在线启停（持久化到 `bot_manifest.json`；禁用即退出消息分发，不影响其它连接）。
-   - 「凭据分组」下拉 = 把实例绑定到某凭据组。每个被启用的实例引用的凭据组，各自建立一条**独立**的 Stream 长连接（多连接网关）。
-   - 「连接明细」表每 15s 自动刷新，展示每个凭据分组的连接状态（已连接 / 未连接）。
-3. 改凭据 / 绑定 / 全局开关后，保存即**热重载** Stream 连接，**无需重启** `aeolusdata-backend` 服务；也可点「重新连接」按钮手动 reload。
+钉钉授权 / SSO / DWS 在「系统设置 → 三方集成」（内容标题为「钉钉集成」），以下三页在「Bot 管理」一级模块：
+
+1. **全局配置页**（默认入口）：一屏看全整体运行状态与「凭据分组 ↔ 实例」的绑定关系。顶部「运行状态」含机器人总开关（开关即保存，关闭停掉全部 Stream 连接）、网关状态、实例数 / 凭据数 / 已连接分组数、立即重连（每 15s 自动刷新）；下方绑定表中用「绑定凭据分组」下拉完成组装。绑定下拉只列同渠道凭据，跨渠道会被后端拒绝并提示「渠道不匹配」。每个被启用实例引用的凭据组各自建立一条独立 Stream 长连接。
+2. **凭证管理页**：列出全部渠道的应用凭据（按渠道展示对应字段），可新增 / 编辑 / 删除（Secret 脱敏，编辑时留空表示不修改）。被实例引用的凭据**不可删除**（需先在实例中解绑）。实例只能绑定与自身渠道一致的凭据，否则会被拒绝并提示「渠道不匹配」。
+3. **实例管理页**：只管实例运行参数与连接状态（「状态」列是本模块唯一的连接状态视图，每 15s 自动刷新）。每行「实例启用」开关 = 在线启停（持久化到 `bot_manifest.json`；禁用即退出消息分发）。「凭据分组」列为只读展示；总开关、重连与绑定操作均不在本页。
+4. 改凭据 / 绑定 / 全局开关后，保存即**热重载** Stream 连接，**无需重启** `aeolusdata-backend` 服务；总开关与「立即重连」在全局配置页操作。
 
 ### 7.3 部署 / 升级提醒
 

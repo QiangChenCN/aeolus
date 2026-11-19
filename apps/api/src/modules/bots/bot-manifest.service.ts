@@ -22,7 +22,7 @@ const DEFAULT_QUERY_TIMEOUT = 60;
 export class BotManifestService {
   private readonly logger = new Logger(BotManifestService.name);
   private readonly file: string;
-  private overrides: Record<string, { enabled?: boolean; credentialsRef?: string; displayName?: string; queryTimeout?: number }> = {};
+  private overrides: Record<string, { enabled?: boolean; credentialsRef?: string; displayName?: string; queryTimeout?: number; aiCardTyping?: boolean }> = {};
 
   constructor(private readonly nest: NestConfigService) {
     const root = path.resolve(
@@ -32,14 +32,14 @@ export class BotManifestService {
     this.overrides = this.readFile();
   }
 
-  private readFile(): Record<string, { enabled?: boolean; credentialsRef?: string; displayName?: string; queryTimeout?: number }> {
+  private readFile(): Record<string, { enabled?: boolean; credentialsRef?: string; displayName?: string; queryTimeout?: number; aiCardTyping?: boolean }> {
     try {
       const obj = JSON.parse(fs.readFileSync(this.file, 'utf-8')) || {};
       const raw = (obj.overrides && typeof obj.overrides === 'object' ? obj.overrides : {}) as Record<
         string,
         unknown
       >;
-      const out: Record<string, { enabled?: boolean; credentialsRef?: string; displayName?: string; queryTimeout?: number }> = {};
+      const out: Record<string, { enabled?: boolean; credentialsRef?: string; displayName?: string; queryTimeout?: number; aiCardTyping?: boolean }> = {};
       for (const [k, v] of Object.entries(raw)) {
         // 兼容旧版 { [botId]: boolean } 写法
         if (typeof v === 'boolean') {
@@ -48,7 +48,7 @@ export class BotManifestService {
         }
         if (v && typeof v === 'object') {
           const o = v as Record<string, unknown>;
-          const entry: { enabled?: boolean; credentialsRef?: string; displayName?: string; queryTimeout?: number } = {};
+          const entry: { enabled?: boolean; credentialsRef?: string; displayName?: string; queryTimeout?: number; aiCardTyping?: boolean } = {};
           if (typeof o.enabled === 'boolean') entry.enabled = o.enabled;
           // 仅当原文件里确实存在 credentialsRef 才写入该键：这样「覆盖里显式解绑（空串）」
           // 会保留键、读回为空串→回落 undefined（未绑定）；而「覆盖只改过启用态、从没碰过
@@ -56,6 +56,7 @@ export class BotManifestService {
           if (typeof o.credentialsRef === 'string') entry.credentialsRef = o.credentialsRef;
           if (typeof o.displayName === 'string' && o.displayName.trim()) entry.displayName = o.displayName.trim();
           if (typeof o.queryTimeout === 'number') entry.queryTimeout = o.queryTimeout;
+          if (typeof o.aiCardTyping === 'boolean') entry.aiCardTyping = o.aiCardTyping;
           out[k] = entry;
         }
       }
@@ -159,6 +160,23 @@ export class BotManifestService {
     this.overrides[botId] = { ...(this.overrides[botId] || {}), queryTimeout: Math.floor(v) };
     this.writeFile();
     this.logger.log('bot %s 查询超时已设为 %d 秒', botId, Math.floor(v));
+    return true;
+  }
+
+  /** AI 卡片打字效果：实例级配置，缺省默认开。 */
+  getAiCardTyping(botId: string): boolean {
+    const o = this.overrides[botId];
+    if (o && typeof o.aiCardTyping === 'boolean') return o.aiCardTyping;
+    return true;
+  }
+
+  /** 写实例的打字开关并落盘；botId 不存在返回 false。 */
+  setAiCardTyping(botId: string, enabled: boolean): boolean {
+    const exists = BOT_MANIFEST.bots.some((x) => x.botId === botId);
+    if (!exists) return false;
+    this.overrides[botId] = { ...(this.overrides[botId] || {}), aiCardTyping: enabled };
+    this.writeFile();
+    this.logger.log('bot %s AI 卡片打字已设为 %s', botId, enabled);
     return true;
   }
 

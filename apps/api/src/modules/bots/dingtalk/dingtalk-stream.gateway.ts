@@ -5,6 +5,7 @@ import { BotReply, IncomingMessage } from '../bot.interface';
 import { BotConfigService } from '../bot-config.service';
 import { DingtalkClientProvider } from '../dingtalk-client.provider';
 import { AiCardContext, DingtalkAiCardService } from './dingtalk-card.service';
+import { ChannelConnection, ChannelGateway, GatewayReloadResult } from '../channel.interface';
 
 /** 钉钉机器人回调下行的字段（仅取回复所需）。 */
 interface RobotMessageShape {
@@ -37,7 +38,8 @@ interface RobotMessageShape {
  * 接收：registerCallbackListener(TOPIC_ROBOT) + registerAllEventListener(SUCCESS ack)。
  */
 @Injectable()
-export class DingtalkStreamGateway implements OnModuleInit, OnModuleDestroy {
+export class DingtalkStreamGateway implements OnModuleInit, OnModuleDestroy, ChannelGateway {
+  readonly channel = 'dingtalk';
   private readonly logger = new Logger(DingtalkStreamGateway.name);
   /** 凭据分组 ref → 该分组专属的 Stream 长连接 client。 */
   private readonly clients = new Map<string, DWClient>();
@@ -92,7 +94,7 @@ export class DingtalkStreamGateway implements OnModuleInit, OnModuleDestroy {
    *  - 否则：使凭据缓存失效 → 断开全部 → 按最新 refsToConnect 重建（凭据变化总是全量重建，
    *    连接数通常为个位数，秒级完成，可接受）。
    */
-  async reload(): Promise<{ ok: boolean; started: boolean; detail: string }> {
+  async reload(): Promise<GatewayReloadResult> {
     if (!this.cfg.isBotEnabled()) {
       this.detachAll();
       return { ok: true, started: false, detail: '机器人已禁用，网关未启动' };
@@ -130,7 +132,7 @@ export class DingtalkStreamGateway implements OnModuleInit, OnModuleDestroy {
    *  - connected：以 SDK 真实连接态 client.connected 为准（WebSocket open 后才为 true）。
    *  - missingCredential：该 ref 被启用的 bot 引用，但凭据分组不存在/未启用/缺 secret，
    *    导致根本不会建连——这是「设置看着正常却无响应」的典型成因，显式标红。 */
-  listConnections(): { ref: string; clientId: string; connected: boolean; missingCredential: boolean }[] {
+  listConnections(): ChannelConnection[] {
     const active = new Set(this.registry.activeRefs());
     const avail = new Set(this.clientProvider.availableRefs());
     const refs = new Set<string>([...active, ...avail]);
@@ -226,7 +228,7 @@ export class DingtalkStreamGateway implements OnModuleInit, OnModuleDestroy {
     try {
       const content = reply?.content ?? '（无返回）';
       const title = this.pickTitle(reply);
-      if (this.cfg.isTypingEnabled(ref)) {
+      if (this.registry.typingEnabledForRef(ref)) {
         await this.card.streamTyping(card.cardInstanceId, client, content, { isError: reply?.state === 'error' });
         await this.card.finish(card.cardInstanceId, client, title, content);
       } else {

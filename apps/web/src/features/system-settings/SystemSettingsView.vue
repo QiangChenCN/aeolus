@@ -5,8 +5,8 @@
     <div class="cards">
       <RouterLink to="/settings/dingtalk" class="card">
         <div>
-          <div class="card-t">钉钉集成</div>
-          <div class="card-d">钉钉授权 / SSO 与机器人调度（全局、凭证、实例配置），dws CLI 配置项（共 32 项，分 8 类）</div>
+          <div class="card-t">三方集成</div>
+          <div class="card-d">钉钉授权 / SSO 与 dws CLI 配置（共 32 项，分 8 类）；机器人凭据与实例请在「机器人」模块管理</div>
         </div>
         <el-icon class="card-arw"><ArrowRight /></el-icon>
       </RouterLink>

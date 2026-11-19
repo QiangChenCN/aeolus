@@ -36,11 +36,11 @@ export class DingtalkClientProvider {
     return this.cfg.getGroup(ref)?.clientId || '';
   }
 
-  /** 所有「已启用且凭据完整」的分组 id（供网关决定建连）。 */
+  /** 所有「钉钉渠道、已启用且凭据完整」的分组 id（供本网关决定建连）。 */
   availableRefs(): string[] {
     return this.cfg
       .listGroups()
-      .filter((g) => g.enabled && g.hasSecret)
+      .filter((g) => g.enabled && g.hasSecret && g.type === 'dingtalk')
       .map((g) => g.id);
   }
 

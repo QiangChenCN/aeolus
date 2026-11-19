@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService as NestConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ChannelType, isChannelType } from './channel.interface';
 
 /**
  * 钉钉机器人连接配置（原仅 .env 的 DING_CLIENT_ID / DING_CLIENT_SECRET）。
@@ -19,17 +20,35 @@ import * as path from 'path';
  *    不再有全局默认。
  */
 
-/** 一组钉钉应用凭据（含明文 secret，仅落盘/内存，对外脱敏）。 */
+/** 一组机器人应用凭据（含明文 secret，仅落盘/内存，对外脱敏）。 */
 export interface CredentialGroup {
   id: string;
   label: string;
+  /** 主应用标识：钉钉 AppKey / 企微 CorpID / 飞书 AppID。 */
   clientId: string;
+  /** 主应用密钥：钉钉 AppSecret / 企微 AppSecret / 飞书 AppSecret。 */
   secret: string;
   enabled: boolean;
-  /** AI 卡片打字效果（按凭据分组控制；缺省视为开）。 */
-  aiCardTyping?: boolean;
-  /** 渠道类型：钉钉(dingtalk) / 企微(wecom) 等，便于以后扩展非钉钉推送渠道。 */
+  /** 渠道类型；老数据缺省视为 dingtalk。 */
   type?: string;
+  /** 渠道差异化附加字段（企微 agentId / 飞书 encryptKey 等），非主密钥，可明文回显。 */
+  extra?: Record<string, string>;
+}
+
+/** 渠道类型归一：老数据空值/undefined → dingtalk；非法值原样保留但拒绝写入。 */
+export function normalizeChannelType(t?: string): string {
+  return t && t.trim() ? t.trim() : 'dingtalk';
+}
+
+/** 凭据分组脱敏视图（前端展示，secret 不外泄）。 */
+export interface CredentialGroupView {
+  id: string;
+  label: string;
+  clientId: string;
+  hasSecret: boolean;
+  enabled: boolean;
+  type: string;
+  extra: Record<string, string>;
 }
 
 interface BotConfigFile {
@@ -105,16 +124,22 @@ export class BotConfigService {
   }
 
   /** 脱敏后的凭据分组列表（前端展示，secret 不外泄）。 */
-  listGroups(): { id: string; label: string; clientId: string; hasSecret: boolean; enabled: boolean; aiCardTyping: boolean; type: string }[] {
+  listGroups(): CredentialGroupView[] {
     return this.readGroups().map((g) => ({
       id: g.id,
       label: g.label,
       clientId: g.clientId,
       hasSecret: !!g.secret,
       enabled: g.enabled,
-      aiCardTyping: g.aiCardTyping !== false,
-      type: g.type || '',
+      type: normalizeChannelType(g.type),
+      extra: g.extra && typeof g.extra === 'object' ? g.extra : {},
     }));
+  }
+
+  /** 某分组的渠道类型（归一后）。分组不存在也返回 dingtalk，便于调用方做保守校验。 */
+  channelOfGroup(id: string): string {
+    const g = this.getGroup(id);
+    return g ? normalizeChannelType(g.type) : 'dingtalk';
   }
 
   /** 运行时真实凭据（按分组 id）；不存在返回 null。 */
@@ -127,26 +152,36 @@ export class BotConfigService {
    * 非法输入抛错，由调用方捕获为 {ok:false, error}。
    */
   saveGroups(
-    input: { id?: unknown; label?: unknown; clientId?: unknown; secret?: unknown; enabled?: unknown; aiCardTyping?: unknown; type?: unknown }[],
-  ): { id: string; label: string; clientId: string; hasSecret: boolean; enabled: boolean; aiCardTyping: boolean; type: string }[] {
+    input: { id?: unknown; label?: unknown; clientId?: unknown; secret?: unknown; enabled?: unknown; type?: unknown; extra?: unknown }[],
+  ): CredentialGroupView[] {
     const groups: CredentialGroup[] = [];
     const seen = new Set<string>();
     const existing = this.readGroups();
     for (const g of input || []) {
       const id = typeof g.id === 'string' ? g.id.trim() : '';
-      if (!id) throw new Error('凭据分组 id 不能为空');
-      if (seen.has(id)) throw new Error('凭据分组 id 重复: ' + id);
+      if (!id) throw new Error('凭证ID不能为空');
+      if (seen.has(id)) throw new Error('凭证ID重复: ' + id);
       seen.add(id);
       const label = typeof g.label === 'string' && g.label.trim() ? g.label.trim() : id;
       const clientId = typeof g.clientId === 'string' ? g.clientId.trim() : '';
       const secretInput = typeof g.secret === 'string' ? g.secret : '';
       const enabled = g.enabled !== false;
-      const aiCardTyping = g.aiCardTyping !== false;
-      const type = typeof g.type === 'string' && g.type.trim() ? g.type.trim() : '';
-      // secret 留空 → 沿用同 id 旧组的 secret
+      const typeRaw = typeof g.type === 'string' ? g.type.trim() : '';
+      const type: ChannelType = typeRaw && !isChannelType(typeRaw)
+        ? (() => { throw new Error(`不支持的渠道类型: ${typeRaw}`); })()
+        : (typeRaw as ChannelType || 'dingtalk');
+      // 渠道差异化字段：仅收字符串值，避免把对象/数组写进配置
+      const extra: Record<string, string> = {};
+      if (g.extra && typeof g.extra === 'object' && !Array.isArray(g.extra)) {
+        for (const [k, v] of Object.entries(g.extra as Record<string, unknown>)) {
+          if (typeof v === 'string') extra[k] = v.trim();
+        }
+      }
+      // secret 留空 → 沿用同 id 旧组的 secret；extra 留空 → 沿用旧值（便于只改主密钥）
       const old = existing.find((x) => x.id === id);
       const secret = secretInput.length ? secretInput : (old?.secret || '');
-      groups.push({ id, label, clientId, secret, enabled, aiCardTyping, type });
+      const mergedExtra = Object.keys(extra).length ? extra : (old?.extra || {});
+      groups.push({ id, label, clientId, secret, enabled, type, extra: mergedExtra });
     }
     const f = this.readFile();
     f.credentials = groups;
@@ -168,18 +203,6 @@ export class BotConfigService {
     return { clientId: g.clientId, clientSecret: g.secret };
   }
 
-  /**
-   * AI 卡片打字效果：按凭据分组（ref）读取；分组未显式设置时回落默认「开」。
-   * 不再使用全局打字开关——打字是「每个机器人(应用)的回复表现」，跟随连接(ref)生效。
-   * @param ref 凭据分组 id；缺省返回默认（开）。
-   */
-  isTypingEnabled(ref?: string): boolean {
-    if (ref) {
-      const g = this.getGroup(ref);
-      if (g) return g.aiCardTyping !== false;
-    }
-    return true; // 默认开
-  }
   isBotEnabled(): boolean {
     const f = this.readFile();
     if (typeof f.botEnabled === 'boolean') return f.botEnabled;

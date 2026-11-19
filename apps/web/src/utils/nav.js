@@ -38,7 +38,7 @@ export function navTo(it) {
     case 'hr-org': return '/hr/org';
     case 'hr-org-positions': return '/hr/positions';
     case 'operationLog': return '/operation-log';
-    case 'botcfg': return '/settings/dingtalk/' + (it.id || 'global');
+    case 'botcfg': return '/bot/' + (it.id || 'instances');
     default: return '/';
   }
 }
@@ -66,11 +66,10 @@ export function navIsActive(it) {
     const k = r.meta && r.meta.kind;
     return k === 'assess' || k === 'assessService' || k === 'assessStandard' || k === 'assessPeriod' || k === 'assessWeather';
   }
-  // 钉钉集成（侧栏叶子项）：其下任一子页（钉钉授权 / botcfg 各子页）命中即高亮
+  // 三方集成（侧栏叶子项，位于系统设置下，内容标题仍为钉钉集成）：授权 / SSO / DWS 单页命中即高亮
   if (it.kind === 'sys-dingtalk') {
     const r = useRoute();
-    const k = r.meta && r.meta.kind;
-    return k === 'sys-dingtalk' || k === 'dingtalk-auth' || k === 'botcfg';
+    return (r.meta && r.meta.kind) === 'sys-dingtalk';
   }
   // 外部服务凭证（侧栏叶子项）：其下任一子页（风神 / MinIO）命中即高亮
   if (it.kind === 'sys-credentials') {

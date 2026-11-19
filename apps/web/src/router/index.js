@@ -31,9 +31,9 @@ import RbacView from '../features/rbac/RbacView.vue';
 import DingtalkSettingsView from '../features/dingtalk-settings/DingtalkSettingsView.vue';
 import AeolusSettingsView from '../features/aeolus-settings/AeolusSettingsView.vue';
 import MinioSettingsView from '../features/minio-settings/MinioSettingsView.vue';
-import BotGlobalView from '../features/bot-global/BotGlobalView.vue';
 import BotRobotView from '../features/bot-robot/BotRobotView.vue';
-import BotInstanceView from '../features/bot-instance/BotInstanceView.vue';
+import BotInstancesView from '../features/bot-instances/BotInstancesView.vue';
+import BotAssemblyView from '../features/bot-assembly/BotAssemblyView.vue';
 import ProfileInfoView from '../features/profile-info/ProfileInfoView.vue';
 import RiderManageView from '../features/rider-manage/RiderManageView.vue';
 import StaffManageView from '../features/staff-manage/StaffManageView.vue';
@@ -76,26 +76,23 @@ const routes = [
       { path: 'operation-log', name: 'operation-log', component: OperationLogView, meta: { title: '操作日志', kind: 'operationLog', id: '', perm: 'admin:roles' } },
       { path: 'groups', name: 'groups', component: GroupsView, meta: { title: '群组' } },
       { path: 'settings', name: 'system-settings', component: SystemSettingsView, meta: { title: '系统设置', kind: 'syscfg' } },
-      // 钉钉集成：原「钉钉设置 + 调度设置」合并（共享 admin:bot 权限、同一维护人/生态），子页 tab 化
+      // 钉钉集成：留在系统设置，承载授权 / SSO / DWS（平台侧配置，与机器人实例配置解耦）。
       {
         path: 'settings/dingtalk',
         name: 'dingtalk-settings',
-        component: SettingsTabShell,
-        redirect: { name: 'dingtalk-auth' },
-        meta: {
-          title: '钉钉集成', kind: 'sys-dingtalk', perm: 'admin:bot',
-          tabs: [
-            { label: '钉钉授权', to: '/settings/dingtalk/auth' },
-            { label: '全局配置', to: '/settings/dingtalk/global' },
-            { label: '凭证配置', to: '/settings/dingtalk/robot' },
-            { label: '实例配置', to: '/settings/dingtalk/instance' },
-          ],
-        },
+        component: DingtalkSettingsView,
+        meta: { title: '三方集成', kind: 'sys-dingtalk', perm: 'admin:bot' },
+      },
+      // 机器人：一级分组，含全局配置（置首）、凭证管理与实例管理；差异化渠道配置仍在各自系统设置页。
+      // 纯分组路由（无 component / 无 meta.tabs），子页直接渲染，唯一入口在侧栏二级菜单。
+      {
+        path: 'bot',
+        name: 'bot-settings',
+        redirect: { name: 'bot-assembly' },
         children: [
-          { path: 'auth', name: 'dingtalk-auth', component: DingtalkSettingsView, meta: { title: '钉钉授权', kind: 'dingtalk-auth', id: '', perm: 'admin:bot' } },
-          { path: 'global', name: 'dingtalk-bot-global', component: BotGlobalView, meta: { title: '全局配置', kind: 'botcfg', id: 'global', perm: 'admin:bot' } },
-          { path: 'robot', name: 'dingtalk-bot-robot', component: BotRobotView, meta: { title: '凭证配置', kind: 'botcfg', id: 'robot', perm: 'admin:bot' } },
-          { path: 'instance', name: 'dingtalk-bot-instance', component: BotInstanceView, meta: { title: '实例配置', kind: 'botcfg', id: 'instance', perm: 'admin:bot' } },
+          { path: 'assembly', name: 'bot-assembly', component: BotAssemblyView, meta: { title: '全局配置', kind: 'botcfg', id: 'assembly', perm: 'admin:bot' } },
+          { path: 'credentials', name: 'bot-credentials', component: BotRobotView, meta: { title: '凭证管理', kind: 'botcfg', id: 'credentials', perm: 'admin:bot' } },
+          { path: 'instances', name: 'bot-instances', component: BotInstancesView, meta: { title: '实例管理', kind: 'botcfg', id: 'instances', perm: 'admin:bot' } },
         ] },
       // 外部服务凭证：原「风神设置 + MinIO 设置」合并（均为一次性外部凭证写入，极低频）
       {
@@ -116,13 +113,19 @@ const routes = [
         ] },
       // 取数基座目录：只读盘点页，所有登录用户可看（详情内部信息由后端按权限收敛）
       { path: 'settings/sources', name: 'sources', component: SourceRegistryView, meta: { title: '取数基座', kind: 'sys-sources', perm: 'view' } },
-      // 旧路径深链兼容：重定向到合并后的新地址
+      // 旧路径深链兼容：机器人相关地址统一指向新一级模块
       { path: 'settings/aeolus', redirect: { name: 'credentials-aeolus' } },
       { path: 'settings/minio', redirect: { name: 'credentials-minio' } },
-      { path: 'bot', redirect: { name: 'dingtalk-auth' } },
-      { path: 'bot/global', redirect: { name: 'dingtalk-bot-global' } },
-      { path: 'bot/robot', redirect: { name: 'dingtalk-bot-robot' } },
-      { path: 'bot/instance', redirect: { name: 'dingtalk-bot-instance' } },
+      { path: 'settings/dingtalk/auth', redirect: { name: 'dingtalk-settings' } },
+      { path: 'settings/dingtalk/robot', redirect: { name: 'bot-credentials' } },
+      { path: 'settings/dingtalk/credentials', redirect: { name: 'bot-credentials' } },
+      { path: 'settings/dingtalk/global', redirect: { name: 'bot-instances' } },
+      { path: 'settings/dingtalk/instance', redirect: { name: 'bot-instances' } },
+      { path: 'settings/dingtalk/instances', redirect: { name: 'bot-instances' } },
+      { path: 'bot/dingtalk', redirect: { name: 'dingtalk-settings' } },
+      { path: 'bot/global', redirect: { name: 'bot-instances' } },
+      { path: 'bot/robot', redirect: { name: 'bot-credentials' } },
+      { path: 'bot/instance', redirect: { name: 'bot-instances' } },
       // 站点负责人设置已并入「人事管理→组织架构」，旧地址重定向保证收藏链接可用
       { path: 'settings/managers', redirect: '/hr/org' },
       { path: 'riders', name: 'riders', component: RiderManageView, meta: { title: '骑手管理', kind: 'riders', id: '' } },

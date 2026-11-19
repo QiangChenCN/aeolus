@@ -1,10 +1,41 @@
-import { reactive, ref } from 'vue';
+import { reactive, ref } from 'vue';
+
 import {
   fetchBotConfig, saveBotConfig, reloadBot, fetchBotStatus,
   fetchBotCredentials, saveBotCredentials, patchBot,
 } from '../api/dashboards.js';
 
-/* 模块级共享状态：三个机器人配置子页（全局/机器人/实例）共用同一份数据与连接轮询 */
+/** 渠道元数据：决定凭证表单的字段标签与差异化附加字段。新增渠道只需在此追加一项。 */
+export const CHANNEL_META = {
+  dingtalk: {
+    label: '钉钉',
+    clientIdLabel: 'AppKey',
+    secretLabel: 'AppSecret',
+    secretHint: '应用 AppKey / AppSecret',
+    extra: [],
+  },
+  wecom: {
+    label: '企业微信',
+    clientIdLabel: 'CorpID',
+    secretLabel: 'AppSecret',
+    secretHint: '企业微信应用凭据',
+    extra: [{ key: 'agentId', label: 'AgentId', placeholder: '企业应用 AgentId' }],
+  },
+  feishu: {
+    label: '飞书',
+    clientIdLabel: 'AppID',
+    secretLabel: 'AppSecret',
+    secretHint: '飞书自建应用凭据',
+    extra: [{ key: 'encryptKey', label: 'Encrypt Key', placeholder: '事件加密密钥（可选）' }],
+  },
+};
+
+/** 渠道展示名（兼容历史空值）。 */
+export function channelLabel(t) {
+  return (CHANNEL_META[t] || CHANNEL_META.dingtalk).label;
+}
+
+/* 模块级共享状态：机器人配置子页（凭证配置 / 机器人实例）共用同一份数据与连接轮询 */
 const bot = reactive({ botEnabled: true });
 const savingBot = ref(false);
 const reloadingBot = ref(false);
@@ -18,12 +49,13 @@ const credsLoading = ref(false);
 const credDialog = ref(false);
 const credEditing = ref(false);
 const savingCred = ref(false);
-const credForm = reactive({ id: '', label: '', clientId: '', secret: '', enabled: true, aiCardTyping: true, hasSecret: false, type: 'dingtalk' });
+const credForm = reactive({ id: '', label: '', clientId: '', secret: '', enabled: true, hasSecret: false, type: 'dingtalk', extra: {} });
 
 let pollTimer = null;
 let consumerCount = 0;
 
-export function useBotConfig() {
+export function useBotConfig() {
+
 
   /* ── 加载 ─────────────────────────────────────────── */
   async function loadBot() {
@@ -117,6 +149,16 @@ export function useBotConfig() {
     } catch (e) { ElMessage.error(e.message || '操作失败'); }
     finally { row._saving = false; await loadStatus(); }
   }
+  /** 实例级 AI 卡片打字效果开关。 */
+  async function setBotTyping(row, enabled) {
+    row._saving = true;
+    try {
+      const r = await patchBot(row.botId, { aiCardTyping: !!enabled });
+      if (!r.ok) ElMessage.error(r.error || '操作失败');
+      else ElMessage.success('已更新打字效果');
+    } catch (e) { ElMessage.error(e.message || '操作失败'); }
+    finally { row._saving = false; await loadStatus(); }
+  }
 
   function refConnected(ref) {
     return !!status.connections.find((c) => c.ref === ref && c.connected);
@@ -128,28 +170,41 @@ export function useBotConfig() {
   function credExists(id) { return !!findCred(id); }
   function credEnabled(id) { const c = findCred(id); return !!c && c.enabled !== false; }
   function credHasSecret(id) { const c = findCred(id); return !!c && !!c.hasSecret; }
+  /** 实例渠道与所绑凭据渠道是否不一致（历史脏数据 / 跨渠道绑定防护）。 */
+  function channelMismatch(row) {
+    if (!row.credentialsRef) return false;
+    const c = findCred(row.credentialsRef);
+    if (!c) return false;
+    return (c.type || 'dingtalk') !== (row.type || 'dingtalk');
+  }
 
   /* ── 凭据分组（机器人）CRUD ──────────────────────── */
   function openCredAdd() {
-    Object.assign(credForm, { id: '', label: '', clientId: '', secret: '', enabled: true, aiCardTyping: true, hasSecret: false, type: 'dingtalk' });
+    Object.assign(credForm, { id: '', label: '', clientId: '', secret: '', enabled: true, hasSecret: false, type: 'dingtalk', extra: {} });
     credEditing.value = false;
     credDialog.value = true;
   }
   function openCredEdit(row) {
     Object.assign(credForm, {
-      id: row.id, label: row.label, clientId: row.clientId, secret: '', enabled: row.enabled, aiCardTyping: row.aiCardTyping !== false, hasSecret: !!row.hasSecret, type: row.type || 'dingtalk',
+      id: row.id, label: row.label, clientId: row.clientId, secret: '', enabled: row.enabled,
+      hasSecret: !!row.hasSecret,
+      type: row.type || 'dingtalk', extra: { ...(row.extra || {}) },
     });
     credEditing.value = true;
     credDialog.value = true;
   }
   function credToPayload(c) {
-    return { id: c.id, label: c.label || c.id, clientId: c.clientId, secret: c.secret || '', enabled: c.enabled !== false, aiCardTyping: c.aiCardTyping !== false, type: c.type || 'dingtalk' };
+    return {
+      id: c.id, label: c.label || c.id, clientId: c.clientId, secret: c.secret || '',
+      enabled: c.enabled !== false,
+      type: c.type || 'dingtalk', extra: c.extra || {},
+    };
   }
   function typeLabel(t) {
-    return ({ dingtalk: '钉钉', wecom: '企微' })[t] || (t ? t : '未设置');
+    return channelLabel(t);
   }
   async function saveCred() {
-    if (!credForm.id.trim()) { ElMessage.error('分组ID不能为空'); return; }
+    if (!credForm.id.trim()) { ElMessage.error('凭证ID不能为空'); return; }
     if (!credForm.clientId.trim()) { ElMessage.error('Client ID不能为空'); return; }
     if (!credEditing.value && !credForm.secret.trim()) { ElMessage.error('新增凭据必须填写 Secret'); return; }
     const next = credEditing.value
@@ -195,8 +250,8 @@ export function useBotConfig() {
     bot, savingBot, reloadingBot, status, lastUpdated, creds, credsLoading,
     credDialog, credEditing, savingCred, credForm,
     loadAll, loadStatus, saveBot, doReload,
-    toggleBot, bindBot, renameInstance, setBotTimeout,
-    refConnected, connOf, findCred, credExists, credEnabled, credHasSecret,
+    toggleBot, bindBot, renameInstance, setBotTimeout, setBotTyping,
+    refConnected, connOf, findCred, credExists, credEnabled, credHasSecret, channelMismatch,
     openCredAdd, openCredEdit, saveCred, deleteCred, credToPayload, typeLabel,
     activate, deactivate,
   };
