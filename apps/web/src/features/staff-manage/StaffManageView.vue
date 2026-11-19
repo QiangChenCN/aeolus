@@ -138,7 +138,7 @@ import { Search, Plus } from '@element-plus/icons-vue';
 import { fetchStaff, createStaff, updateStaff, deleteStaff, fetchPositions } from '../../api/staff.js';
 import { fetchTeams } from '../../api/dashboards.js';
 import { useAuthStore } from '../../stores/auth.js';
-import PersonnelChangesDrawer from '../personnel/PersonnelChangesDrawer.vue';
+import PersonnelChangesDrawer from '../../components/common/PersonnelChangesDrawer.vue';
 
 const auth = useAuthStore();
 const canWrite = computed(() => auth.hasPerm('config:write'));
