@@ -202,4 +202,11 @@ router.beforeEach(async (to) => {
   return true;
 });
 
+// 站点标题统一为「Aeolus WorkBench - <页面标题>」，页面标题取当前最深匹配路由的 meta.title。
+// 放在 afterEach：此时重定向已解析完毕，to 是最终落地的路由，避免拿到中间重定向项。
+const SITE_TITLE = 'Aeolus WorkBench';
+router.afterEach((to) => {
+  document.title = to.meta.title ? `${SITE_TITLE} - ${to.meta.title}` : SITE_TITLE;
+});
+
 export default router;
