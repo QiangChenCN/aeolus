@@ -42,7 +42,7 @@ function calcRemaining(expireStr: string, now = new Date()): string {
   return parts.length ? parts.join('') : '不足1分钟';
 }
 
-/** 站长任务看板（原 jobs/board/task_board.py）。 */
+/** 站点任务提醒（原 jobs/board/task_board.py）。 */
 @Injectable()
 export class TaskBoardPipeline implements TaskHandler {
   readonly id = 'task_board';
@@ -139,9 +139,9 @@ export class TaskBoardPipeline implements TaskHandler {
   ): string {
     const mentions = resolved.map(([, oid]) => `<@${oid}>`).join(' ');
     return (
-      '## 站长任务看板 · 进行中任务\n' +
+      '## 站点任务提醒 · 进行中任务\n' +
       `**当前共 ${total} 条「已开始」任务未完成**，请相关执行人及时跟进处理（明细见下图）：\n\n` +
-      `![站长任务看板-进行中任务](${imgUrl})\n` +
+      `![站点任务提醒-进行中任务](${imgUrl})\n` +
       '\n\n' +
       mentions
     );

@@ -469,7 +469,7 @@ export class ReportRenderService {
     return savePng(canvas, out);
   }
 
-  // ───────────── 5. 站长任务看板（进行中任务） ─────────────
+  // ───────────── 5. 站点任务提醒（进行中任务） ─────────────
   renderTasks(tasks: Record<string, any>[], outPath?: string): string {
     const out = outPath || this.out('apps/api/runtime/jobs/board/out/task_started.png');
     const nowStr = fmtNow();
@@ -510,7 +510,7 @@ export class ReportRenderService {
     const { canvas, ctx } = newCanvas(imgW, imgH, C.WHITE);
 
     fillRect(ctx, 0, 0, imgW, titleH + margin, C.BRAND);
-    drawLeft(ctx, margin, 16, '站长任务看板 · 进行中任务', titleF, C.WHITE);
+    drawLeft(ctx, margin, 16, '站点任务提醒 · 进行中任务', titleF, C.WHITE);
     drawLeft(ctx, imgW - margin - 200, 24, `生成时间：${nowStr}`, smallF, C.WHITE);
 
     let y = margin + titleH + gap;

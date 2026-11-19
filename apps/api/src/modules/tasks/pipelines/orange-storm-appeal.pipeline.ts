@@ -191,17 +191,12 @@ export class OrangeStormAppealPipeline implements TaskHandler {
    * 每个站点单独 @ 该站点的负责人（<@openId> 占位 + atOpenDingTalkIds 双保险）。
    */
   private buildGroupText(
-    label: string,
     details: Record<string, string>[],
     stationAt: Map<string, string[]>,
     imgUrl: string | null,
   ): string {
     const byStation = this.groupByStation(details);
-    const parts = [
-      `## 橙色风暴申诉提醒`,
-      `**统计窗口：** ${label}　**判定不通过 · 未申诉 共 ${details.length} 条**`,
-      '',
-    ];
+    const parts: string[] = [];
     if (imgUrl) {
       parts.push(`![明细](${imgUrl})`, '');
     }
@@ -214,19 +209,9 @@ export class OrangeStormAppealPipeline implements TaskHandler {
     return parts.join('\n');
   }
 
-  /** 单个负责人的私发 Markdown：名下每个站点一节 + 明细图内联（不含明细表格）。 */
-  private buildDmText(
-    label: string,
-    name: string,
-    stations: Map<string, Record<string, string>[]>,
-    imgUrl: string | null,
-  ): string {
-    const total = [...stations.values()].reduce((n, l) => n + l.length, 0);
-    const parts = [
-      `## 橙色风暴申诉提醒（${name}）`,
-      `**统计窗口：** ${label}　**您名下站点判定不通过 · 未申诉 共 ${total} 条**`,
-      '',
-    ];
+  /** 单个负责人的私发 Markdown：只内联该负责人名下的明细图（不含其他负责人的数据）。 */
+  private buildDmText(imgUrl: string | null): string {
+    const parts: string[] = [];
     if (imgUrl) {
       parts.push(`![明细](${imgUrl})`, '');
     }
@@ -277,6 +262,9 @@ export class OrangeStormAppealPipeline implements TaskHandler {
       label?: string;
       imgPath?: string;
       imgUrl?: string | null;
+      resolved?: [string, string][];
+      missingNames?: string[];
+      dmImages?: Map<string, { path: string; url: string | null }>;
     } = {};
     const p = new Pipeline(ctx, state);
 
@@ -317,13 +305,37 @@ export class OrangeStormAppealPipeline implements TaskHandler {
       ctx.log(`已输出：${csvPath}`);
     });
 
-    p.stage('render', '渲染明细图', () => {
-      state.imgPath = this.render.renderOrangeStormAppeal(
-        state.details || [],
-        state.label || win.label,
-        this.imgPath,
-      );
-      ctx.log(`明细图已生成: ${state.imgPath}`);
+    p.stage('render', '渲染明细图', async () => {
+      const details = state.details || [];
+      const label = state.label || win.label;
+      state.imgPath = this.render.renderOrangeStormAppeal(details, label, this.imgPath);
+      ctx.log(`群发明细图已生成: ${state.imgPath}`);
+
+      if (noDm) return;
+
+      // 私发要按负责人拆图：先解析负责人（群内 @ 复用同一份结果）。
+      const allNames = new Set<string>();
+      for (const st of this.groupByStation(details).keys()) {
+        for (const m of this.stationManagers.managersForTeam(st)) allNames.add(m);
+      }
+      const { resolved, missing } = await this.dingtalkIds.resolveNamesAuto(allNames);
+      state.resolved = resolved;
+      state.missingNames = missing;
+
+      // 每个负责人一张图，只含其名下站点的明细，避免私聊里看到其他负责人的数据。
+      state.dmImages = new Map();
+      for (const [oid, t] of this.splitByManager(details, resolved)) {
+        const rows = [...t.stations.values()].flat();
+        const safeOid = oid.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const outPath = path.join(this.outDir, `orange_storm_appeal_dm_${safeOid}.png`);
+        const imgPath = this.render.renderOrangeStormAppeal(
+          rows,
+          `${label}（负责人：${t.name}）`,
+          outPath,
+        );
+        state.dmImages.set(oid, { path: imgPath, url: null });
+      }
+      ctx.log(`私发负责人的专属明细图已生成: ${state.dmImages.size} 张`);
     });
 
     p.stage('upload', '上传 MinIO', async () => {
@@ -333,25 +345,35 @@ export class OrangeStormAppealPipeline implements TaskHandler {
           state.label || win.label,
           this.imgPath,
         );
-        ctx.log(`（upload 节点补渲染）明细图已生成: ${state.imgPath}`);
+        ctx.log(`（upload 节点补渲染）群发明细图已生成: ${state.imgPath}`);
       }
       // 上传失败不降级：直接抛错让任务失败（内部自带 3 次重试）
       state.imgUrl = await this.minio.upload(state.imgPath, 'os');
-      ctx.log(`明细图公网直链: ${state.imgUrl}`);
+      ctx.log(`群发明细图公网直链: ${state.imgUrl}`);
+
+      for (const [oid, d] of state.dmImages || []) {
+        d.url = await this.minio.upload(d.path, 'os');
+        ctx.log(`私发明细图公网直链（${oid}）: ${d.url}`);
+      }
     });
 
     p.stage('send', '发送钉钉提醒', async () => {
       const details = state.details || [];
-      const label = state.label || win.label;
       const byStation = this.groupByStation(details);
 
-      // 解析 站点 -> 负责人 openDingTalkId（每个站点只 @ 自己的负责人）
-      // 站点列已是团队全名，可精确命中 UI 配置的站点全称/teams 别名
-      const allNames = new Set<string>();
-      for (const st of byStation.keys()) {
-        for (const m of this.stationManagers.managersForTeam(st)) allNames.add(m);
+      // 负责人解析在 render 节点已产出（私发拆图用），这里复用；
+      // 若从 send 节点起跑（--begin send）则现场兜底解析。
+      let resolved = state.resolved;
+      let missing = state.missingNames || [];
+      if (!resolved) {
+        const allNames = new Set<string>();
+        for (const st of byStation.keys()) {
+          for (const m of this.stationManagers.managersForTeam(st)) allNames.add(m);
+        }
+        const r = await this.dingtalkIds.resolveNamesAuto(allNames);
+        resolved = r.resolved;
+        missing = r.missing;
       }
-      const { resolved, missing } = await this.dingtalkIds.resolveNamesAuto(allNames);
       if (missing.length && !noAt) {
         ctx.log(`[warn] 以下负责人未解析到 openDingTalkId，已跳过 @：${missing.join('、')}`);
       }
@@ -383,7 +405,7 @@ export class OrangeStormAppealPipeline implements TaskHandler {
       // MinIO 直链是图片内联的必要条件（upload 节点失败即任务失败，不会走到这里）
       const imgUrl = state.imgUrl;
       if (!imgUrl) throw new Error('明细图公网直链缺失（upload 节点异常），拒绝发送');
-      const text = this.buildGroupText(label, details, stationAt, imgUrl);
+      const text = this.buildGroupText(details, stationAt, imgUrl);
       const out = await this.dingtalk.sendMessage({ group: gid, text, atOpenDingTalkIds: atIds });
       ctx.log(`群消息发送（图片内联 Markdown）: ${JSON.stringify(out).slice(0, 300)}`);
 
@@ -401,13 +423,18 @@ export class OrangeStormAppealPipeline implements TaskHandler {
       let dmFail = 0;
       for (const [oid, t] of targets) {
         const cnt = [...t.stations.values()].reduce((n, l) => n + l.length, 0);
+        // 私发内联该负责人自己的明细图；从 send 节点起跑没生成专属图时回退全量图。
+        const dmImgUrl = state.dmImages?.get(oid)?.url ?? state.imgUrl ?? null;
         try {
           await this.dingtalk.sendDm({
             openDingTalkId: oid,
-            text: this.buildDmText(label, t.name, t.stations, state.imgUrl ?? null),
+            text: this.buildDmText(dmImgUrl),
           });
           dmOk++;
-          ctx.log(`私发 ${t.name}（${[...t.stations.keys()].join('、')}，共 ${cnt} 条）`);
+          ctx.log(
+            `私发 ${t.name}（${[...t.stations.keys()].join('、')}，共 ${cnt} 条，` +
+              `专属图: ${state.dmImages?.has(oid) ? '是' : '否'}）`,
+          );
         } catch (e) {
           dmFail++;
           ctx.log(`[warn] 私发 ${t.name}（${oid}）失败: ${(e as Error).message}`);

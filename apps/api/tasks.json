@@ -204,7 +204,7 @@
     },
     {
       "id": "task_board",
-      "name": "站长任务看板",
+      "name": "站点任务提醒",
       "group": "task",
       "desc": "拉站长任务列表 → 筛已开始 → 渲染 → 发钉钉 @ 执行人",
       "params": [
@@ -432,15 +432,16 @@
       "id": "orange_storm_appeal",
       "name": "橙色风暴申诉提醒",
       "group": "orange",
-      "desc": "拉 QC 抽检判定 → 筛不通过且未申诉（未过期）→ 落盘明细 → 发群 @ 站长并按站点私发负责人",
+      "desc": "拉 QC 抽检判定 → 筛不通过且未申诉（未过期）→ 落盘明细 → 发群全量明细图 @ 站长 → 按负责人拆分各自明细图私发",
       "risk": "external",
       "timeout": 600,
       "outputs": [
         "apps/api/runtime/jobs/orange_storm_appeal/out/orange_storm_appeal.json",
         "apps/api/runtime/jobs/orange_storm_appeal/out/orange_storm_appeal.csv",
-        "apps/api/runtime/jobs/orange_storm_appeal/out/orange_storm_appeal.png"
+        "apps/api/runtime/jobs/orange_storm_appeal/out/orange_storm_appeal.png",
+        "apps/api/runtime/jobs/orange_storm_appeal/out/orange_storm_appeal_dm_*.png"
       ],
-      "confirm": "将向钉钉群发送橙色风暴申诉提醒并 @ 站长，且按站点拆分私发各负责人（单聊）。这是真实消息。确认继续？",
+      "confirm": "将向钉钉群发送橙色风暴申诉提醒（全量明细图）并 @ 站长，且按负责人各自生成只含其名下站点的明细图私发（单聊）。这是真实消息。确认继续？",
       "params": [
         {
           "flag": "--group",
@@ -503,17 +504,17 @@
         {
           "id": "render",
           "name": "渲染明细图",
-          "desc": "待申诉明细渲染成 orange_storm_appeal.png"
+          "desc": "渲染群发全量图 orange_storm_appeal.png + 每个负责人各自名下站点的专属明细图"
         },
         {
           "id": "upload",
           "name": "上传 MinIO",
-          "desc": "PNG 上传 MinIO 拿公网直链（失败不降级，任务直接失败）"
+          "desc": "全量图与各负责人专属图均上传 MinIO 拿公网直链（失败不降级，任务直接失败）"
         },
         {
           "id": "send",
           "name": "发送钉钉提醒",
-          "desc": "明细图内联发群，按站点 @ 对应负责人 + 按站点拆分私发负责人（--no-dm 只发群不私发）"
+          "desc": "全量明细图内联发群并按站点 @ 负责人；私发则每人只内联自己名下站点的明细图（--no-dm 只发群不私发）"
         }
       ]
     },

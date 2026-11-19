@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
 
 /**
- * 站长任务看板取数（移植自 get_data/board.py，单一来源）。
+ * 站点任务提醒取数（移植自 get_data/board.py，单一来源）。
  *
  * POST xtop.ryze.fs.agency.team.task.listByPage/1.0，按 status 分页拉全量。
  */
