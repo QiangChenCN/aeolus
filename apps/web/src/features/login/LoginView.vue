@@ -3,7 +3,7 @@
     <div class="login-card">
       <!-- 左侧品牌区 -->
       <aside class="login-brand">
-        <img class="lb-logo" src="/logo.png" alt="Aeolus" />
+        <img class="lb-logo" src="@shared-ui/assets/aeolus-workbench.svg" alt="Aeolus" />
         <h1 class="lb-title">Aeolus WorkBench</h1>
         <p class="lb-tag">一站式任务编排与数据看板</p>
         <ul class="lb-feats">

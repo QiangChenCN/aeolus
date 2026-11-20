@@ -4,7 +4,7 @@
       <el-icon><Menu /></el-icon>
     </button>
     <div class="hd-brand">
-      <img class="hd-logo" src="/logo.png" alt="Aeolus" />
+      <img class="hd-logo" src="@shared-ui/assets/aeolus-workbench.svg" alt="Aeolus" />
       <span class="hd-title">Aeolus WorkBench</span>
     </div>
     <span class="hd-spacer"></span>
