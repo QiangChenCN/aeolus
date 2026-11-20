@@ -215,9 +215,9 @@ function dingtalkLogin() {
     toast.show('钉钉登录未启用，请联系管理员');
     return;
   }
-  // 钉钉客户端内由 probe 自动走 JSAPI 免登，手动点击时重新探测一次即可。
+  // 钉钉客户端内手动点击视为主动登录：force 会解除退出时设置的自动免登抑制。
   if (dt.inDingtalk) {
-    dt.probe();
+    dt.probe(true);
     return;
   }
   // 普通浏览器与桌面端一致：跳钉钉 OAuth2 授权页，回调种会话 Cookie 后回到移动端。

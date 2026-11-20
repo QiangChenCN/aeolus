@@ -1,6 +1,6 @@
 import { onMounted, reactive, ref } from 'vue';
 import { dingtalkConfig, dingtalkJsapi, dingtalkBind } from '../api/auth.js';
-import { useAuthStore } from '../stores/auth.js';
+import { useAuthStore, isAutoLoginSuppressed, clearAutoLoginSuppression } from '../stores/auth.js';
 
 /**
  * 钉钉登录（JSAPI 免登 / OAuth 回跳 / 绑定）共享逻辑。
@@ -167,7 +167,9 @@ export function useDingtalkLogin({ onSuccess, query = null, configParams = '' } 
   }
 
   /** OAuth 回跳的三种结果都要落到界面上；随后探测三方集成配置，钉钉容器内自动免登。 */
-  function probe() {
+  function probe(force = false) {
+    // 手动点钉钉登录时显式解除主动退出设置的自动免登抑制。
+    if (force) clearAutoLoginSuppression();
     // 小程序 / App 端没有 window、fetch 与钉钉 JSAPI，不探测也不展示钉钉入口。
     if (typeof window === 'undefined') return;
     const dt = resolvedQuery.dingtalk;
@@ -191,7 +193,8 @@ export function useDingtalkLogin({ onSuccess, query = null, configParams = '' } 
           dtCorpId.value = cfg.corpId || '';
           dtAuthorizeUrl.value = cfg.authorizeUrl || '';
           inDingtalk.value = isInDingtalk();
-          if (inDingtalk.value) autoDingtalkLogin();
+          // 主动退出后不再自动免登，避免刚退出就被拉回登录态；手动登录传 force=true 可绕过。
+          if (inDingtalk.value && (force || !isAutoLoginSuppressed())) autoDingtalkLogin();
         }
       })
       .catch(() => { /* 钉钉配置探测失败不影响账密登录 */ });

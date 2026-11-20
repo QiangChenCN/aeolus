@@ -12,6 +12,24 @@ export function setLoginRedirector(fn) { loginRedirector = fn; }
 // 拿到尚未填充的登录态 → 误判未登录 → 刷新即跳登录页。
 let bootPromise = null;
 
+// 主动退出后抑制钉钉 JSAPI 自动免登：否则退出后跳到登录页会被钉钉容器内的 probe 立即重新登录，
+// 表现为「退出后又回到首页」。只影响自动免登，用户手动点钉钉登录仍可用（probe(true) 会清除标记）。
+// 用 sessionStorage 让同一标签页刷新后依然生效；非浏览器端静默降级为内存态。
+const AUTO_LOGIN_SUPPRESS_KEY = 'wb_auto_login_suppressed';
+function readAutoLoginSuppressed() {
+  if (typeof sessionStorage === 'undefined') return false;
+  try { return sessionStorage.getItem(AUTO_LOGIN_SUPPRESS_KEY) === '1'; } catch { return false; }
+}
+export function isAutoLoginSuppressed() { return readAutoLoginSuppressed(); }
+export function clearAutoLoginSuppression() {
+  if (typeof sessionStorage === 'undefined') return;
+  try { sessionStorage.removeItem(AUTO_LOGIN_SUPPRESS_KEY); } catch { /* ignore */ }
+}
+function suppressAutoLogin() {
+  if (typeof sessionStorage === 'undefined') return;
+  try { sessionStorage.setItem(AUTO_LOGIN_SUPPRESS_KEY, '1'); } catch { /* ignore */ }
+}
+
 // 鉴权状态：登录态完全由后端会话 Cookie 决定。前端只缓存「me 校验得到的用户信息」，
 // 用于界面展示与路由守卫判定；不持有令牌本身（HttpOnly Cookie 由浏览器管理，XSS 不可读）。
 export const useAuthStore = defineStore('auth', {
@@ -46,6 +64,8 @@ export const useAuthStore = defineStore('auth', {
           try {
             const data = await apiMe();
             if (data && data.authenticated) {
+              // 会话有效（含 OAuth 回跳、刷新后恢复）即解除「主动退出」抑制。
+              clearAutoLoginSuppression();
               this.user = data.user; this.role = data.role;
               this.avatar = data.avatar ?? null;
               this.name = data.name ?? null;
@@ -65,6 +85,7 @@ export const useAuthStore = defineStore('auth', {
     async signin(username, password, remember = false) {
       const data = await apiSignin(username, password, remember);
       if (data && data.token) {
+        clearAutoLoginSuppression();
         this.user = data.user; this.role = data.role;
         this.avatar = data.avatar ?? null;
         this.name = data.name ?? null;
@@ -106,7 +127,8 @@ export const useAuthStore = defineStore('auth', {
       } catch (e) { /* ignore */ }
     },
     async signout() {
-      try { await apiSignout(); } catch (e) { /* ignore */ }
+      let serverOk = true;
+      try { await apiSignout(); } catch (e) { serverOk = false; }
       clearBearerToken(); // 清掉 iframe/JSAPI 场景下的 X-Token 内存态
       this.user = null; this.role = null; this.avatar = null;
       this.name = null; this.phone = null; this.email = null;
@@ -114,7 +136,14 @@ export const useAuthStore = defineStore('auth', {
       this.perms = [];
       this.permsSig = '';
       this.lastPermsCheck = 0;
+      // 丢弃旧的 bootstrap 结果并重置 booted：下次进入任何页面都会重新向 /auth/me
+      // 校验真实 Cookie 状态，避免旧 Promise 缓存把已退出的用户态再回填回来。
+      bootPromise = null;
+      this.booted = false;
+      // 钉钉容器内退出后禁止 JSAPI 自动免登把用户又拉回首页（手动点登录仍可用）。
+      suppressAutoLogin();
       this.requireLogin();
+      return serverOk;
     },
     /**
      * 钉钉 JSAPI 免登成功后调用：后端把 wb_token 直接返回，这里存入内存并立即以 X-Token 头
@@ -124,6 +153,7 @@ export const useAuthStore = defineStore('auth', {
       setBearerToken(token);
       const data = await apiMe();
       if (data && data.authenticated) {
+        clearAutoLoginSuppression();
         this.user = data.user; this.role = data.role;
         this.avatar = data.avatar ?? null;
         this.name = data.name ?? null;

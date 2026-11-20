@@ -108,12 +108,21 @@ function toggleNotify() {
 }
 
 const sheetOpen = ref(false);
+const loggingOut = ref(false);
 function openSheet() { sheetOpen.value = true; }
 function closeSheet() { sheetOpen.value = false; }
-function confirmLogout() {
+async function confirmLogout() {
+  if (loggingOut.value) return;
+  loggingOut.value = true;
   closeSheet();
-  toast('已退出登录，返回登录页…（演示）');
-  setTimeout(() => uni.reLaunch({ url: '/pages/login/index' }), 900);
+  try {
+    // 走共享 store 的真实登出：POST /auth/logout 清 HttpOnly Cookie + 吊销服务端会话，
+    // 再清空 Pinia 登录态并触发 requireLogin 跳登录页。
+    await auth.signout();
+    toast('已退出登录');
+  } finally {
+    loggingOut.value = false;
+  }
 }
 </script>
 
