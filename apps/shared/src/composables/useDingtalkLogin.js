@@ -1,4 +1,4 @@
-import { onMounted, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { dingtalkConfig, dingtalkJsapi, dingtalkBind } from '../api/auth.js';
 import { useAuthStore } from '../stores/auth.js';
@@ -216,9 +216,12 @@ export function useDingtalkLogin({ onSuccess, query = null } = {}) {
 
   onMounted(probe);
 
-  return {
+  // 必须用 reactive 包裹：调用方模板以 dt.dtEnabled / !dt.inDingtalk 访问，
+  // 普通对象里的 ref 不会被模板自动解包（仅顶层 ref unwrap），
+  // 会导致钉钉按钮条件恒为 false、状态提示也全部失效。
+  return reactive({
     dtEnabled, dtCorpId, dtAuthorizeUrl, inDingtalk, dtLoading,
     dtStatus, dtMessage, pendingBindToken,
     bindAfterSignin, openOauth, probe,
-  };
+  });
 }
