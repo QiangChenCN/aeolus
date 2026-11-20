@@ -12,13 +12,16 @@ export function createApp() {
 
   // 共享模块里有 Element Plus 的 ElMessage 裸调用（桌面端约定）。
   // uni-app 端提供静默兜底，避免运行时 ReferenceError；后续各端页面改用本端反馈组件。
-  window.ElMessage = {
-    success: () => {},
-    info: () => {},
-    warning: () => {},
-    error: () => {},
-  };
-  window.ElNotification = window.ElMessage;
+  // 非 H5 端（小程序/App）没有 window，跳过兜底——这些端不加载桌面组件，也不会走到裸调用。
+  if (typeof window !== 'undefined') {
+    window.ElMessage = {
+      success: () => {},
+      info: () => {},
+      warning: () => {},
+      error: () => {},
+    };
+    window.ElNotification = window.ElMessage;
+  }
 
   return { app };
 }

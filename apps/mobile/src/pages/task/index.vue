@@ -1,49 +1,51 @@
 <template>
   <view class="m-screen">
-    <scroll-view class="m-scroll" scroll-y>
+    <AuthGate>
+    <scroll-view class="m-scroll" scroll-y :scroll-top="scrollTop" @scroll="onScroll">
       <view class="page-head"><h1>任务</h1></view>
       <view class="filter">
-        <view v-for="(f, i) in filters" :key="f" class="filter-btn" :class="{ active: i === active }" @click="active = i">{{ f }}</view>
+        <view v-for="(f, i) in filters" :key="f" class="filter-btn" :class="{ active: i === active }" @click="setFilter(i)">{{ f }}</view>
       </view>
-      <view class="list">
-        <view class="row" @click="toast('任务详情（演示）')">
-          <view class="r-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3.5" width="16" height="17" rx="2.5"/><path d="m8.5 12 2.3 2.3 4.7-4.8" stroke-linecap="round" stroke-linejoin="round"/></svg></view>
+      <view v-if="visibleItems.length" class="list">
+        <view v-for="item in visibleItems" :key="item.id" class="row" @click="toast(item.title + '（演示）')">
+          <view class="r-ico"><ListIcon :name="item.icon" /></view>
           <view class="r-main">
-            <view class="r-title">商站任务 · 黄江镇站素材补交</view>
-            <view class="r-sub">今天 18:00 截止</view>
+            <view class="r-title">{{ item.title }}</view>
+            <view class="r-sub">{{ item.sub }}</view>
           </view>
-          <view class="r-tag tag-danger">紧急</view>
-        </view>
-        <view class="row" @click="toast('任务详情（演示）')">
-          <view class="r-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.5 8.5 0 1 1-4.6-7.6" stroke-linecap="round"/><path d="M9 12.5 12 15.5 20 7" stroke-linecap="round" stroke-linejoin="round"/></svg></view>
-          <view class="r-main">
-            <view class="r-title">违规申诉 · 大岭山站 2 条</view>
-            <view class="r-sub">今天 18:00 截止</view>
-          </view>
-          <view class="r-tag tag-danger">紧急</view>
-        </view>
-        <view class="row" @click="toast('任务详情（演示）')">
-          <view class="r-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="6" width="17" height="13" rx="2.5"/><path d="M9 3.5h6v4H9z"/><path d="M10.5 12.5h3" stroke-linecap="round"/></svg></view>
-          <view class="r-main">
-            <view class="r-title">健康证复审通知 · 3 人</view>
-            <view class="r-sub">本周五前</view>
-          </view>
-          <view class="r-tag tag-warn">提醒</view>
+          <view class="r-tag" :class="item.tagClass">{{ item.tag }}</view>
         </view>
       </view>
+      <view v-else class="empty">该分类下暂无任务</view>
     </scroll-view>
+    </AuthGate>
     <AppTabBar current="task" />
     <wd-toast />
   </view>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useToast } from 'wot-design-uni';
+import { useTabStateStore } from '../../stores/tab-state.js';
 import AppTabBar from '../../components/AppTabBar.vue';
+import AuthGate from '../../components/AuthGate.vue';
+import ListIcon from '../../components/ListIcon.vue';
 
+const tabState = useTabStateStore();
 const filters = ['待处理', '进行中', '已完成'];
-const active = ref(0);
+const active = ref(tabState.getFilter('task'));
+const scrollTop = ref(tabState.getScroll('task'));
+function setFilter(i) { active.value = i; tabState.setFilter('task', i); }
+function onScroll(e) { tabState.setScroll('task', e.detail.scrollTop); }
 const toastApi = useToast();
 function toast(msg) { toastApi.show(msg); }
+
+// 演示数据：筛选按 status 分组；接真实 API 时只需替换 items 来源，模板与图标组件不用改。
+const items = [
+  { id: 1, status: 0, icon: 'task', title: '商站任务 · 黄江镇站素材补交', sub: '今天 18:00 截止', tag: '紧急', tagClass: 'tag-danger' },
+  { id: 2, status: 0, icon: 'appeal', title: '违规申诉 · 大岭山站 2 条', sub: '今天 18:00 截止', tag: '紧急', tagClass: 'tag-danger' },
+  { id: 3, status: 0, icon: 'health', title: '健康证复审通知 · 3 人', sub: '本周五前', tag: '提醒', tagClass: 'tag-warn' },
+];
+const visibleItems = computed(() => items.filter((i) => i.status === active.value));
 </script>

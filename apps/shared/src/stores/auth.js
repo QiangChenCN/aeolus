@@ -28,6 +28,8 @@ export const useAuthStore = defineStore('auth', {
     /** 后端权限快照签名，用于发现角色权限被改而前端缓存未刷新的情况。 */
     permsSig: '',
     lastPermsCheck: 0,
+    /** 会话校验（bootstrap）是否已完成；uni-app 的 onLaunch 不阻塞渲染，页面据此门控首屏。 */
+    booted: false,
   }),
   getters: {
     authenticated: (s) => !!s.user,
@@ -57,6 +59,8 @@ export const useAuthStore = defineStore('auth', {
         })();
       }
       await bootPromise;
+      // 无论校验成功 / 未登录 / 网络异常，引导都已结束，页面可以据此放行首屏。
+      this.booted = true;
     },
     async signin(username, password, remember = false) {
       const data = await apiSignin(username, password, remember);
@@ -67,6 +71,7 @@ export const useAuthStore = defineStore('auth', {
         this.phone = data.phone ?? null;
         this.email = data.email ?? null;
         this.mustChange = !!data.must_change;
+        this.booted = true;
         // signin 响应不含权限点，补一次 /me 拉取，避免菜单/按钮按空权限渲染。
         await this.reloadPerms();
         return data;

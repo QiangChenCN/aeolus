@@ -78,7 +78,7 @@
           </view>
           <text @click="toast.show('请联系管理员重置密码')">忘记密码</text>
         </view>
-        <view class="btn-main" :class="{ shake: shakeBtn }" @click="submitPwd">登 录</view>
+        <view class="btn-main" :class="{ shake: shakeBtn, disabled: loading }" @click="submitPwd">{{ loading ? '登录中…' : '登 录' }}</view>
       </view>
 
       <!-- 协议 -->
@@ -95,8 +95,6 @@
       <view class="divider">其他登录方式</view>
       <view class="oauth">
         <view class="oauth-btn" @click="dingtalkLogin"><image class="oauth-icon" src="@/static/icons/dingtalk.svg" mode="aspectFit" /></view>
-        <view class="oauth-btn" @click="toast.show('微信授权登录暂未开放')"><image class="oauth-icon" src="@/static/icons/wechat.svg" mode="aspectFit" /></view>
-        <view class="oauth-btn" @click="toast.show('支付宝授权登录暂未开放')"><image class="oauth-icon" src="@/static/icons/alipay.svg" mode="aspectFit" /></view>
       </view>
 
       <view class="footer">遇到问题？<text class="footer-link" @click="toast.show('已通知管理员协助')">联系管理员</text></view>
@@ -109,10 +107,9 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, onUnmounted } from 'vue';
 import { useToast } from 'wot-design-uni';
 import { useAuthStore } from '@shared/stores/auth.js';
-import { useDingtalkLogin } from '@shared/composables/useDingtalkLogin.js';
 
 const auth = useAuthStore();
 
@@ -129,23 +126,20 @@ const shakeBtn = ref(false);
 const smsError = ref('');
 const codeText = ref('获取验证码');
 
-const dt = useDingtalkLogin({
-  onSuccess: () => uni.reLaunch({ url: '/pages/index/index' }),
-  query: {},
+// 页面级计时器句柄：卸载时必须清理，否则 reLaunch 后 setInterval 仍每 1 秒改动已销毁的响应式对象。
+let codeTimer = null;
+const shakeTimers = [];
+onUnmounted(() => {
+  if (codeTimer) clearInterval(codeTimer);
+  shakeTimers.forEach(clearTimeout);
 });
 
 const toast = useToast();
 
-// 钉钉免登状态用轻提示承接（原 notice-bar 已移除）
-watch(() => dt.dtStatus.value, (status) => {
-  if (status === 'logging') toast.show('正在通过钉钉自动登录…');
-  else if (status === 'unbound' || status === 'failed') toast.error(dt.dtMessage.value || '钉钉登录未成功');
-});
-
 function shake() {
   shakeBtn.value = false;
-  setTimeout(() => { shakeBtn.value = true; }, 10);
-  setTimeout(() => { shakeBtn.value = false; }, 400);
+  shakeTimers.push(setTimeout(() => { shakeBtn.value = true; }, 10));
+  shakeTimers.push(setTimeout(() => { shakeBtn.value = false; }, 400));
 }
 
 function checkAgreement() {
@@ -162,9 +156,10 @@ function sendCode() {
   smsError.value = '';
   let left = 60;
   codeText.value = left + 's 后重发';
-  const timer = setInterval(() => {
+  if (codeTimer) clearInterval(codeTimer);
+  codeTimer = setInterval(() => {
     left--;
-    if (left <= 0) { clearInterval(timer); codeText.value = '重新获取'; }
+    if (left <= 0) { clearInterval(codeTimer); codeTimer = null; codeText.value = '重新获取'; }
     else codeText.value = left + 's 后重发';
   }, 1000);
   toast.show('验证码已发送');
@@ -178,12 +173,12 @@ async function submitSms() {
 }
 
 async function submitPwd() {
+  if (loading.value) return;
   if (!username.value || !password.value) { toast.error('请输入手机号 / 工号和密码'); return; }
   if (!checkAgreement()) return;
   loading.value = true;
   try {
     await auth.signin(username.value, password.value, remember.value);
-    await dt.bindAfterSignin();
     uni.reLaunch({ url: '/pages/index/index' });
   } catch (e) {
     toast.error(e.message || '登录失败');
@@ -197,6 +192,11 @@ function dingtalkLogin() {
 }
 
 function toDesktop() {
+  // 切换桌面版依赖浏览器 cookie 与 location，仅 H5 可用。
+  if (typeof document === 'undefined' || typeof window === 'undefined') {
+    toast.show('请在浏览器中打开以切换桌面版');
+    return;
+  }
   const oneYear = 365 * 24 * 60 * 60;
   document.cookie = `wb_view=desktop; path=/; max-age=${oneYear}; SameSite=Lax`;
   window.location.href = '/';
@@ -367,6 +367,7 @@ function toDesktop() {
   letter-spacing: 0.14em;
   box-shadow: 0 10px 22px -8px rgba(255, 80, 0, 0.55);
 }
+.btn-main.disabled { opacity: 0.7; pointer-events: none; }
 .btn-main.shake { animation: shake 380ms cubic-bezier(0.25, 1, 0.5, 1); }
 @keyframes shake {
   20% { transform: translateX(-6px); }

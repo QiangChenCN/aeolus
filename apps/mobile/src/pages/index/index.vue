@@ -1,6 +1,7 @@
 <template>
   <view class="m-screen">
-    <scroll-view class="m-scroll" scroll-y>
+    <AuthGate>
+    <scroll-view class="m-scroll" scroll-y :scroll-top="scrollTop" @scroll="onScroll">
       <view class="hero">
         <view class="hi">早上好，{{ displayName }}</view>
         <view class="hero-title">今日概览</view>
@@ -64,18 +65,24 @@
         </view>
       </view>
     </scroll-view>
+    </AuthGate>
     <AppTabBar current="home" />
     <wd-toast />
   </view>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useToast } from 'wot-design-uni';
 import { useAuthStore } from '@shared/stores/auth.js';
+import { useTabStateStore } from '../../stores/tab-state.js';
 import AppTabBar from '../../components/AppTabBar.vue';
+import AuthGate from '../../components/AuthGate.vue';
 
 const auth = useAuthStore();
+const tabState = useTabStateStore();
+const scrollTop = ref(tabState.getScroll('home'));
+function onScroll(e) { tabState.setScroll('home', e.detail.scrollTop); }
 const displayName = computed(() => auth.name || auth.user || '用户');
 const toastApi = useToast();
 function toast(msg) { toastApi.show(msg); }

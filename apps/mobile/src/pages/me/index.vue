@@ -1,6 +1,7 @@
 <template>
   <view class="m-screen">
-    <scroll-view class="m-scroll" scroll-y>
+    <AuthGate>
+    <scroll-view class="m-scroll" scroll-y :scroll-top="scrollTop" @scroll="onScroll">
       <view class="page-head"><h1>个人中心</h1></view>
 
       <!-- 身份卡 -->
@@ -61,6 +62,7 @@
       </view>
       <view class="version">Aeolus Workbench v1.0.0</view>
     </scroll-view>
+    </AuthGate>
 
     <AppTabBar current="me" />
 
@@ -84,9 +86,14 @@
 import { computed, ref } from 'vue';
 import { useToast } from 'wot-design-uni';
 import { useAuthStore } from '@shared/stores/auth.js';
+import { useTabStateStore } from '../../stores/tab-state.js';
 import AppTabBar from '../../components/AppTabBar.vue';
+import AuthGate from '../../components/AuthGate.vue';
 
 const auth = useAuthStore();
+const tabState = useTabStateStore();
+const scrollTop = ref(tabState.getScroll('me'));
+function onScroll(e) { tabState.setScroll('me', e.detail.scrollTop); }
 const toastApi = useToast();
 function toast(msg) { toastApi.show(msg); }
 
