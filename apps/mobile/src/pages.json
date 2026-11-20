@@ -15,11 +15,23 @@
     },
     {
       "path": "pages/index/index",
-      "style": {
-        "navigationBarTitleText": "Aeolus",
-        "navigationBarBackgroundColor": "#FF5000",
-        "navigationBarTextStyle": "white"
-      }
+      "style": { "navigationStyle": "custom" }
+    },
+    {
+      "path": "pages/task/index",
+      "style": { "navigationStyle": "custom" }
+    },
+    {
+      "path": "pages/att/index",
+      "style": { "navigationStyle": "custom" }
+    },
+    {
+      "path": "pages/msg/index",
+      "style": { "navigationStyle": "custom" }
+    },
+    {
+      "path": "pages/me/index",
+      "style": { "navigationStyle": "custom" }
     }
   ],
   "globalStyle": {

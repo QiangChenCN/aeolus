@@ -22,4 +22,92 @@ page {
   --ink-300: #c2b4ab;
   --line: #efe3da;
   --paper: #fff9f4;
+  --card: #ffffff;
+  --danger: #d93025;
+  --radius-l: 24px;
+  --radius-m: 16px;
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
 }
+
+/* ==========================================================================
+   移动端框架公共样式 —— 迁移自 menu.html 原型。
+   各页面根节点统一 .m-screen（纵向 flex、占满视口、内容区可滚动），
+   tabbar 由 AppTabBar 组件固定在底部。页面私有头部/卡片样式放各自 scoped。
+   ========================================================================== */
+page {
+  background: var(--paper);
+  color: var(--ink-900);
+  font-family: 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.m-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--paper);
+  box-sizing: border-box;
+}
+.m-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.m-scroll::-webkit-scrollbar { display: none; }
+
+/* 通用页面标题 */
+.page-head { padding: calc(52px + env(safe-area-inset-top, 0px)) 24px 14px; }
+.page-head h1 { font-size: 22px; font-weight: 800; }
+
+/* 分区标题 */
+.sec-title {
+  margin: 24px 24px 10px;
+  font-size: 12px; font-weight: 700;
+  color: var(--ink-300); letter-spacing: 0.14em;
+}
+
+/* 筛选 tab */
+.filter { display: flex; gap: 18px; padding: 0 24px 12px; }
+.filter-btn {
+  background: none; border: none; font: inherit;
+  font-size: 14.5px; font-weight: 600; color: var(--ink-500);
+  padding: 5px 2px; position: relative;
+}
+.filter-btn.active { color: var(--brand-600); }
+.filter-btn.active::after {
+  content: ''; position: absolute; left: 50%; bottom: 0;
+  width: 20px; height: 3px; border-radius: 2px;
+  background: var(--brand-500);
+  transform: translateX(-50%) scaleX(1);
+  transition: transform 220ms var(--ease-out-quart);
+}
+
+/* 通用列表行 */
+.list { margin: 0 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+.row {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius-m); padding: 14px 16px;
+  width: 100%; text-align: left;
+}
+.r-ico {
+  width: 36px; height: 36px; border-radius: 11px; flex-shrink: 0;
+  display: grid; place-items: center;
+  background: var(--brand-50); color: var(--brand-600);
+}
+.r-ico svg { width: 17px; height: 17px; }
+.r-main { flex: 1; min-width: 0; }
+.r-title { font-size: 14.5px; font-weight: 600; }
+.r-sub { margin-top: 3px; font-size: 12px; color: var(--ink-500); }
+.r-tag {
+  font-size: 11px; font-weight: 700; padding: 3px 9px;
+  border-radius: 999px; flex-shrink: 0;
+}
+.tag-warn { background: #fff4e0; color: #b87400; }
+.tag-danger { background: #fbedec; color: var(--danger); }
+.tag-ok { background: #eaf7ee; color: #1e8e4b; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand-500); flex-shrink: 0; }
+
+/* 轻提示（深色居中气泡，对齐原型 toast） */
+.m-toast { z-index: 50; }
