@@ -9,7 +9,7 @@
       class="tab-btn"
       :class="{ active: tab.key === current }"
       :aria-current="tab.key === current ? 'page' : undefined"
-      @click="switchTo(tab.key)"
+      @click="switchTo(tab)"
     >
       <view class="tab-ico">
         <!-- 工作台 -->
