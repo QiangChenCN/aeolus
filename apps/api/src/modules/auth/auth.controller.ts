@@ -80,14 +80,20 @@ export class AuthController {
   /** 前端探测：钉钉登录是否启用 + corpId + OAuth 授权地址（公开，用于决定是否渲染钉钉登录）。 */
   @RequirePerm('self')
   @Get('dingtalk/config')
-  dingtalkConfig(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  dingtalkConfig(@Query('view') view: string, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     // 每次取授权地址都生成一次性 state 并写 HttpOnly Cookie，回调时比对，防登录 CSRF
     const state = randomBytes(16).toString('hex');
     const parts = [
       `wb_dtstate=${state}`, 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Max-Age=600',
     ];
     if (req.secure) parts.push('Secure');
-    res.setHeader('Set-Cookie', parts.join('; '));
+    // 记录发起端：浏览器 OAuth 回调后跳回对应前端（桌面端 /m/ 之外的根路径，或移动端 /m/）。
+    // 仅接受白名单值，避免该 Cookie 被当成开放重定向参数。
+    const viewParts = [
+      `wb_dtview=${view === 'mobile' ? 'mobile' : 'desktop'}`, 'Path=/', 'SameSite=Lax', 'Max-Age=600',
+    ];
+    if (req.secure) viewParts.push('Secure');
+    res.setHeader('Set-Cookie', [parts.join('; '), viewParts.join('; ')]);
     return this.ding.getPublicConfig(state);
   }
 
@@ -163,17 +169,26 @@ export class AuthController {
   ) {
     // state 校验：必须与我们签发并写入 HttpOnly Cookie 的值一致
     const expectedState = getCookie(req, 'wb_dtstate');
-    res.setHeader('Set-Cookie', 'wb_dtstate=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+    const fromMobile = getCookie(req, 'wb_dtview') === 'mobile';
+    res.setHeader('Set-Cookie', [
+      'wb_dtstate=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+      'wb_dtview=; Path=/; SameSite=Lax; Max-Age=0',
+    ]);
+    // 失败 / 未绑定回到发起端的登录页：桌面端 /login，移动端 uni-app 的 hash 路由页。
+    const loginUrl = (kind: string, extra = '') => {
+      const q = 'dingtalk=' + encodeURIComponent(kind) + (extra ? '&' + extra : '');
+      return fromMobile ? `/m/#/pages/login/index?${q}` : `/login?${q}`;
+    };
     if (!expectedState || !state || state !== expectedState) {
-      res.redirect('/login?dingtalk=error&msg=' + encodeURIComponent('授权状态校验失败，请重新发起登录'));
+      res.redirect(loginUrl('error', 'msg=' + encodeURIComponent('授权状态校验失败，请重新发起登录')));
       return;
     }
     if (!this.ding.isEnabled()) {
-      res.redirect('/login?dingtalk=disabled');
+      res.redirect(loginUrl('disabled'));
       return;
     }
     if (!code) {
-      res.redirect('/login?dingtalk=error');
+      res.redirect(loginUrl('error'));
       return;
     }
     try {
@@ -181,14 +196,15 @@ export class AuthController {
       const r = this.auth.resolveDingtalkUser(id.unionid, id.name || '', this.ip(req), false);
       if ('needBind' in r) {
         const bindToken = this.auth.createDingtalkBind(r.unionid, r.name);
-        res.redirect('/login?dingtalk=needbind&bindToken=' + encodeURIComponent(bindToken));
+        res.redirect(loginUrl('needbind', 'bindToken=' + encodeURIComponent(bindToken)));
         return;
       }
       this.setSessionCookie(res, r.token, false, req.secure);
-      const base = this.ding.frontendUrl(req);
-      res.redirect(base ? base + '/' : '/');
+      const base = this.ding.frontendUrl(req).replace(/\/+$/, '');
+      const home = fromMobile ? '/m/' : '/';
+      res.redirect(base ? base + home : home);
     } catch (e) {
-      res.redirect('/login?dingtalk=error&msg=' + encodeURIComponent((e as Error).message));
+      res.redirect(loginUrl('error', 'msg=' + encodeURIComponent((e as Error).message)));
     }
   }
 
@@ -256,7 +272,9 @@ export class AuthController {
     const parts = [`wb_token=${encodeURIComponent(token)}`, 'Path=/', 'HttpOnly', 'SameSite=Lax'];
     if (remember) parts.push('Max-Age=604800'); // 记住我：7 天
     if (secure) parts.push('Secure');
-    res.setHeader('Set-Cookie', parts.join('; '));
+    // append 而非 setHeader：OAuth 回调需要同时清除一次性 state / view Cookie，
+    // 用 setHeader 会把已设置的清除头覆盖掉。
+    res.append('Set-Cookie', parts.join('; '));
   }
 
   private clearSessionCookie(res: Response, secure: boolean) {

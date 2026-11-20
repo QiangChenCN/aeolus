@@ -1,5 +1,4 @@
 import { onMounted, reactive, ref } from 'vue';
-import { useRoute } from 'vue-router';
 import { dingtalkConfig, dingtalkJsapi, dingtalkBind } from '../api/auth.js';
 import { useAuthStore } from '../stores/auth.js';
 
@@ -7,16 +6,13 @@ import { useAuthStore } from '../stores/auth.js';
  * 钉钉登录（JSAPI 免登 / OAuth 回跳 / 绑定）共享逻辑。
  * 桌面登录页与移动端登录页共用，避免两套实现口径漂移。
  * onSuccess 由调用方提供，负责跳转到各自端的首页。
+ * query 由调用方注入（web 传 route.query，uni-app 传 onLoad 参数）；
+ * configParams 用于给后端标注发起端（移动端传 view=mobile，决定 OAuth 回调落点）。
+ * shared 层不依赖 vue-router，否则独立工程 apps/mobile 构建时解析失败。
  */
-export function useDingtalkLogin({ onSuccess, query = null } = {}) {
+export function useDingtalkLogin({ onSuccess, query = null, configParams = '' } = {}) {
   const auth = useAuthStore();
-  // 桌面端用 vue-router；uni-app 等无 router 环境由调用方注入 query（如页面 onLoad 参数）。
-  // useRoute 在无 router 时会返回 undefined，必须判空后再取 query。
-  let resolvedQuery = query;
-  if (!resolvedQuery) {
-    const route = useRoute();
-    resolvedQuery = route && route.query ? route.query : {};
-  }
+  const resolvedQuery = query || {};
 
   const dtEnabled = ref(false);
   const dtCorpId = ref('');
@@ -172,6 +168,8 @@ export function useDingtalkLogin({ onSuccess, query = null } = {}) {
 
   /** OAuth 回跳的三种结果都要落到界面上；随后探测三方集成配置，钉钉容器内自动免登。 */
   function probe() {
+    // 小程序 / App 端没有 window、fetch 与钉钉 JSAPI，不探测也不展示钉钉入口。
+    if (typeof window === 'undefined') return;
     const dt = resolvedQuery.dingtalk;
     if (dt === 'needbind' && typeof resolvedQuery.bindToken === 'string') {
       dtStatus.value = 'unbound';
@@ -186,7 +184,7 @@ export function useDingtalkLogin({ onSuccess, query = null } = {}) {
       dtStatus.value = 'failed';
       dtMessage.value = '钉钉登录未启用：请先在「三方集成」填写 AppKey / AppSecret 并开启开关。';
     }
-    dingtalkConfig()
+    dingtalkConfig(configParams)
       .then((cfg) => {
         if (cfg && cfg.enabled) {
           dtEnabled.value = true;
@@ -211,7 +209,7 @@ export function useDingtalkLogin({ onSuccess, query = null } = {}) {
   }
 
   function openOauth() {
-    if (dtAuthorizeUrl.value) window.location.href = dtAuthorizeUrl.value;
+    if (dtAuthorizeUrl.value && typeof window !== 'undefined') window.location.href = dtAuthorizeUrl.value;
   }
 
   onMounted(probe);

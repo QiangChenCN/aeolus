@@ -127,6 +127,7 @@ const error = ref('');
 
 // 钉钉免登 / 绑定逻辑与移动端共用，跳转落点由各端自行决定
 const dt = useDingtalkLogin({
+  query: route.query,
   onSuccess: () => {
     router.replace(auth.mustChange ? '/settings/profile' : redirectTarget());
   },

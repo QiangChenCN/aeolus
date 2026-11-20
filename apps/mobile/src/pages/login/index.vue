@@ -91,6 +91,9 @@
         </view>
       </view>
 
+      <!-- 钉钉自动登录 / OAuth 回跳状态提示，与桌面端同口径 -->
+      <view v-if="dt.dtMessage" class="dt-message">{{ dt.dtMessage }}</view>
+
       <!-- 其他登录方式 -->
       <view class="divider">其他登录方式</view>
       <view class="oauth">
@@ -107,11 +110,29 @@
 </template>
 
 <script setup>
-import { ref, onUnmounted } from 'vue';
+import { reactive, ref, onMounted, onUnmounted } from 'vue';
+import { onLoad } from '@dcloudio/uni-app';
 import { useToast } from 'wot-design-uni';
 import { useAuthStore } from '@shared/stores/auth.js';
+import { useDingtalkLogin } from '@shared/composables/useDingtalkLogin.js';
 
 const auth = useAuthStore();
+
+// OAuth 回调（未绑定 / 失败）由后端重定向回本页并带 query。onLoad 早于 onMounted，
+// 用 reactive 对象注入共享 composable，probe 执行时才能读到最新的页面参数。
+const pageQuery = reactive({});
+onLoad((options) => { Object.assign(pageQuery, options || {}); });
+const dt = useDingtalkLogin({
+  query: pageQuery,
+  configParams: 'view=mobile',
+  onSuccess: () => uni.reLaunch({ url: '/pages/index/index' }),
+});
+
+// OAuth 成功后后端直接跳 /m/，本页首次加载时会话已就绪；与桌面端路由守卫同口径直接进首页。
+onMounted(async () => {
+  await auth.bootstrap();
+  if (auth.authenticated) uni.reLaunch({ url: '/pages/index/index' });
+});
 
 const mode = ref('pwd');
 const username = ref('');
@@ -179,6 +200,8 @@ async function submitPwd() {
   loading.value = true;
   try {
     await auth.signin(username.value, password.value, remember.value);
+    // 与桌面端一致：若钉钉 OAuth 已完成身份校验但账号未绑定，此处登录成功后自动绑定。
+    await dt.bindAfterSignin();
     uni.reLaunch({ url: '/pages/index/index' });
   } catch (e) {
     toast.error(e.message || '登录失败');
@@ -188,7 +211,17 @@ async function submitPwd() {
 }
 
 function dingtalkLogin() {
-  toast.show('钉钉免登请在钉钉客户端内打开本应用');
+  if (!dt.dtEnabled) {
+    toast.show('钉钉登录未启用，请联系管理员');
+    return;
+  }
+  // 钉钉客户端内由 probe 自动走 JSAPI 免登，手动点击时重新探测一次即可。
+  if (dt.inDingtalk) {
+    dt.probe();
+    return;
+  }
+  // 普通浏览器与桌面端一致：跳钉钉 OAuth2 授权页，回调种会话 Cookie 后回到移动端。
+  dt.openOauth();
 }
 
 function toDesktop() {
@@ -399,6 +432,13 @@ function toDesktop() {
 .agreement-radio.checked { border-color: var(--brand-500); background: var(--brand-500); }
 .agreement-text { flex: 1; }
 .link { color: var(--brand-600); font-weight: 600; }
+
+.dt-message {
+  margin: 4px 4px -10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #c2410c;
+}
 
 .divider {
   display: flex;

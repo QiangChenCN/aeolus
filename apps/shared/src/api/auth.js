@@ -37,8 +37,8 @@ export async function me() {
 }
 
 // 钉钉登录相关（JSAPI 免登 / OAuth2 网页登录 / 绑定）
-export async function dingtalkConfig() {
-  return request('/auth/dingtalk/config');
+export async function dingtalkConfig(params = '') {
+  return request('/auth/dingtalk/config' + (params ? '?' + params : ''));
 }
 export async function dingtalkJsapi(authCode) {
   return request('/auth/dingtalk/jsapi', {
