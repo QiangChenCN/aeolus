@@ -84,12 +84,14 @@ page {
 }
 
 /* 通用列表行 */
-.list { margin: 0 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+.list { margin: 0 20px 20px; display: flex; flex-direction: column; gap: 10px; box-sizing: border-box; }
 .row {
   display: flex; align-items: center; gap: 12px;
   background: var(--card); border: 1px solid var(--line);
   border-radius: var(--radius-m); padding: 14px 16px;
   width: 100%; text-align: left;
+  /* width:100% 在 content-box 下会叠加 padding+border，导致右侧超出容器被裁切 */
+  box-sizing: border-box; min-width: 0;
 }
 .r-ico {
   width: 36px; height: 36px; border-radius: 11px; flex-shrink: 0;
