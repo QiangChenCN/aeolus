@@ -3,7 +3,7 @@
     <h2 class="v-title">系统设置</h2>
     <p class="muted">系统级集成与外部服务配置。以下为当前已接入的设置模块：</p>
     <div class="cards">
-      <RouterLink to="/settings/dingtalk" class="card">
+      <RouterLink to="/settings/integrations" class="card">
         <div>
           <div class="card-t">三方集成</div>
           <div class="card-d">钉钉授权 / SSO 与 dws CLI 配置（共 32 项，分 8 类）；机器人凭据与实例请在「机器人」模块管理</div>

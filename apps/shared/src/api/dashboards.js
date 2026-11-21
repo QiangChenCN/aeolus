@@ -272,6 +272,12 @@ export function dingAuthLogout() { return request('/ding/auth/logout', j({})); }
 /* ============ 钉钉 CLI 配置（WebUI 设置） ============ */
 export function dingConfig() { return request('/ding/config'); }
 export function saveDingConfig(patch = {}) { return request('/ding/config', j({ patch })); }
+export function dingVersion() { return request('/ding/version'); }
+export function dingUpgradeCheck() { return request('/ding/upgrade/check', { timeout: 60000 }); }
+export function dingUpgrade() { return request('/ding/upgrade', { ...j({}), timeout: 60000 }); }
+export function dingUpgradeStatus() { return request('/ding/upgrade/status'); }
+export function getDingSendSettings() { return request('/ding/send-settings'); }
+export function saveDingSendSettings(patch = {}) { return request('/ding/send-settings', j(patch)); }
 
 // 钉钉 SSO（免登 / OAuth2 扫码）配置：前端可持久化，无需改 .env
 export function getSsoConfig() { return request('/auth/dingtalk/sso-config'); }

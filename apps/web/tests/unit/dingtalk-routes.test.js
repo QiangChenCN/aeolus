@@ -6,13 +6,15 @@ const routeByPath = (p) => router.getRoutes().find((r) => r.path === p);
 
 describe('机器人与三方集成路由结构', () => {
   it('钉钉授权/SSO/DWS 仍在系统设置下（入口名为三方集成）', () => {
-    const r = routeByPath('/settings/dingtalk');
+    const r = routeByPath('/settings/integrations');
     expect(r).toBeTruthy();
-    expect(r.name).toBe('dingtalk-settings');
-    // 网页标题（meta.title → document.title）改为三方集成，内容标题仍为钉钉集成
+    expect(r.name).toBe('integrations-settings');
+    // 网页标题（meta.title → document.title）为三方集成，内容标题仍为钉钉集成
     expect(r.meta.title).toBe('三方集成');
-    expect(r.meta.kind).toBe('sys-dingtalk');
+    expect(r.meta.kind).toBe('sys-integrations');
     expect(r.meta.perm).toBe('admin:bot');
+    // 旧钉钉地址仅作兼容重定向
+    expect(routeByPath('/settings/dingtalk').redirect.name).toBe('integrations-settings');
   });
 
   it('机器人分组为纯分组路由：无 component、无 meta.tabs，避免侧栏与 Tab 双重入口', () => {
@@ -21,7 +23,7 @@ describe('机器人与三方集成路由结构', () => {
     expect(parent.component).toBeUndefined();
     expect(parent.meta.tabs).toBeUndefined();
     // 旧路径仅作为兼容重定向保留，不再是机器人模块的页面
-    expect(routeByPath('/bot/dingtalk').redirect.name).toBe('dingtalk-settings');
+    expect(routeByPath('/bot/dingtalk').redirect.name).toBe('integrations-settings');
   });
 
   it('全局配置为第一个子页，也是默认落地页', () => {
@@ -45,8 +47,8 @@ describe('机器人与三方集成路由结构', () => {
 
   it('旧地址重定向到正确归属', () => {
     const cases = [
-      ['/settings/dingtalk/auth', 'dingtalk-settings'],
-      ['/bot/dingtalk', 'dingtalk-settings'],
+      ['/settings/dingtalk/auth', 'integrations-settings'],
+      ['/bot/dingtalk', 'integrations-settings'],
       ['/settings/dingtalk/credentials', 'bot-credentials'],
       ['/settings/dingtalk/robot', 'bot-credentials'],
       ['/settings/dingtalk/global', 'bot-instances'],

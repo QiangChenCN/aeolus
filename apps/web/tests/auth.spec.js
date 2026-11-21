@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 const PROTECTED = [
   '/tasks',
   '/assessment',
-  '/settings/dingtalk',
+  '/settings/integrations',
   '/bot/instances',
   '/settings/rbac/users',
   '/overview',

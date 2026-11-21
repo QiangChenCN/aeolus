@@ -24,7 +24,7 @@ describe('navTo', () => {
     ['rbac', '/settings/rbac'],
     ['profile', '/settings/profile'],
     ['syscfg', '/settings'],
-    ['sys-dingtalk', '/settings/dingtalk'],
+    ['sys-integrations', '/settings/integrations'],
     ['sys-credentials', '/settings/credentials'],
     ['hr-org', '/hr/org'],
     ['hr-org-positions', '/hr/positions'],

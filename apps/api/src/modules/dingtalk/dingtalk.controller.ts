@@ -142,6 +142,52 @@ export class DingtalkController {
     return this.guard(() => this.ding.saveDingConfig(b?.patch || {}));
   }
 
+  /** 读取 dws CLI 版本（页面展示 + 开发者配置解锁入口）。 */
+  @RequirePerm('admin:bot')
+  @Get('ding/version')
+  async dingVersion() {
+    return this.guard(() => this.ding.getDwsVersion());
+  }
+
+  /** 检查 dws CLI 是否有新版本（只查询，不修改环境）。 */
+  @RequirePerm('admin:bot')
+  @Get('ding/upgrade/check')
+  async dingUpgradeCheck() {
+    return this.guard(() => this.ding.checkDwsUpdate());
+  }
+
+  /** 启动 dws CLI 升级任务（异步，立即返回进度）。 */
+  @RequirePerm('admin:bot')
+  @Post('ding/upgrade')
+  async dingUpgrade() {
+    return this.guard(() => Promise.resolve(this.ding.startUpgrade()));
+  }
+
+  /** 查询升级任务的详细进度（阶段、百分比、错误）。 */
+  @RequirePerm('admin:bot')
+  @Get('ding/upgrade/status')
+  async dingUpgradeStatus() {
+    return this.guard(() => Promise.resolve(this.ding.getUpgradeProgress()));
+  }
+
+  /** 读取发消息设置（AI 角标开关）。 */
+  @RequirePerm('admin:bot')
+  @Get('ding/send-settings')
+  async dingSendSettings() {
+    return this.guard(() => this.ding.getSendSettings());
+  }
+
+  /** 保存发消息设置（AI 角标开关），保存后下一次发消息即生效。 */
+  @RequirePerm('admin:bot')
+  @Post('ding/send-settings')
+  async saveDingSendSettings(@Body() b: { aiTag?: boolean }) {
+    return this.guard(() =>
+      this.ding.saveSendSettings({
+        aiTag: typeof b?.aiTag === 'boolean' ? b.aiTag : undefined,
+      }),
+    );
+  }
+
   private async guard(fn: () => Promise<unknown>) {
     try {
       return { ok: true, data: await fn() };

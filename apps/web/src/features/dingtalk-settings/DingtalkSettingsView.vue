@@ -2,13 +2,47 @@
   <div class="dt">
     <h2 class="v-title">钉钉集成</h2>
 
-    <!-- 钉钉授权 -->
+    <!-- 钉钉 DWS：授权状态 + 发消息设置 + CLI 配置（同一卡片内） -->
     <el-card class="blk" shadow="never">
+      <template #header>
+        <span class="blk-h">钉钉 DWS</span>
+        <el-switch
+          v-model="sendSettings.aiTag"
+          class="blk-switch"
+          active-text="AI角标"
+          inactive-text="无角标"
+          inline-prompt
+          :loading="sendSaving"
+          @change="saveAiTag"
+        />
+        <span class="blk-sub">开启时 dws 发出的消息带「通过AI发送」小尾巴（切换即时保存）</span>
+      </template>
+
       <div v-if="ding.loggedIn" class="ding-ok">
         <div class="ding-ok-head">
           <span class="ok-dot"></span>
           <span class="ok-title">授权状态</span>
+          <span class="ok-ver" @click="tapVersion">Version {{ dwsVersion }}</span>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            :loading="checking || upgradeProgress.running"
+            :disabled="upgradeProgress.running || (!checking && !checkError && !updateInfo.needsUpgrade)"
+            :title="checkError || upgradeProgress.error || upgradeProgress.detail"
+            @click="doUpgrade"
+          >
+            {{ upgradeButtonText }}
+          </el-button>
+          <el-button v-if="changelogInfo.items.length" link type="primary" size="small" @click="changelogVisible = true">更新记录</el-button>
           <el-button size="small" type="danger" plain :loading="ding.loggingOut" @click="dingLogout">退出登录</el-button>
+        </div>
+        <div v-if="upgradeProgress.running" class="up-progress">
+          <el-progress
+            :percentage="upgradeProgress.percent >= 0 ? upgradeProgress.percent : 0"
+            :show-text="upgradeProgress.percent >= 0"
+          />
+          <span class="up-detail">{{ upgradeProgress.detail }}</span>
         </div>
         <div class="ding-info-grid" v-if="ding.profile && ding.profile.corp_name">
           <div class="di"><span class="di-k">组织</span><span class="di-v">{{ ding.profile.corp_name }}</span></div>
@@ -48,6 +82,46 @@
           title="请在浏览器/钉钉打开上方链接并确认授权，本页会自动刷新状态；授权完成后无需手动操作。"
         />
       </div>
+
+      <template v-if="devUnlocked">
+        <div class="blk-section">
+          <div class="sec-h">DWS 配置（{{ items.length }} 项）</div>
+          <el-collapse v-model="activeGroups" accordion>
+            <el-collapse-item
+              v-for="g in grouped"
+              :key="g.cat"
+              :title="catLabel(g.cat)"
+              :name="g.cat"
+            >
+              <div v-for="it in g.items" :key="it.key" class="cfg-row">
+                <div class="cfg-meta">
+                  <code class="cfg-key">{{ it.key }}</code>
+                  <span class="cfg-desc">{{ it.description }}</span>
+                </div>
+                <el-input
+                  v-if="it.sensitive"
+                  v-model="form[it.key]"
+                  :placeholder="origSensitive[it.key] ? '已设置，修改请重填；留空保持不变' : '未设置'"
+                  type="password"
+                  show-password
+                  class="cfg-input"
+                />
+                <el-input
+                  v-else
+                  v-model="form[it.key]"
+                  :placeholder="'默认：' + it.default"
+                  class="cfg-input"
+                />
+              </div>
+            </el-collapse-item>
+          </el-collapse>
+
+          <div class="cfg-actions">
+            <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
+            <el-button @click="lockDev">锁定开发者配置</el-button>
+          </div>
+        </div>
+      </template>
     </el-card>
 
     <!-- 钉钉单点登录(SSO)配置 -->
@@ -98,46 +172,16 @@
       </div>
     </el-card>
 
-    <!-- DWS 配置项 -->
-    <el-card class="blk" shadow="never">
-      <template #header>
-        <span class="blk-h">钉钉DWS 配置</span>
-      </template>
-
-      <el-collapse v-model="activeGroups" accordion>
-        <el-collapse-item
-          v-for="g in grouped"
-          :key="g.cat"
-          :title="catLabel(g.cat)"
-          :name="g.cat"
-        >
-          <div v-for="it in g.items" :key="it.key" class="cfg-row">
-            <div class="cfg-meta">
-              <code class="cfg-key">{{ it.key }}</code>
-              <span class="cfg-desc">{{ it.description }}</span>
-            </div>
-            <el-input
-              v-if="it.sensitive"
-              v-model="form[it.key]"
-              :placeholder="origSensitive[it.key] ? '已设置，修改请重填；留空保持不变' : '未设置'"
-              type="password"
-              show-password
-              class="cfg-input"
-            />
-            <el-input
-              v-else
-              v-model="form[it.key]"
-              :placeholder="'默认：' + it.default"
-              class="cfg-input"
-            />
-          </div>
-        </el-collapse-item>
-      </el-collapse>
-
-      <div class="cfg-actions">
-        <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
+    <el-dialog v-model="changelogVisible" :title="`${changelogInfo.version} 更新记录`" width="640px">
+      <div class="cl-meta" v-if="changelogInfo.date">发布日期：{{ changelogInfo.date }}</div>
+      <div class="cl-list">
+        <div v-for="(line, i) in changelogInfo.items" :key="i" class="cl-item">{{ line }}</div>
       </div>
-    </el-card>
+      <template #footer>
+        <a v-if="changelogInfo.url" :href="changelogInfo.url" target="_blank" rel="noopener">查看完整发布说明</a>
+        <el-button @click="changelogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -150,6 +194,12 @@ import {
   dingAuthLogout,
   dingConfig,
   saveDingConfig,
+  dingVersion,
+  dingUpgradeCheck,
+  dingUpgrade,
+  dingUpgradeStatus,
+  getDingSendSettings,
+  saveDingSendSettings,
   getSsoConfig,
   saveSsoConfig,
 } from '@shared/api/dashboards.js';
@@ -237,14 +287,153 @@ const items = ref([]);
 const form = reactive({});
 const origSensitive = reactive({});
 const saving = ref(false);
+// 发消息 AI 角标开关：默认与 dws 保持一致（带角标），保存后立即作用于下一次发送。
+const sendSettings = reactive({ aiTag: true });
+const sendSaving = ref(false);
 // 手风琴模式：同时只展开一组，默认全部折叠。
 const activeGroups = ref('');
+
+// 开发者配置解锁：仅前端 UI 状态（localStorage），不写后端；已保存的配置不受锁定影响。
+const DEV_UNLOCK_KEY = 'aeolus-dws-dev-unlocked';
+const DEV_TAPS_REQUIRED = 7;
+const devUnlocked = ref((() => {
+  try { return localStorage.getItem(DEV_UNLOCK_KEY) === '1'; } catch { return false; }
+})());
+const tapCount = ref(0);
+const dwsVersion = ref('');
+const checking = ref(false);
+const upgradeProgress = reactive({ running: false, phase: 'idle', detail: '', percent: 0, targetVersion: null, error: null });
+let upgradePollTimer = null;
+const checkError = ref('');
+const updateInfo = reactive({ needsUpgrade: false, current: '', latest: '' });
+const changelogVisible = ref(false);
+const changelogInfo = reactive({ version: '', date: '', url: '', items: [] });
+let tapTimer = null;
+
+async function loadVersion() {
+  try {
+    const r = await dingVersion();
+    const d = (r && r.data) || r || {};
+    dwsVersion.value = d.version || '';
+  } catch { /* 版本号拿不到不影响功能 */ }
+}
+async function runCheck() {
+  checking.value = true;
+  checkError.value = '';
+  try {
+    const r = await dingUpgradeCheck();
+    if (!r || r.ok === false) throw new Error((r && (r.error || r.message)) || '检查失败');
+    const d = (r && r.data) || r || {};
+    updateInfo.current = d.current_version || '';
+    updateInfo.latest = d.latest_version || '';
+    updateInfo.needsUpgrade = !!d.needs_upgrade;
+    changelogInfo.version = d.latest_version || '';
+    changelogInfo.date = d.release_date || '';
+    changelogInfo.url = d.release_url || '';
+    changelogInfo.items = Array.isArray(d.changelog) ? d.changelog : [];
+    if (updateInfo.current) dwsVersion.value = updateInfo.current;
+  } catch (e) {
+    checkError.value = e.message || '检查失败';
+    updateInfo.needsUpgrade = false;
+    changelogInfo.items = [];
+  } finally { checking.value = false; }
+}
+function applyUpgradeProgress(d) {
+  upgradeProgress.running = !!d?.running;
+  upgradeProgress.phase = d?.phase || 'idle';
+  upgradeProgress.detail = d?.detail || '';
+  upgradeProgress.percent = typeof d?.percent === 'number' ? d.percent : 0;
+  upgradeProgress.targetVersion = d?.targetVersion || null;
+  upgradeProgress.error = d?.error || null;
+}
+function stopUpgradePoll() {
+  if (upgradePollTimer) { clearInterval(upgradePollTimer); upgradePollTimer = null; }
+}
+async function pollUpgradeStatus() {
+  try {
+    const r = await dingUpgradeStatus();
+    const d = (r && r.data) || r || {};
+    const wasRunning = upgradeProgress.running;
+    applyUpgradeProgress(d);
+    if (!d.running && wasRunning) {
+      stopUpgradePoll();
+      await loadVersion();
+      await runCheck();
+      if (d.phase === 'done') ElMessage.success('dws 已更新');
+      else ElMessage.error(d.error || '升级失败');
+    }
+  } catch { /* 轮询失败下次继续 */ }
+}
+function startUpgradePoll() {
+  stopUpgradePoll();
+  upgradePollTimer = setInterval(pollUpgradeStatus, 1000);
+}
+async function initUpgradeState() {
+  try {
+    const r = await dingUpgradeStatus();
+    const d = (r && r.data) || r || {};
+    applyUpgradeProgress(d);
+    if (d.running) { startUpgradePoll(); return false; }
+  } catch { /* 状态接口不可用则走版本检查 */ }
+  return true;
+}
+async function doUpgrade() {
+  if (checking.value || upgradeProgress.running) return;
+  if (checkError.value) { await runCheck(); return; }
+  if (!updateInfo.needsUpgrade) return;
+  const ok = await app.confirmDialog({
+    title: '更新 dws CLI',
+    message: `当前 ${updateInfo.current || dwsVersion.value}，最新 ${updateInfo.latest}。更新会替换 CLI 与技能包，期间请勿执行任务。`,
+    okText: '更新',
+    cancelText: '取消',
+  });
+  if (!ok) return;
+  try {
+    const ur = await dingUpgrade();
+    if (!ur || ur.ok === false) throw new Error((ur && (ur.error || ur.message)) || '启动升级失败');
+    applyUpgradeProgress((ur && ur.data) || ur);
+    if (upgradeProgress.running) startUpgradePoll();
+    else ElMessage.success('dws 已更新');
+  } catch (e) { ElMessage.error(e.message || '启动升级失败'); }
+}
+function tapVersion() {
+  if (devUnlocked.value) return;
+  tapCount.value += 1;
+  if (tapTimer) clearTimeout(tapTimer);
+  tapTimer = setTimeout(() => { tapCount.value = 0; }, 5000);
+  if (tapCount.value < DEV_TAPS_REQUIRED) return;
+  devUnlocked.value = true;
+  try { localStorage.setItem(DEV_UNLOCK_KEY, '1'); } catch { /* ignore */ }
+  if (tapTimer) clearTimeout(tapTimer);
+  tapCount.value = 0;
+}
+function lockDev() {
+  devUnlocked.value = false;
+  tapCount.value = 0;
+  if (tapTimer) clearTimeout(tapTimer);
+  try { localStorage.removeItem(DEV_UNLOCK_KEY); } catch { /* ignore */ }
+}
 
 const categories = computed(() => [...new Set(items.value.map((i) => i.category))]);
 const grouped = computed(() =>
   categories.value.map((cat) => ({ cat, items: items.value.filter((i) => i.category === cat) })),
 );
 function catLabel(c) { return CAT_LABELS[c] || c; }
+
+const UPGRADE_PHASE_LABELS = {
+  checking: '检查中', backup: '备份中', download: '下载中', verify: '校验中',
+  extract: '解压中', install: '安装中', done: '已完成', error: '更新失败',
+};
+const upgradeButtonText = computed(() => {
+  if (upgradeProgress.running) {
+    const label = UPGRADE_PHASE_LABELS[upgradeProgress.phase] || '更新中';
+    return upgradeProgress.phase === 'download' && upgradeProgress.percent >= 0
+      ? `${label} ${upgradeProgress.percent}%` : label;
+  }
+  if (checking.value) return '检查中';
+  if (checkError.value) return '检查失败';
+  return updateInfo.needsUpgrade ? '更新' : '已是最新';
+});
 
 async function loadConfig() {
   try {
@@ -277,8 +466,36 @@ async function save() {
   finally { saving.value = false; }
 }
 
-onMounted(() => { dingRefresh(); loadConfig(); loadSso(); });
-onUnmounted(stopDingPoll);
+async function loadSendSettings() {
+  try {
+    const r = await getDingSendSettings();
+    const d = (r && r.data) || r || {};
+    sendSettings.aiTag = d.aiTag !== false;
+  } catch (e) { ElMessage.error(e.message || '加载发消息设置失败'); }
+}
+async function saveAiTag(v) {
+  const next = !!v;
+  sendSaving.value = true;
+  try {
+    const r = await saveDingSendSettings({ aiTag: next });
+    if (r && r.ok) {
+      await loadSendSettings();
+      ElMessage.success(next ? '已开启 AI 角标' : '已关闭 AI 角标');
+    } else {
+      sendSettings.aiTag = !next;
+      ElMessage.error((r && (r.error || r.message)) || '保存失败');
+    }
+  } catch (e) {
+    sendSettings.aiTag = !next;
+    ElMessage.error(e.message || '保存失败');
+  } finally { sendSaving.value = false; }
+}
+
+onMounted(() => {
+  dingRefresh(); loadConfig(); loadVersion(); loadSendSettings(); loadSso();
+  void initUpgradeState().then((ok) => { if (ok) void runCheck(); });
+});
+onUnmounted(() => { stopDingPoll(); stopUpgradePoll(); });
 
 /* ---------------- 钉钉 SSO 配置 ---------------- */
 const sso = reactive({
@@ -332,6 +549,13 @@ async function saveSso() {
 .blk-h { font-size: var(--el-font-size-medium); font-weight: var(--fw-semibold); }
 .blk-sub { margin-left: var(--sp-12); font-size: var(--el-font-size-extra-small); color: var(--el-text-color-secondary); }
 .blk-switch { margin-left: var(--sp-12); vertical-align: middle; }
+.blk-section { margin-top: var(--sp-16); padding-top: var(--sp-16); border-top: 1px solid #ebeef5; }
+.sec-h { margin-bottom: var(--sp-8); font-weight: var(--fw-semibold); font-size: var(--el-font-size-medium); }
+.ok-ver { flex: none; font-size: var(--el-font-size-extra-small); color: var(--el-text-color-secondary); background: rgba(255,255,255,.7); padding: 1px 6px; border-radius: 4px; cursor: pointer; user-select: none; }
+.cl-meta { margin-bottom: var(--sp-12); font-size: var(--el-font-size-extra-small); color: var(--el-text-color-secondary); }
+.cl-list { max-height: 420px; overflow-y: auto; }
+.cl-item { padding: var(--sp-8) 0; border-bottom: 1px dashed #ebeef5; font-size: var(--el-font-size-small); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.cl-item:last-child { border-bottom: none; }
 .blk-alert { margin-bottom: var(--sp-16); }
 .muted { color: var(--el-text-color-secondary); }
 .sso-form { max-width: 720px; margin-top: var(--sp-8); }
@@ -351,6 +575,9 @@ async function saveSso() {
 .ding-ok-head { display: flex; align-items: center; gap: var(--sp-12); margin-bottom: var(--sp-12); }
 .ok-dot { width: 9px; height: 9px; border-radius: 50%; background: #67c23a; box-shadow: 0 0 0 3px rgba(103,194,58,.18); flex: none; }
 .ok-title { font-weight: 600; font-size: var(--el-font-size-medium); flex: 1; }
+.up-progress { display: flex; align-items: center; gap: var(--sp-12); margin-bottom: var(--sp-12); }
+.up-progress .el-progress { flex: 1; }
+.up-detail { flex: none; font-size: var(--el-font-size-extra-small); color: var(--el-text-color-secondary); }
 .ding-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-10) var(--sp-24); }
 .di { display: flex; align-items: baseline; gap: var(--sp-10); min-width: 0; }
 .di-wide { grid-column: 1 / -1; }

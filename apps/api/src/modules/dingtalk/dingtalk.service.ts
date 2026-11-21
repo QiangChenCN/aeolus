@@ -81,6 +81,26 @@ export interface DwsOpts {
   timeout?: number;
   dryRun?: boolean;
   yes?: boolean;
+  /** 显式 false 时给发送消息命令加 --ai-tag=false（去掉「通过AI发送」角标）。 */
+  aiTag?: boolean;
+}
+
+/** 发消息相关设置（WebUI 维护，落盘 runtime）。 */
+export interface DingSendSettings {
+  aiTag: boolean;
+}
+
+/** dws 升级任务的详细进度（内存态，前端轮询）。 */
+export interface UpgradeProgress {
+  running: boolean;
+  phase: 'idle' | 'checking' | 'backup' | 'download' | 'verify' | 'extract' | 'install' | 'done' | 'error';
+  detail: string;
+  /** 0-100；-1 表示拿不到总量、只能看阶段文案。 */
+  percent: number;
+  targetVersion: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
 }
 
 export interface DingGroup {
@@ -93,7 +113,12 @@ export interface DingGroup {
 export class DingtalkService {
   private readonly logger = new Logger(DingtalkService.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly config: ConfigService) {
+    const root = path.resolve(
+      this.config.get<string>('PROJECT_ROOT') || path.resolve(process.cwd(), '..'),
+    );
+    this.sendSettingsFile = path.join(root, 'apps', 'api', 'runtime', 'dingtalk_send_settings.json');
+  }
 
   // ---------------------------------------------------------- 命令解析
   /**
@@ -116,8 +141,17 @@ export class DingtalkService {
   private readonly configEnvPath = path.join(os.homedir(), '.dws', 'dws.env');
   private configCache: Record<string, string> | null = null;
 
+  /** 发消息设置（AI 角标开关）落盘路径，运行时产物，gitignored。 */
+  private readonly sendSettingsFile: string;
+
   private loginChild?: ChildProcess;
   private loginInfo?: { userCode: string; verificationUri: string; expiresInSeconds: number };
+  /** 升级任务进度（进程内状态，前端轮询；重复点击直接返回当前进度）。 */
+  private upgradeProgress: UpgradeProgress = {
+    running: false, phase: 'idle', detail: '', percent: 0,
+    targetVersion: null, startedAt: null, finishedAt: null, error: null,
+  };
+  private upgradePoll?: ReturnType<typeof setInterval>;
 
   /**
    * 发起钉钉设备流登录（OAuth Device Flow，适合无头/远程环境）。
@@ -281,6 +315,7 @@ export class DingtalkService {
     if (timeout > 0) full.push('--timeout', String(timeout));
     if (opts.yes) full.push('--yes');
     if (opts.dryRun) full.push('--dry-run');
+    if (opts.aiTag === false) full.push('--ai-tag=false');
     full.push('--format', 'json');
 
     const cands = this.candidates();
@@ -579,7 +614,7 @@ export class DingtalkService {
     const args = ['chat', 'message', 'send', '--group', group, '--text', p.text];
     const ids = (p.atOpenDingTalkIds || []).filter(Boolean);
     if (ids.length) args.push('--at-open-dingtalk-ids', ids.join(','));
-    return this.run(args, { yes: true, dryRun: p.dryRun });
+    return this.run(args, { yes: true, dryRun: p.dryRun, aiTag: this.aiTagEnabled() });
   }
 
   /** 发文件消息（图片会以附件形式发送，不渲染成内联图）。 */
@@ -589,7 +624,7 @@ export class DingtalkService {
     const group = await this.resolveTarget(p.group);
     return this.run(
       ['chat', 'message', 'send', '--group', group, '--msg-type', 'file', '--file', p.file],
-      { yes: true, dryRun: p.dryRun },
+      { yes: true, dryRun: p.dryRun, aiTag: this.aiTagEnabled() },
     );
   }
 
@@ -607,7 +642,7 @@ export class DingtalkService {
     if (!p.text) throw new Error('缺少 text');
     const args = ['chat', 'message', 'send', '--open-dingtalk-id', p.openDingTalkId, '--content', p.text];
     if (p.title) args.push('--title', p.title);
-    return this.run(args, { yes: true, dryRun: p.dryRun });
+    return this.run(args, { yes: true, dryRun: p.dryRun, aiTag: this.aiTagEnabled() });
   }
 
   // ---------------------------------------------------------- dws CLI 配置（WebUI 设置）
@@ -650,6 +685,170 @@ export class DingtalkService {
     return { items };
   }
 
+  /** 读取 dws CLI 版本（供前端展示与开发者配置解锁入口）。 */
+  async getDwsVersion(): Promise<{ version: string; edition?: string }> {
+    const j = await this.run(['version']);
+    return {
+      version: String(j?.version || ''),
+      edition: j?.edition ? String(j.edition) : undefined,
+    };
+  }
+
+  /** 检查 dws CLI 是否有新版本（只查询，不下载/修改）。 */
+  async checkDwsUpdate(): Promise<Record<string, any>> {
+    return this.run(['upgrade', '--check'], { timeout: 60 });
+  }
+
+  /** 当前升级任务进度快照。 */
+  getUpgradeProgress(): UpgradeProgress {
+    return { ...this.upgradeProgress };
+  }
+
+  /** 启动异步升级，立即返回进度快照；重复调用不会并发启动第二个升级。 */
+  startUpgrade(): UpgradeProgress {
+    if (this.upgradeProgress.running) return this.getUpgradeProgress();
+    this.upgradeProgress = {
+      running: true, phase: 'checking', detail: '检查更新', percent: 0,
+      targetVersion: null, startedAt: new Date().toISOString(), finishedAt: null, error: null,
+    };
+    void this.runUpgradeJob();
+    return this.getUpgradeProgress();
+  }
+
+  /** 后台执行升级，持续更新阶段与下载百分比。 */
+  private async runUpgradeJob(): Promise<void> {
+    let sizes: Record<string, number> = {};
+    try {
+      const check = await this.checkDwsUpdate();
+      this.upgradeProgress.targetVersion = String(check?.latest_version || '');
+      sizes = await this.fetchUpgradeAssetSizes();
+    } catch (e) {
+      this.logger.warn('升级前检查失败，继续升级（下载百分比可能不可用）: ' + (e as Error).message);
+    }
+
+    const args = ['upgrade', '-y', '--timeout', '300', '--format', 'json'];
+    const cmd = this.candidates()[0];
+    let out = '';
+    let err = '';
+    let code = -1;
+    try {
+      const child = spawn(cmd[0], cmd.slice(1).concat(args), {
+        windowsHide: true,
+        env: this.dwsEnv(),
+      });
+      const onData = (d: Buffer | string) => {
+        const s = String(d);
+        out += s;
+        this.consumeUpgradeOutput(out);
+      };
+      child.stdout?.on('data', onData);
+      child.stderr?.on('data', onData);
+      this.upgradePoll = setInterval(() => this.updateDownloadProgress(sizes), 1000);
+      code = await new Promise<number>((resolve) => {
+        child.on('error', () => resolve(-1));
+        child.on('close', (c) => resolve(c ?? -1));
+      });
+    } catch (e) {
+      err = (e as Error).message;
+    } finally {
+      if (this.upgradePoll) {
+        clearInterval(this.upgradePoll);
+        this.upgradePoll = undefined;
+      }
+    }
+
+    if (code === 0) {
+      this.upgradeProgress.phase = 'done';
+      this.upgradeProgress.detail = '升级完成';
+      this.upgradeProgress.percent = 100;
+    } else {
+      this.upgradeProgress.phase = 'error';
+      this.upgradeProgress.detail = '升级失败';
+      this.upgradeProgress.error = this.humanize(out, err, code);
+    }
+    this.upgradeProgress.running = false;
+    this.upgradeProgress.finishedAt = new Date().toISOString();
+  }
+
+  /** 从 dws 输出识别当前阶段（基于累积文本，避免分块截断）。 */
+  private consumeUpgradeOutput(all: string): void {
+    const p = this.upgradeProgress;
+    if (all.includes('替换二进制') || all.includes('安装技能包')) {
+      p.phase = 'install'; p.detail = '安装中'; p.percent = 99;
+    } else if (all.includes('解压并验证')) {
+      p.phase = 'extract'; p.detail = '解压并验证'; p.percent = 97;
+    } else if (all.includes('校验 SHA256')) {
+      p.phase = 'verify'; p.detail = '校验 SHA256'; p.percent = 95;
+    } else if (all.includes('下载 dws-linux-amd64.tar.gz') || all.includes('下载 dws-skills.zip')) {
+      p.phase = 'download'; p.percent = Math.max(p.percent, 5);
+    } else if (all.includes('备份当前版本')) {
+      p.phase = 'backup'; p.detail = '备份当前版本'; p.percent = Math.max(p.percent, 2);
+    } else if (all.includes('检查更新')) {
+      p.phase = 'checking'; p.detail = '检查更新'; p.percent = Math.max(p.percent, 1);
+    }
+  }
+
+  /** 按缓存目录里已下载字节数 / GitHub 发布资源总大小计算百分比。 */
+  private updateDownloadProgress(sizes: Record<string, number>): void {
+    const p = this.upgradeProgress;
+    if (!p.running || (p.phase !== 'download' && p.phase !== 'checking' && p.phase !== 'backup')) return;
+    const root = path.join(os.homedir(), '.dws', 'cache', 'downloads');
+    try {
+      const dirs = fs.readdirSync(root, { withFileTypes: true })
+        .filter((e) => e.isDirectory() && e.name.startsWith('upgrade-'))
+        .map((e) => {
+          const full = path.join(root, e.name);
+          return { full, mtime: fs.statSync(full).mtimeMs };
+        })
+        .sort((a, b) => b.mtime - a.mtime);
+      const dir = dirs[0]?.full;
+      if (!dir) return;
+      const names = ['dws-linux-amd64.tar.gz', 'dws-skills.zip'];
+      let downloaded = 0;
+      for (const name of names) {
+        const f = path.join(dir, name);
+        if (fs.existsSync(f)) downloaded += fs.statSync(f).size;
+      }
+      const total = names.reduce((s, n) => s + (sizes[n] || 0), 0);
+      const mb = (n: number) => (n / 1048576).toFixed(1);
+      p.phase = 'download';
+      if (total > 0) {
+        const pct = Math.min(94, Math.max(5, Math.floor((downloaded / total) * 100)));
+        p.percent = pct;
+        p.detail = `下载中 ${pct}% (${mb(downloaded)}/${mb(total)} MB)`;
+      } else {
+        p.percent = -1;
+        p.detail = `下载中 ${mb(downloaded)} MB`;
+      }
+    } catch {
+      /* 缓存目录暂未创建时忽略 */
+    }
+  }
+
+  /** 从 GitHub Release API 取升级资源大小，用于算下载百分比；失败则只显示阶段。 */
+  private async fetchUpgradeAssetSizes(): Promise<Record<string, number>> {
+    try {
+      const r = await fetch(
+        'https://api.github.com/repos/DingTalk-Real-AI/dingtalk-workspace-cli/releases/latest',
+        {
+          signal: AbortSignal.timeout(15000),
+          headers: { 'User-Agent': 'aeolusdata-dws-upgrade', Accept: 'application/vnd.github+json' },
+        },
+      );
+      if (!r.ok) return {};
+      const j: any = await r.json();
+      const out: Record<string, number> = {};
+      for (const a of j?.assets || []) {
+        if (a?.name === 'dws-linux-amd64.tar.gz' || a?.name === 'dws-skills.zip') {
+          out[a.name] = Number(a.size) || 0;
+        }
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  }
+
   /** 保存 dws 配置覆盖：patch 中空字符串表示删除（恢复 dws 内置默认）。 */
   async saveDingConfig(patch: Record<string, string>): Promise<{ ok: boolean }> {
     const map = { ...this.loadConfigEnv() };
@@ -667,6 +866,49 @@ export class DingtalkService {
       throw new Error('写入 dws 配置失败: ' + (e as Error).message);
     }
     return { ok: true };
+  }
+
+  /** 读取发消息设置；未落盘过时沿用 dws 默认：带 AI 角标。 */
+  async getSendSettings(): Promise<DingSendSettings> {
+    try {
+      if (fs.existsSync(this.sendSettingsFile)) {
+        const raw = JSON.parse(fs.readFileSync(this.sendSettingsFile, 'utf-8')) as Partial<DingSendSettings>;
+        return { aiTag: typeof raw?.aiTag === 'boolean' ? raw.aiTag : true };
+      }
+    } catch (e) {
+      this.logger.warn('读取发消息设置失败，沿用默认值: ' + (e as Error).message);
+    }
+    return { aiTag: true };
+  }
+
+  /** 保存发消息设置；只改显式传入的布尔项，立即生效（每次发消息都重读文件）。 */
+  async saveSendSettings(patch: { aiTag?: boolean }): Promise<{ ok: boolean; settings: DingSendSettings }> {
+    const current = await this.getSendSettings();
+    if (typeof patch?.aiTag === 'boolean') current.aiTag = patch.aiTag;
+    try {
+      const dir = path.dirname(this.sendSettingsFile);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const tmp = `${this.sendSettingsFile}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(current, null, 2) + '\n', { mode: 0o600 });
+      fs.renameSync(tmp, this.sendSettingsFile);
+    } catch (e) {
+      throw new Error('写入发消息设置失败: ' + (e as Error).message);
+    }
+    return { ok: true, settings: current };
+  }
+
+  /** 发消息时读取当前 AI 角标开关。 */
+  private aiTagEnabled(): boolean {
+    // 同步读取，保证保存后下一次发送立即生效，不依赖缓存或重启。
+    try {
+      if (fs.existsSync(this.sendSettingsFile)) {
+        const raw = JSON.parse(fs.readFileSync(this.sendSettingsFile, 'utf-8')) as Partial<DingSendSettings>;
+        return typeof raw?.aiTag === 'boolean' ? raw.aiTag : true;
+      }
+    } catch (e) {
+      this.logger.warn('读取 AI 角标设置失败，沿用默认值: ' + (e as Error).message);
+    }
+    return true;
   }
 
   // ---------------------------------------------------------- 在线表格

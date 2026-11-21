@@ -84,9 +84,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('已登录可进入系统设置钉钉集成页并渲染 SSO 配置表单', async ({ page }) => {
-  await page.goto('/settings/dingtalk');
-  // 守卫放行：停留在钉钉集成页而非跳登录
-  await expect(page).toHaveURL(/\/settings\/dingtalk$/);
+  await page.goto('/settings/integrations');
+  // 守卫放行：停留在三方集成页而非跳登录
+  await expect(page).toHaveURL(/\/settings\/integrations$/);
 
   // 收敛到页面容器 .dt，避免与侧边栏同名菜单项触发严格模式冲突
   const dt = page.locator('.dt');
@@ -162,5 +162,8 @@ test('旧机器人地址统一重定向到一级模块', async ({ page }) => {
   await expect(page).toHaveURL(/\/bot\/credentials$/);
 
   await page.goto('/bot/dingtalk');
-  await expect(page).toHaveURL(/\/settings\/dingtalk$/);
+  await expect(page).toHaveURL(/\/settings\/integrations$/);
+
+  await page.goto('/settings/dingtalk');
+  await expect(page).toHaveURL(/\/settings\/integrations$/);
 });

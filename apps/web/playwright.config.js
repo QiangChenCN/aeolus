@@ -24,7 +24,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    // 先构建再预览；preview 为 SPA 形态，深层路由（如 /settings/dingtalk）自动回退 index.html。
+    // 先构建再预览；preview 为 SPA 形态，深层路由（如 /settings/integrations）自动回退 index.html。
     command: 'npm run build && npm run preview',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,

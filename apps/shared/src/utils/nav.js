@@ -29,7 +29,7 @@ export function navTo(it) {
     case 'rbac': return '/settings/rbac';
     case 'profile': return '/settings/profile';
     case 'syscfg': return '/settings';
-    case 'sys-dingtalk': return '/settings/dingtalk';
+    case 'sys-integrations': return '/settings/integrations';
     case 'sys-credentials': return '/settings/credentials';
     case 'sys-sources': return '/settings/sources';
     case 'sys-managers': return '/hr/org';
@@ -67,9 +67,9 @@ export function navIsActive(it) {
     return k === 'assess' || k === 'assessService' || k === 'assessStandard' || k === 'assessPeriod' || k === 'assessWeather';
   }
   // 三方集成（侧栏叶子项，位于系统设置下，内容标题仍为钉钉集成）：授权 / SSO / DWS 单页命中即高亮
-  if (it.kind === 'sys-dingtalk') {
+  if (it.kind === 'sys-integrations') {
     const r = useRoute();
-    return (r.meta && r.meta.kind) === 'sys-dingtalk';
+    return (r.meta && r.meta.kind) === 'sys-integrations';
   }
   // 外部服务凭证（侧栏叶子项）：其下任一子页（风神 / MinIO）命中即高亮
   if (it.kind === 'sys-credentials') {

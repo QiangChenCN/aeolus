@@ -76,12 +76,13 @@ const routes = [
       { path: 'operation-log', name: 'operation-log', component: OperationLogView, meta: { title: '操作日志', kind: 'operationLog', id: '', perm: 'admin:roles' } },
       { path: 'groups', name: 'groups', component: GroupsView, meta: { title: '群组' } },
       { path: 'settings', name: 'system-settings', component: SystemSettingsView, meta: { title: '系统设置', kind: 'syscfg' } },
-      // 钉钉集成：留在系统设置，承载授权 / SSO / DWS（平台侧配置，与机器人实例配置解耦）。
+      // 三方集成：留在系统设置，承载钉钉授权 / SSO / DWS（平台侧配置，与机器人实例配置解耦）。
+      // URL 用 integrations（复数），便于后续接入企微/飞书等第三方而不必再改路由。
       {
-        path: 'settings/dingtalk',
-        name: 'dingtalk-settings',
+        path: 'settings/integrations',
+        name: 'integrations-settings',
         component: DingtalkSettingsView,
-        meta: { title: '三方集成', kind: 'sys-dingtalk', perm: 'admin:bot' },
+        meta: { title: '三方集成', kind: 'sys-integrations', perm: 'admin:bot' },
       },
       // 机器人：一级分组，含全局配置（置首）、凭证管理与实例管理；差异化渠道配置仍在各自系统设置页。
       // 纯分组路由（无 component / 无 meta.tabs），子页直接渲染，唯一入口在侧栏二级菜单。
@@ -116,13 +117,15 @@ const routes = [
       // 旧路径深链兼容：机器人相关地址统一指向新一级模块
       { path: 'settings/aeolus', redirect: { name: 'credentials-aeolus' } },
       { path: 'settings/minio', redirect: { name: 'credentials-minio' } },
-      { path: 'settings/dingtalk/auth', redirect: { name: 'dingtalk-settings' } },
+      // 旧钉钉路径保留重定向：收藏夹/历史链接仍可用，统一落到新的三方集成地址。
+      { path: 'settings/dingtalk', redirect: { name: 'integrations-settings' } },
+      { path: 'settings/dingtalk/auth', redirect: { name: 'integrations-settings' } },
       { path: 'settings/dingtalk/robot', redirect: { name: 'bot-credentials' } },
       { path: 'settings/dingtalk/credentials', redirect: { name: 'bot-credentials' } },
       { path: 'settings/dingtalk/global', redirect: { name: 'bot-instances' } },
       { path: 'settings/dingtalk/instance', redirect: { name: 'bot-instances' } },
       { path: 'settings/dingtalk/instances', redirect: { name: 'bot-instances' } },
-      { path: 'bot/dingtalk', redirect: { name: 'dingtalk-settings' } },
+      { path: 'bot/dingtalk', redirect: { name: 'integrations-settings' } },
       { path: 'bot/global', redirect: { name: 'bot-instances' } },
       { path: 'bot/robot', redirect: { name: 'bot-credentials' } },
       { path: 'bot/instance', redirect: { name: 'bot-instances' } },
