@@ -45,8 +45,14 @@ export function navTo(it) {
 
 // route 可由调用方透传：watch 回调里没有 active component instance，
 // 直接 useRoute() 会拿到 undefined（读 .meta 即抛错）。渲染期调用不传，仍走 useRoute()。
+// 兜底返回空对象：即使将来有新调用点漏传，也只是不高亮，不会让整个侧栏 setup 崩溃。
+function resolveRoute(route) {
+  if (route) return route;
+  return useRoute() || { meta: {}, params: {} };
+}
+
 export function navMatch(it, route) {
-  const r = route || useRoute();
+  const r = resolveRoute(route);
   const kind = r.meta && r.meta.kind;
   const id = r.params.groupId != null ? r.params.groupId : (r.meta && r.meta.id);
   return it.kind === kind && (it.id || '') === (id != null ? id : '');
@@ -58,38 +64,38 @@ export function navIsActive(it, route) {
   }
   // 权限管理（侧栏叶子项）：其下任一 rbac-* 子页命中即高亮
   if (it.kind === 'rbac') {
-    const r = route || useRoute();
+    const r = resolveRoute(route);
     const k = r.meta && r.meta.kind;
     return typeof k === 'string' && k.startsWith('rbac');
   }
   // 考核设置（侧栏叶子项，位于数据看板下）：其下任一 assess* 子页命中即高亮
   if (it.kind === 'assess') {
-    const r = route || useRoute();
+    const r = resolveRoute(route);
     const k = r.meta && r.meta.kind;
     return k === 'assess' || k === 'assessService' || k === 'assessStandard' || k === 'assessPeriod' || k === 'assessWeather';
   }
   // 三方集成（侧栏叶子项，位于系统设置下，内容标题仍为钉钉集成）：授权 / SSO / DWS 单页命中即高亮
   if (it.kind === 'sys-integrations') {
-    const r = route || useRoute();
+    const r = resolveRoute(route);
     return (r.meta && r.meta.kind) === 'sys-integrations';
   }
   // 外部服务凭证（侧栏叶子项）：其下任一子页（风神 / MinIO）命中即高亮
   if (it.kind === 'sys-credentials') {
-    const r = route || useRoute();
+    const r = resolveRoute(route);
     const k = r.meta && r.meta.kind;
     return k === 'sys-credentials' || k === 'sys-aeolus' || k === 'sys-minio';
   }
   // 个人中心（侧栏叶子项，位于系统设置下）：profile 单页命中即高亮
   if (it.kind === 'profile') {
-    const r = route || useRoute();
+    const r = resolveRoute(route);
     const k = r.meta && r.meta.kind;
     return k === 'profile';
   }
   return navMatch(it, route);
 }
 
-export function navParentOn(it) {
-  return it.children.some((c) => navIsActive(c));
+export function navParentOn(it, route) {
+  return it.children.some((c) => navIsActive(c, route));
 }
 
 export function navBusy(it) {

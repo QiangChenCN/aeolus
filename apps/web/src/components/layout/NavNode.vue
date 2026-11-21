@@ -1,6 +1,6 @@
 <template>
   <template v-if="node.type === 'leaf'">
-    <RouterLink :to="navTo(node)" class="nv" :class="{ on: navIsActive(node) }" :style="indent" @click.stop>
+    <RouterLink :to="navTo(node)" class="nv" :class="{ on: navIsActive(node, route) }" :style="indent" @click.stop>
       <el-icon class="ic"><component :is="node.icon" /></el-icon>
       <span class="nm">{{ node.name }}</span>
       <span v-if="node.count != null" class="ct">{{ node.count }}</span>
@@ -9,7 +9,7 @@
   </template>
 
   <template v-else>
-    <div class="nv nv-parent" :class="{ open: isOpen, 'parent-on': navParentOn(node) }" :style="indent" @click="toggle">
+    <div class="nv nv-parent" :class="{ open: isOpen, 'parent-on': navParentOn(node, route) }" :style="indent" @click="toggle">
       <el-icon class="ic"><component :is="node.icon" /></el-icon>
       <span class="nm">{{ node.name }}</span>
       <span v-if="node.count != null" class="ct">{{ node.count }}</span>
@@ -31,6 +31,7 @@
 
 <script setup>
 import { computed } from 'vue';
+import { useRoute } from 'vue-router';
 import { useAppStore } from '@shared/stores/app.js';
 import NavNode from './NavNode.vue';
 import { navTo, navIsActive, navBusy, navParentOn } from '@shared/utils/nav.js';
@@ -42,6 +43,8 @@ const props = defineProps({
 });
 
 const app = useAppStore();
+// setup 阶段取一次 route：模板里若直接调 useRoute() 会因无 active instance 拿到 undefined。
+const route = useRoute();
 const isOpen = computed(() => app.navOpen[props.node.key] === true);
 // 顶层不缩进；每深一层右移 16px（第 1 层 32px，与旧 .nv-sub 对齐）
 const indent = computed(() =>
