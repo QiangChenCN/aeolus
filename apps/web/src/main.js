@@ -14,6 +14,7 @@ import RobotIcon from '@shared/components/icons/RobotIcon.vue';
 import '@shared-ui/styles/element-overrides.css';
 import '@shared-ui/styles/base.css';
 import './styles/responsive.css';
+import { enforceView } from '@shared/utils/view-mode.js';
 
 // 跨应用共享包（workspace 依赖）冒烟：确认 @aeolus/shared 在 web 侧可被解析与打包
 console.log(`[shared] monorepo name = ${AEOLUS_MONOREPO_NAME}`);
@@ -92,6 +93,9 @@ window.addEventListener('unhandledrejection', (e) => {
 
 // 等初始导航完成（含鉴权守卫里的 /auth/me 会话校验）后再挂载 App。
 // 否则 App.vue 会先于守卫完成就挂载并读取登录态，产生「刷新即跳登录页」的竞态。
-router.isReady().then(() => {
-  app.mount('#app');
-});
+// 全局视图守卫：UA/手动偏好判定要落在移动端时，replace 后不再挂载桌面应用。
+if (!enforceView('desktop')) {
+  router.isReady().then(() => {
+    app.mount('#app');
+  });
+}

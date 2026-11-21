@@ -130,6 +130,8 @@ async function bootstrap(): Promise<void> {
       .map((c) => c.trim())
       .find((c) => c.startsWith('wb_view='));
     if (mode === 'wb_view=desktop') return next();
+    // 用户手动选了移动版：即便当前是桌面 UA 也直接去移动端，与前端全局判定同口径。
+    if (mode === 'wb_view=mobile') return res.redirect(302, '/m/');
     const ua = String(req.headers['user-agent'] || '');
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
     if (!isMobile) return next();

@@ -174,10 +174,10 @@ export class AuthController {
       'wb_dtstate=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
       'wb_dtview=; Path=/; SameSite=Lax; Max-Age=0',
     ]);
-    // 失败 / 未绑定回到发起端的登录页：桌面端 /login，移动端 uni-app 的 hash 路由页。
+    // 失败 / 未绑定回到发起端的登录页：桌面端 /login，移动端 uni-app（H5 已改 history 路由）。
     const loginUrl = (kind: string, extra = '') => {
       const q = 'dingtalk=' + encodeURIComponent(kind) + (extra ? '&' + extra : '');
-      return fromMobile ? `/m/#/pages/login/index?${q}` : `/login?${q}`;
+      return fromMobile ? `/m/pages/login/index?${q}` : `/login?${q}`;
     };
     if (!expectedState || !state || state !== expectedState) {
       res.redirect(loginUrl('error', 'msg=' + encodeURIComponent('授权状态校验失败，请重新发起登录')));

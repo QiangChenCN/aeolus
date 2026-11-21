@@ -115,6 +115,7 @@ import { onLoad } from '@dcloudio/uni-app';
 import { useToast } from 'wot-design-uni';
 import { useAuthStore } from '@shared/stores/auth.js';
 import { useDingtalkLogin } from '@shared/composables/useDingtalkLogin.js';
+import { setManualView, targetPath } from '@shared/utils/view-mode.js';
 
 const auth = useAuthStore();
 
@@ -230,9 +231,8 @@ function toDesktop() {
     toast.show('请在浏览器中打开以切换桌面版');
     return;
   }
-  const oneYear = 365 * 24 * 60 * 60;
-  document.cookie = `wb_view=desktop; path=/; max-age=${oneYear}; SameSite=Lax`;
-  window.location.href = '/';
+  setManualView('desktop');
+  window.location.replace(targetPath('mobile', window.location.pathname, window.location.search));
 }
 </script>
 

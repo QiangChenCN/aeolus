@@ -43,6 +43,16 @@
         </view>
       </view>
 
+      <view class="sec-title">视图</view>
+      <view class="group">
+        <view class="cell" @click="toDesktop">
+          <view class="c-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8 20h8M12 16.5V20" stroke-linecap="round"/></svg></view>
+          <text class="c-label">切换桌面版</text>
+          <text class="c-value">当前页</text>
+          <svg class="c-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m9 18 6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </view>
+      </view>
+
       <view class="sec-title">关于</view>
       <view class="group">
         <view class="cell" @click="toast('帮助中心（演示）')">
@@ -87,6 +97,7 @@ import { computed, ref } from 'vue';
 import { useToast } from 'wot-design-uni';
 import { useAuthStore } from '@shared/stores/auth.js';
 import { useTabStateStore } from '../../stores/tab-state.js';
+import { setManualView, targetPath } from '@shared/utils/view-mode.js';
 import AppTabBar from '../../components/AppTabBar.vue';
 import AuthGate from '../../components/AuthGate.vue';
 
@@ -96,6 +107,15 @@ const scrollTop = ref(tabState.getScroll('me'));
 function onScroll(e) { tabState.setScroll('me', e.detail.scrollTop); }
 const toastApi = useToast();
 function toast(msg) { toastApi.show(msg); }
+
+function toDesktop() {
+  if (typeof window === 'undefined') {
+    toast('请在浏览器中打开以切换桌面版');
+    return;
+  }
+  setManualView('desktop');
+  window.location.replace(targetPath('mobile', window.location.pathname, window.location.search));
+}
 
 const displayName = computed(() => auth.name || auth.user || '用户');
 const avatarChar = computed(() => displayName.value ? String(displayName.value).charAt(0).toUpperCase() : 'A');

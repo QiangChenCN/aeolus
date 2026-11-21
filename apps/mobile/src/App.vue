@@ -3,9 +3,14 @@ import { watch } from 'vue';
 import { setLoginRedirector, useAuthStore } from '@shared/stores/auth.js';
 import { setUnauthorizedHandler } from '@shared/api/request.js';
 import { useTaskCenterStore } from './stores/task-center.js';
+import { enforceView } from '@shared/utils/view-mode.js';
 
 export default {
   onLaunch() {
+    // H5 全局视图守卫：小程序/App 无 window，enforceView 直接返回 false。
+    // UA 或手动偏好判到桌面端时 replace 到对应桌面路由，后续初始化不再执行。
+    if (enforceView('mobile')) return;
+
     const auth = useAuthStore();
     const taskCenter = useTaskCenterStore();
 

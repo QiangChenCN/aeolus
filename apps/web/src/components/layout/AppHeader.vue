@@ -12,7 +12,7 @@
     <StatusCapsule label="服务" :dot="connDot" :text="connText" :title="connTitle" />
     <StatusCapsule label="Cookie" :dot="cookieDot" :text="cookieText" :title="cookieTitle" />
     <StatusCapsule label="Quark" :dot="quarkDot" :text="quarkText" :title="quarkTitle" />
-    <a class="hd-mobile" href="/m/" title="前往移动版">移动版</a>
+    <a class="hd-mobile" href="/m/" @click.prevent="toMobile" title="前往移动版">移动版</a>
     <UserChip />
   </div>
 </template>
@@ -23,8 +23,15 @@ import StatusCapsule from '@shared/components/common/StatusCapsule.vue';
 import UserChip from '@shared/components/common/UserChip.vue';
 import { useAppStore } from '@shared/stores/app.js';
 import { useBreakpoint } from '@shared/composables/useBreakpoint.js';
+import { setManualView, targetPath } from '@shared/utils/view-mode.js';
 
 defineEmits(['toggle-nav']);
+
+// 手动切到移动版：记住偏好（若与 UA 一致则不记），并跳到当前路由对应的移动页面。
+function toMobile() {
+  setManualView('mobile');
+  window.location.replace(targetPath('desktop', window.location.pathname, window.location.search));
+}
 
 const app = useAppStore();
 const { isCompact } = useBreakpoint();

@@ -13,7 +13,8 @@
   },
   "h5": {
     "router": {
-      "base": "/m/"
+      "base": "/m/",
+      "mode": "history"
     },
     "devServer": {
       "port": 5174
