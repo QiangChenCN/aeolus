@@ -43,47 +43,49 @@ export function navTo(it) {
   }
 }
 
-export function navMatch(it) {
-  const route = useRoute();
-  const kind = route.meta && route.meta.kind;
-  const id = route.params.groupId != null ? route.params.groupId : (route.meta && route.meta.id);
+// route 可由调用方透传：watch 回调里没有 active component instance，
+// 直接 useRoute() 会拿到 undefined（读 .meta 即抛错）。渲染期调用不传，仍走 useRoute()。
+export function navMatch(it, route) {
+  const r = route || useRoute();
+  const kind = r.meta && r.meta.kind;
+  const id = r.params.groupId != null ? r.params.groupId : (r.meta && r.meta.id);
   return it.kind === kind && (it.id || '') === (id != null ? id : '');
 }
 
-export function navIsActive(it) {
+export function navIsActive(it, route) {
   if (it.type === 'parent') {
-    return it.children.some((c) => navIsActive(c)) || !!(it.kind && navMatch(it));
+    return it.children.some((c) => navIsActive(c, route)) || !!(it.kind && navMatch(it, route));
   }
   // 权限管理（侧栏叶子项）：其下任一 rbac-* 子页命中即高亮
   if (it.kind === 'rbac') {
-    const r = useRoute();
+    const r = route || useRoute();
     const k = r.meta && r.meta.kind;
     return typeof k === 'string' && k.startsWith('rbac');
   }
   // 考核设置（侧栏叶子项，位于数据看板下）：其下任一 assess* 子页命中即高亮
   if (it.kind === 'assess') {
-    const r = useRoute();
+    const r = route || useRoute();
     const k = r.meta && r.meta.kind;
     return k === 'assess' || k === 'assessService' || k === 'assessStandard' || k === 'assessPeriod' || k === 'assessWeather';
   }
   // 三方集成（侧栏叶子项，位于系统设置下，内容标题仍为钉钉集成）：授权 / SSO / DWS 单页命中即高亮
   if (it.kind === 'sys-integrations') {
-    const r = useRoute();
+    const r = route || useRoute();
     return (r.meta && r.meta.kind) === 'sys-integrations';
   }
   // 外部服务凭证（侧栏叶子项）：其下任一子页（风神 / MinIO）命中即高亮
   if (it.kind === 'sys-credentials') {
-    const r = useRoute();
+    const r = route || useRoute();
     const k = r.meta && r.meta.kind;
     return k === 'sys-credentials' || k === 'sys-aeolus' || k === 'sys-minio';
   }
   // 个人中心（侧栏叶子项，位于系统设置下）：profile 单页命中即高亮
   if (it.kind === 'profile') {
-    const r = useRoute();
+    const r = route || useRoute();
     const k = r.meta && r.meta.kind;
     return k === 'profile';
   }
-  return navMatch(it);
+  return navMatch(it, route);
 }
 
 export function navParentOn(it) {
@@ -103,12 +105,12 @@ export function navBusy(it) {
 }
 
 /** 深链/刷新进入子页时，展开其所有祖先父级（含嵌套）。只展开、不收起。 */
-export function openActiveAncestors(list) {
+export function openActiveAncestors(list, route) {
   const app = useAppStore();
   for (const it of list) {
     if (it.type === 'parent') {
-      if (it.children.some((c) => navIsActive(c))) app.setNavOpen(it.key, true);
-      openActiveAncestors(it.children);
+      if (it.children.some((c) => navIsActive(c, route))) app.setNavOpen(it.key, true);
+      openActiveAncestors(it.children, route);
     }
   }
 }

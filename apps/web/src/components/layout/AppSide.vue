@@ -100,7 +100,7 @@ const navItems = computed(() => {
 const topParentKeys = computed(() => navItems.value.filter((i) => i.type === 'parent').map((i) => i.key));
 
 // 深链/刷新进入子页时自动展开所属父级（含嵌套层级），只展开不收起
-watch(() => route.fullPath, () => openActiveAncestors(navItems.value), { immediate: true });
+watch(() => route.fullPath, () => openActiveAncestors(navItems.value, route), { immediate: true });
 </script>
 
 <style scoped>
