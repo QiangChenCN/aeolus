@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# manage.sh —— Aeolus 本地四服务（含任务 Worker）运维统一入口（开发机用，非 systemd 环境）
+# manage.sh —— Aeolus 本地五服务（含任务 Worker、移动端 H5）运维统一入口（开发机用，非 systemd 环境）
 #
 # 合并了原 start.sh / stop.sh / restart.sh 以及独立看门狗 watchdog.sh：单一入口统管启停与自愈。
 # 看门狗以 `watch` 子命令实现（长驻监控循环），由本脚本在 start 时拉起、stop 时一并停掉。
 #
 # 子命令：
-#   start   [svc...] [--force] [--no-watchdog] 启动（顺序 compute→backend→web；worker 由后端自动拉起，无需此处管；已在运行自动跳过）
-#   stop    [svc...]                          停止（顺序 web→worker→backend→compute；一并停看门狗）
+#   start   [svc...] [--force] [--no-watchdog] 启动（顺序 compute→backend→web→mobile；worker 由后端自动拉起，无需此处管；已在运行自动跳过）
+#   stop    [svc...]                          停止（顺序 mobile→web→worker→backend→compute；一并停看门狗）
 #   restart [svc...] [--watchdog]             逐服务「停→起」，自动恢复看门狗原状态
-#   status                                   仅做健康检查并打印四服务状态（不改服务）
+#   status                                   仅做健康检查并打印五服务状态（不改服务）
 #   watch                                    看门狗监控循环（由 start 自动拉起，勿手动单独跑）
 #
 # 看门狗默认行为：
@@ -17,16 +17,18 @@
 #   · stop 仍会一并停掉看门狗（否则它会在约 60s 内把服务重新拉起来）；
 #   · restart 仍按「原状态」恢复（原本没跑就不自作主张拉起），需强制开则加 --watchdog。
 #
-# svc 可选：compute | backend | worker | web（缺省全部）
+# svc 可选：compute | backend | worker | web | mobile（缺省全部）
 #   例：
-#     bash scripts/manage.sh start                  # 四个都起 + 一并拉起看门狗
-#     bash scripts/manage.sh start --no-watchdog    # 只起四个服务，不自愈监管
+#     bash scripts/manage.sh start                  # 五个都起 + 一并拉起看门狗
+#     bash scripts/manage.sh start --no-watchdog    # 只起五个服务，不自愈监管
 #     bash scripts/manage.sh start backend          # 只起后端（仍会拉起看门狗）
 #     bash scripts/manage.sh stop web                # 只停前端
+#     bash scripts/manage.sh stop mobile             # 只停移动端 H5
 #     bash scripts/manage.sh restart backend         # 只重启后端（前端/计算不受影响）
 #
 # 说明：
-#   · 启动顺序 compute→backend→web（worker 由后端在启动时自动 fork 并看护，manage.sh 不再单独管理，避免双份抢占任务）；
+#   · 启动顺序 compute→backend→web→mobile（worker 由后端在启动时自动 fork 并看护，manage.sh 不再单独管理，避免双份抢占任务）；
+#   · mobile 是 uni-app H5 的 Vite dev server（端口 5174、base /m/），健康检查路径 /m/；
 #   · restart 逐个「停→起」而非整体 stop 再 start，避免后端启动瞬间 8900 未就绪导致的短暂无数据；
 #   · 看门狗在 stop 时会被一并停掉（否则 ~60s 内又把服务拉起），restart 会按原状态恢复。
 
@@ -37,7 +39,8 @@ mkdir -p "$LOGDIR"
 
 CPORT=8900   # Python 计算服务（gunicorn + uvicorn worker）
 BPORT=8787   # NestJS 后端
-WPORT=5173   # 前端 Vite
+WPORT=5173   # 前端 Vite（桌面站）
+MPORT=5174   # 移动端 H5 Vite dev server（uni-app，base /m/）
 WPAT='dist/src/main-worker'    # 任务 Worker（无 HTTP 端口，仅按进程判定存活；放宽以匹配后端 fork 的 .js 子进程）
 FORCE=0      # 全局：start 时是否强制重启已运行的服务
 
@@ -96,17 +99,17 @@ wait_ready() {
   echo "  [fail] $name ${to}s 内未就绪，请查 $LOGDIR"; return 1
 }
 
-# 健康检查：打印四服务（compute/backend/web 看端口 + HTTP，worker 看进程）状态；
+# 健康检查：打印五服务（compute/backend/web/mobile 看端口 + HTTP，worker 看进程）状态；
 # 全部健康返回 0，否则返回 1（供 start/restart 据此置 rc）。
 health_check() {
   local all_ok=0
   echo "=== 服务状态 ==="
-  local items=("compute:$CPORT:port" "backend:$BPORT:port" "web:$WPORT:port" "worker:0:proc")
+  local items=("compute:$CPORT:port:/" "backend:$BPORT:port:/" "web:$WPORT:port:/" "mobile:$MPORT:port:/m/" "worker:0:proc:")
   for item in "${items[@]}"; do
-    IFS=':' read -r name port kind <<< "$item"
+    IFS=':' read -r name port kind path <<< "$item"
     local ok=0
     if [ "$kind" = "port" ]; then
-      if port_listen "$port" && curl -s -o /dev/null -m 5 "http://127.0.0.1:$port/" >/dev/null 2>&1; then ok=1; fi
+      if port_listen "$port" && curl -s -o /dev/null -m 5 "http://127.0.0.1:$port$path" >/dev/null 2>&1; then ok=1; fi
     else
       pgrep -f "$WPAT" >/dev/null 2>&1 && ok=1
     fi
@@ -115,12 +118,13 @@ health_check() {
   return $all_ok
 }
 
-# 判断单个服务是否已健康（compute/backend/web 看端口+HTTP，worker 看进程存活）
+# 判断单个服务是否已健康（compute/backend/web/mobile 看端口+HTTP，worker 看进程存活）
 svc_up() {
   case "$1" in
     compute) port_listen $CPORT && curl -s -o /dev/null -m 5 "http://127.0.0.1:$CPORT/" >/dev/null 2>&1 ;;
     backend) port_listen $BPORT && curl -s -o /dev/null -m 5 "http://127.0.0.1:$BPORT/" >/dev/null 2>&1 ;;
     web)     port_listen $WPORT && curl -s -o /dev/null -m 5 "http://127.0.0.1:$WPORT/" >/dev/null 2>&1 ;;
+    mobile)  port_listen $MPORT && curl -s -o /dev/null -m 5 "http://127.0.0.1:$MPORT/m/" >/dev/null 2>&1 ;;
     worker)  pgrep -f "$WPAT" >/dev/null 2>&1 ;;
     *) return 1 ;;
   esac
@@ -133,6 +137,7 @@ start_svc() {
     backend) start_backend ;;
     worker)  start_worker ;;
     web)     start_web ;;
+    mobile)  start_mobile ;;
   esac
 }
 
@@ -181,7 +186,7 @@ skip_if_running_pat() {
 }
 
 start_compute() {
-  echo "[1/4] Python 计算服务 ($CPORT)"
+  echo "[1/5] Python 计算服务 ($CPORT)"
   skip_if_running "$CPORT" compute && return 0
   if [ ! -x "$ROOT/services/compute/.venv/bin/python" ]; then
     echo "  [fail] 缺少 $ROOT/services/compute/.venv/bin/python（请先建虚拟环境）"; return 1
@@ -192,7 +197,7 @@ start_compute() {
 }
 
 start_backend() {
-  echo "[2/4] 后端 NestJS ($BPORT)"
+  echo "[2/5] 后端 NestJS ($BPORT)"
   skip_if_running "$BPORT" backend && return 0
   if [ ! -f "$ROOT/apps/api/dist/src/main.js" ]; then
     echo "  [fail] 缺少 apps/api/dist/src/main.js —— 请先 pnpm build:api"; return 1
@@ -206,7 +211,7 @@ start_backend() {
 }
 
 start_worker() {
-  echo "[3/4] 任务 Worker (main-worker)"
+  echo "[3/5] 任务 Worker (main-worker)"
   skip_if_running_pat "$WPAT" worker && return 0
   if [ ! -f "$ROOT/apps/api/dist/src/main-worker.js" ]; then
     echo "  [fail] 缺少 apps/api/dist/src/main-worker.js —— 请先 pnpm build:api"; return 1
@@ -223,12 +228,22 @@ start_worker() {
 }
 
 start_web() {
-  echo "[4/4] 前端 Vite ($WPORT)"
+  echo "[4/5] 前端 Vite ($WPORT)"
   skip_if_running "$WPORT" web && return 0
   # pnpm 工作区：用 workspace 命令启动，避免 hoisted 依赖后各 app/node_modules/.bin 缺失
   setsid bash -c "cd $ROOT && exec pnpm --filter aeolus-workbench-web run dev" \
     >> "$LOGDIR/web.log" 2>&1 < /dev/null &
   wait_ready "$WPORT" / web 40
+}
+
+start_mobile() {
+  echo "[5/5] 移动端 H5 Vite ($MPORT, base /m/)"
+  skip_if_running "$MPORT" mobile && return 0
+  # uni-app H5 dev：端口 5174、base /m/ 由 apps/mobile/src/manifest.json 配置。
+  # 与 web 一样用 workspace 命令启动，避免 .bin/uni 缺失；健康检查路径为 /m/。
+  setsid bash -c "cd $ROOT && exec pnpm --filter aeolus-mobile-web run dev" \
+    >> "$LOGDIR/mobile.log" 2>&1 < /dev/null &
+  wait_ready "$MPORT" /m/ mobile 60
 }
 
 start_watchdog() {
@@ -239,6 +254,7 @@ start_watchdog() {
 
 # ---------------- 停止相关 ----------------
 PAT_WEB='vite --port 5173 --strictPort'
+PAT_MOBILE='node_modules/[.]bin/uni'  # 移动端 H5 dev 实际监听 5174 的 uni 进程（精确匹配 .bin/uni，pnpm/sh 父进程随之退出）
 PAT_BACKEND='dist/src/main$'
 PAT_WORKER='dist/src/main-worker'
 PAT_COMPUTE='compute_api[.]main:app'
@@ -266,11 +282,11 @@ cmd_start() {
       --force) FORCE=1 ;;
       --watchdog) WITH_WATCHDOG=1 ;;
       --no-watchdog) WITH_WATCHDOG=0 ;;
-      compute|backend|worker|web) SERVICES+=("$a") ;;
-      *) echo "用法: bash scripts/manage.sh start [compute|backend|worker|web] [--force] [--no-watchdog]"; exit 1 ;;
+      compute|backend|worker|web|mobile) SERVICES+=("$a") ;;
+      *) echo "用法: bash scripts/manage.sh start [compute|backend|worker|web|mobile] [--force] [--no-watchdog]"; exit 1 ;;
     esac
   done
-  [ ${#SERVICES[@]} -eq 0 ] && SERVICES=(compute backend web)
+  [ ${#SERVICES[@]} -eq 0 ] && SERVICES=(compute backend web mobile)
   ensure_pg
   local rc=0
   for s in "${SERVICES[@]}"; do
@@ -284,17 +300,18 @@ cmd_start() {
 
 cmd_stop() {
   local SERVICES=("$@")
-  [ ${#SERVICES[@]} -eq 0 ] && SERVICES=(web worker backend compute)
+  [ ${#SERVICES[@]} -eq 0 ] && SERVICES=(mobile web worker backend compute)
   echo "[watchdog]"; stop_one watchdog "$PAT_WATCHDOG"
   local n=0
   for s in "${SERVICES[@]}"; do
     n=$((n + 1)); echo "[$n/${#SERVICES[@]}]"
     case "$s" in
+      mobile) stop_svc_retry "移动端 H5 Vite (5174)" "$PAT_MOBILE" ;;
       web) stop_svc_retry "前端 Vite (5173)" "$PAT_WEB" ;;
       worker) stop_svc_retry "任务 Worker" "$PAT_WORKER" ;;
       backend) stop_svc_retry "后端 NestJS (8787)" "$PAT_BACKEND" ;;
       compute) stop_svc_retry "Python 计算 (8900)" "$PAT_COMPUTE" ;;
-      *) echo "  未知服务：$s（可选 web|worker|backend|compute）" ;;
+      *) echo "  未知服务：$s（可选 mobile|web|worker|backend|compute）" ;;
     esac
   done
   echo; echo "已停止：${SERVICES[*]}   启动：bash scripts/manage.sh start"
@@ -308,11 +325,11 @@ cmd_restart() {
   for a in "$@"; do
     case "$a" in
       --watchdog) FORCE_WATCHDOG=1 ;;
-      compute|backend|worker|web) SERVICES+=("$a") ;;
-      *) echo "用法: bash scripts/manage.sh restart [compute|backend|worker|web] [--watchdog]"; exit 1 ;;
+      compute|backend|worker|web|mobile) SERVICES+=("$a") ;;
+      *) echo "用法: bash scripts/manage.sh restart [compute|backend|worker|web|mobile] [--watchdog]"; exit 1 ;;
     esac
   done
-  [ ${#SERVICES[@]} -eq 0 ] && SERVICES=(compute backend web)
+  [ ${#SERVICES[@]} -eq 0 ] && SERVICES=(compute backend web mobile)
   ensure_pg
 
   # 先记录并停掉 watchdog，避免重启窗口内它抢先拉起服务
@@ -324,6 +341,7 @@ cmd_restart() {
   for s in "${SERVICES[@]}"; do
     echo "=== 重启 $s ==="
     case "$s" in
+      mobile) stop_svc_retry "移动端 H5 Vite (5174)" "$PAT_MOBILE" || rc=1 ;;
       web) stop_svc_retry "前端 Vite (5173)" "$PAT_WEB" || rc=1 ;;
       worker) stop_svc_retry "任务 Worker" "$PAT_WORKER" || rc=1 ;;
       backend) stop_svc_retry "后端 NestJS (8787)" "$PAT_BACKEND" || rc=1 ;;
@@ -348,8 +366,8 @@ cmd_restart() {
 # 由 cmd_start 通过 `setsid ... manage.sh watch` 拉起为独立后台进程；cmd_stop 会一并停掉它。
 cmd_watch() {
   log(){ echo "$(date '+%F %T') $*" | tee -a "$LOGDIR/watchdog.log"; }
-  local fb=0 fc=0 fw=0 fwk=0
-  log "[watch] started; monitoring $BPORT / $CPORT / $WPORT (RESTART_WEB=$RESTART_WEB)"
+  local fb=0 fc=0 fw=0 fm=0
+  log "[watch] started; monitoring $BPORT / $CPORT / $WPORT / $MPORT (RESTART_WEB=$RESTART_WEB)"
   while true; do
     if port_listen $BPORT && probe_backend_deep; then fb=0
     else
@@ -369,6 +387,13 @@ cmd_watch() {
         fw=0
       fi
     fi
+    # 移动端 H5（Vite dev，端口 5174、base /m/）：健康检查走 /m/，端口存活但 /m/ 无响应也算异常。
+    # 与 web 不同，mobile 默认开启自愈重启（用户明确要求）。
+    if port_listen $MPORT && curl -s -o /dev/null -m 10 "http://127.0.0.1:$MPORT/m/" >/dev/null 2>&1; then fm=0
+    else
+      fm=$((fm+1)); log "[warn] mobile unhealthy (fail $fm/$MAX_FAIL)"
+      if [ $fm -ge $MAX_FAIL ]; then pkill -KILL -f "$PAT_MOBILE" 2>/dev/null; sleep 1; start_mobile; fm=0; fi
+    fi
     # 任务 Worker 由后端（WorkerSpawnerService）在启动时自行 fork 并看护，看门狗不再重复管理，避免双份抢占任务
     sleep $PROBE_INTERVAL
   done
@@ -386,5 +411,5 @@ case "${1:-}" in
   restart) shift; cmd_restart "$@" ;;
   status) shift; cmd_status "$@" ;;
   watch) shift; cmd_watch "$@" ;;
-  *) echo "用法: bash scripts/manage.sh {start|stop|restart|status|watch} [compute|backend|worker|web] [...]"; exit 1 ;;
+  *) echo "用法: bash scripts/manage.sh {start|stop|restart|status|watch} [compute|backend|worker|web|mobile] [...]"; exit 1 ;;
 esac
