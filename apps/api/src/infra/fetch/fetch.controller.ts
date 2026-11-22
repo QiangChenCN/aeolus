@@ -3,7 +3,7 @@ import { Body, Controller, Get, Logger, Post, Query } from '@nestjs/common';
 import { OrdersFetchService } from './sources/orders-fetch.service';
 import { FetchPaceService } from './runners/fetch-pace.service';
 import { RefreshAllService } from './runners/refresh-all.service';
-import { TIME_FIELDS, TIME_FIELD } from './sources/delivery-query.service';
+import { TIME_FIELDS, TIME_FIELD, DeliveryQueryService } from './sources/delivery-query.service';
 import { QuarkCredsService } from './creds/quark-creds.service';
 import { TeamsFetchService } from './sources/teams-fetch.service';
 import { ContactImFetchService } from './sources/contact-im-fetch.service';
@@ -16,6 +16,7 @@ import { ViolationListFetchService } from './sources/violation-list-fetch.servic
 import { ViolationStoreService } from './storage/violation-store.service';
 import { RealtimeStoreService } from './storage/realtime-store.service';
 import { ViolationSchedulerService } from './runners/violation-scheduler.service';
+import { DELIVERY_COLUMNS } from '../../modules/delivery/delivery-normalize';
 
 /** 北京时间（UTC+8）某天的 [00:00:00.000, 23:59:59.999] 毫秒区间。 */
 function dayRangeMs(date: string): [number, number] {
@@ -42,6 +43,7 @@ export class FetchController {
     private readonly realtimeStore: RealtimeStoreService,
     private readonly violationScheduler: ViolationSchedulerService,
     private readonly contactImSvc: ContactImFetchService,
+    private readonly querySvc: DeliveryQueryService,
   ) {}
 
   /**
@@ -109,6 +111,35 @@ export class FetchController {
       by_team: byTeam,
       elapsed_sec: Math.round(elapsed * 10) / 10,
       stats: this.pace.statsSnapshot(),
+    };
+  }
+
+  /**
+   * 运单明细实时查询基座（供其他程序 / AI 调用）：按 日期/站点/骑手 实时打 queryTracking。
+   *
+   * GET /api/fetch/orders-query
+   *   ?date=YYYY-MM-DD        日期（默认北京时间今天）
+   *   &team_ids=1,2,3         风神站点 ID，逗号分隔；不传=全站
+   *   &rider=骑手ID或姓名      骑手下推（knightInfo）；不传=不限
+   *   &time_field=trackingFinish|trackingCreated|platformBooked
+   *
+   * 返回 {ok, date, time_field, team_ids, rider, total, rows, columns,
+   *       elapsed_sec, truncated, stats}。rows 为归一化后的运单明细行（与
+   * /api/delivery/orders 同构），columns 为列定义；不落盘。
+   * 站点/骑手均下推到上游，通常只命中少量页；全站且无骑手的大单量日会按 4 时段切片。
+   */
+  @RequirePerm('view')
+  @Get('orders-query')
+  async ordersQuery(
+    @Query('date') date?: string,
+    @Query('time_field') timeField?: string,
+    @Query('team_ids') teamIds?: string,
+    @Query('rider') rider?: string,
+  ) {
+    const result = await this.querySvc.queryOrders({ date, timeField, teamIds, rider });
+    return {
+      ...result,
+      columns: DELIVERY_COLUMNS.map((c) => ({ key: c.key, label: c.label, kind: c.kind })),
     };
   }
 

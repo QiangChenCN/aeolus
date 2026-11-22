@@ -9,7 +9,7 @@
  * 仍需建服务文件 + FetchModule 注册 + Controller 端点（带 @RequirePerm）。
  */
 
-export type SourceTrigger = '手动' | '定时' | '自动' | '任务管线' | '内部调用';
+export type SourceTrigger = '手动' | '定时' | '自动' | '任务管线' | '内部调用' | '外部调用';
 export type SourceAuth = 'aeolus' | 'quark' | 'dingtalk' | 'none';
 
 export interface SourceCatalogItem {
@@ -66,16 +66,23 @@ export const SOURCE_CATALOG: SourceCatalogItem[] = [
   },
   {
     id: 'delivery-query',
-    name: '运单分页查询原语',
-    desc: '运单查询接口与时间字段口径（trackingCreated / platformBooked / trackingFinish）封装；仅在导出后对账时打一次第 1 页。',
+    name: '运单明细查询',
+    tags: ['API'],
+    desc: '运单明细实时查询基座：按 日期/站点/骑手 实时打 queryTracking，返回归一化明细行，不落盘。与「运单明细导出」互补——导出整站落库免限流，本基座交互式点查即时返回。',
     service: 'DeliveryQueryService',
     file: 'apps/api/src/infra/fetch/sources/delivery-query.service.ts',
-    trigger: '内部调用',
-    endpoints: [],
+    trigger: '外部调用',
+    endpoints: ['GET /api/fetch/orders-query'],
     dependsOn: 'aeolus',
     storage: [],
-    linked: ['OrdersFetchService'],
-    notes: '无对外端点，由 OrdersFetchService 调用。',
+    linked: ['OrdersFetchService（导出后对账打第 1 页）', '其他程序 / AI Agent 调用'],
+    params: [
+      'date：日期 YYYY-MM-DD（北京时间，默认今天）',
+      'team_ids：风神站点 ID，逗号分隔；不传=全站（下推 teamIds）',
+      'rider：骑手 ID 或姓名（下推 knightInfo，仅返回该骑手单据）',
+      'time_field：trackingFinish / trackingCreated / platformBooked（默认 trackingFinish）',
+    ],
+    notes: '两层职责：底层 query() 单次请求（OrdersFetchService 对账用）；编排层 queryOrders() 含下推/翻页/切片/会话自愈/限流退避/归一化/去重。\n返回 {ok, date, team_ids, rider, total, rows, columns, elapsed_sec, truncated, stats}。rows 为归一化行（与 /api/delivery/orders 同构）。\n站点/骑手均下推上游，通常命中少量页；全站无骑手且单日>9000 单时按 4 时段切片（可能数十秒）。翻页上限 190 页，超限 truncated=true。',
   },
   {
     id: 'delivery-export',
