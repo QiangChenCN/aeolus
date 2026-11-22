@@ -2,9 +2,7 @@
   <div class="srcpage" v-loading="loading">
     <el-card class="page-card" shadow="never">
     <h2 class="v-title">取数基座</h2>
-    <p class="muted">
-      当前全部取数服务的只读盘点（由后端目录下发）。状态取自页面顶部的登录态胶囊，不在此处发起额外探活。
-    </p>
+    <p class="muted">当前全部取数服务的只读盘点（由后端目录下发）。</p>
 
     <div v-if="items.length">
       <div class="bar">
@@ -21,9 +19,10 @@
           <div class="card-head">
             <div class="card-title">
               <span class="card-name">{{ s.name }}</span>
-              <el-tag v-for="t in (s.tags || [])" :key="t" size="small" type="warning" effect="plain">{{ t }}</el-tag>
             </div>
-            <el-tag size="small" :type="statusOf(s).tag">{{ statusOf(s).label }}</el-tag>
+            <div class="card-tags">
+              <el-tag v-for="t in (s.tags || [])" :key="t" size="small" type="primary" effect="plain">{{ t }}</el-tag>
+            </div>
           </div>
           <div class="card-desc">{{ s.desc }}</div>
           <div class="card-meta">
@@ -40,24 +39,19 @@
 
       <el-table v-else :data="items" stripe border class="tbl" @row-click="openDetail">
         <el-table-column prop="name" label="基座" min-width="180" />
-        <el-table-column label="标签" width="90">
-          <template #default="{ row }">
-            <el-tag v-for="t in (row.tags || [])" :key="t" size="small" type="warning" effect="plain">{{ t }}</el-tag>
-            <span v-if="!(row.tags || []).length" class="muted">—</span>
-          </template>
-        </el-table-column>
         <el-table-column prop="service" label="服务类" min-width="220" />
         <el-table-column prop="trigger" label="触发" width="110" />
         <el-table-column label="依赖" width="100">
           <template #default="{ row }">{{ authLabel(row.dependsOn) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="130">
-          <template #default="{ row }">
-            <el-tag size="small" :type="statusOf(row).tag">{{ statusOf(row).label }}</el-tag>
-          </template>
-        </el-table-column>
         <el-table-column label="关联" min-width="180">
           <template #default="{ row }">{{ (row.linked || []).join('、') || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="标签" width="90">
+          <template #default="{ row }">
+            <el-tag v-for="t in (row.tags || [])" :key="t" size="small" type="primary" effect="plain">{{ t }}</el-tag>
+            <span v-if="!(row.tags || []).length" class="muted">—</span>
+          </template>
         </el-table-column>
       </el-table>
     </div>
@@ -77,17 +71,13 @@
         />
         <el-descriptions v-else-if="detail" :column="1" border size="small">
           <el-descriptions-item label="标签">
-            <el-tag v-for="t in (detail.tags || [])" :key="t" size="small" type="warning" effect="plain" class="detail-tag">{{ t }}</el-tag>
+            <el-tag v-for="t in (detail.tags || [])" :key="t" size="small" type="primary" effect="plain" class="detail-tag">{{ t }}</el-tag>
             <span v-if="!(detail.tags || []).length" class="muted">—</span>
           </el-descriptions-item>
           <el-descriptions-item label="服务类">{{ detail.service }}</el-descriptions-item>
           <el-descriptions-item label="源文件">{{ detail.file }}</el-descriptions-item>
           <el-descriptions-item label="触发方式">{{ detail.trigger }}</el-descriptions-item>
           <el-descriptions-item label="登录态依赖">{{ authLabel(detail.dependsOn) }}</el-descriptions-item>
-          <el-descriptions-item label="状态">
-            <el-tag size="small" :type="statusOf(detail).tag">{{ statusOf(detail).label }}</el-tag>
-            <span class="muted tip-inline">{{ statusOf(detail).tip }}</span>
-          </el-descriptions-item>
           <el-descriptions-item label="HTTP 入口">
             <div v-for="e in detail.endpoints" :key="e" class="mono">{{ e }}</div>
             <span v-if="!detail.endpoints.length" class="muted">无对外端点（仅内部调用）</span>
@@ -125,11 +115,9 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { useAppStore } from '@shared/stores/app.js';
 import { useAuthStore } from '@shared/stores/auth.js';
 import { fetchSources, fetchSourceDetail } from '@shared/api/sources.js';
 
-const app = useAppStore();
 const auth = useAuthStore();
 
 const loading = ref(false);
@@ -140,22 +128,6 @@ const current = ref(null);
 const detail = ref(null);
 
 const canDetail = computed(() => auth.hasPerm('admin:aeolus'));
-
-function statusOf(s) {
-  if (s.dependsOn === 'aeolus' || s.dependsOn === 'quark') {
-    const state = s.dependsOn === 'quark' ? app.quark?.status : app.cookie?.status;
-    if (!state) return { key: 'pending', label: '检测中', tag: 'info', tip: '登录态尚未探测' };
-    if (state === 'invalid') return { key: 'bad', label: '登录态失效', tag: 'danger', tip: '请到「外部凭证」重新配置或登录' };
-    if (state === 'valid') return { key: 'ok', label: '正常', tag: 'success', tip: '登录态有效' };
-    return { key: 'pending', label: '待确认', tag: 'warning', tip: '登录态未知，可能网络抖动' };
-  }
-  return {
-    key: 'ok',
-    label: '已接入',
-    tag: 'success',
-    tip: s.dependsOn === 'dingtalk' ? '依赖钉钉应用凭证' : '无外部登录态依赖',
-  };
-}
 
 function authLabel(dep) {
   return ({ aeolus: '风神 Cookie', quark: 'Quark DA', dingtalk: '钉钉应用', none: '无' })[dep] || '—';
@@ -207,8 +179,9 @@ onMounted(load);
   cursor: pointer; transition: border-color .15s, box-shadow .15s;
 }
 .src-card:hover { border-color: var(--el-color-primary); box-shadow: 0 2px 12px rgba(0, 0, 0, .06); }
-.card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-8); }
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-8); }
 .card-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.card-tags { display: flex; justify-content: flex-end; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
 .card-name { font-weight: var(--fw-semibold); }
 .detail-tag { margin-right: 4px; }
 .card-desc { flex: 1; font-size: var(--el-font-size-extra-small); color: var(--el-text-color-regular); line-height: 1.6; }
@@ -217,7 +190,6 @@ onMounted(load);
 .more { color: var(--el-color-primary); font-size: var(--el-font-size-extra-small); }
 .tbl { cursor: pointer; }
 .tip { margin-bottom: var(--sp-12); }
-.tip-inline { margin-left: var(--sp-8); }
 .basic { margin-top: var(--sp-12); }
 .mono { font-family: var(--font-mono, monospace); font-size: 12px; }
 .notes { white-space: pre-line; }

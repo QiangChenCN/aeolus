@@ -62,7 +62,7 @@ export class DeliveryExportService {
   /**
    * 完整链路：触发 → 轮询认领 → 拿URL → 下载 → 解析，返回 dict 列表（中文+英文双键）。
    * cookie 可选（不传则 ensure）；会话失效自动重登重试一次。
-   * 其它失败（任务超时/网络/触发未受理）抛异常，由调用方回落分页。
+   * 其它失败（任务超时/网络/触发未受理）抛异常，由调用方直接报错（已禁用分页兜底）。
    */
   async exportOrders(
     startMs: number,

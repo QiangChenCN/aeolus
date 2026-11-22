@@ -114,18 +114,17 @@ def test_load_team_ignores_shared_raw(tmp_data, monkeypatch):
 
 # ---------------- 会话失效自愈：401 → 强制重登 → 重试一次 ----------------
 
-def test_violation_api_error_is_runtime_error():
+def test_api_error_is_runtime_error():
     """结构化异常必须仍是 RuntimeError，否则会打断既有捕获方。"""
-    from sources import violation as V
-    e = V.ViolationApiError("违规明细接口返回空 result（code=401 未登录）", "401")
+    from sources import session as GA
+    e = GA.ApiError("接口返回空 result（code=401 未登录）", "401")
     assert isinstance(e, RuntimeError)
     assert e.code == "401"
 
 
-# 注：以下「会话失效自愈（401 → 强制重登 → 重试一次 / 至多一次 /
-# 非会话错误不重登）」的编排已随违规取数迁到 NestJS（见
-# violation-fetch.service.ts 的 downloadCsv），Python 侧 RV.fetch_rows 已删除，
-# 相关用例随之移除 —— 跨语言两层各测各的。
+# 注：会话失效自愈（401 → 强制重登 → 重试一次）的编排归 NestJS
+# （见 violation-fetch.service.ts / violation-list-fetch.service.ts），
+# Python 侧只保留统一的异常类型，不做重登。
 
 
 # ---------------- sources/auth 共享原语本身 ----------------

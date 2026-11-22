@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PgService } from '../../../modules/pg/pg.service';
+import { violationId } from '../sources/delivery-field-map';
 
 /**
  * 违规处罚明细持久层（按月累计看板的数据底座）—— PostgreSQL only，不再保留 SQLite。
@@ -44,7 +45,7 @@ export class ViolationStoreService {
     let n = 0;
     const now = this.nowStr();
     for (const r of rows || []) {
-      const no = String(r['violationOrderId'] ?? '');
+      const no = violationId(r);
       if (!no) continue;
       await this.pg.query(
         'INSERT INTO violation (stat_date, violation_no, raw_json, created_at) ' +

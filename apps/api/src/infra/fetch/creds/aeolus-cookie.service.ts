@@ -16,8 +16,8 @@ import { AeolusLoginService } from './aeolus-login.service';
  *
  * 三处与 Python 的**行为差异**（都有意为之，且更严格）：
  *  1. `ensure()` 会做 validToken 探针。Python 的 `ensure_cookies` 也做；而迁移前的 Nest 版本
- *     只「文件存在就用」，于是拿着过期 cookie 反复打接口赚 401，还得靠 Python 侧
- *     `call_with_relogin` 兜。现在探针 + 进程内缓存（只探一次）既自愈又不浪费请求。
+ *     只「文件存在就用」，于是拿着过期 cookie 反复打接口赚 401，还得靠调用方自行兜底。
+ *     现在探针 + 进程内缓存（只探一次）既自愈又不浪费请求。
  *  2. `relogin()` **强制**新登录，不复用内存 token。Python 的 `refresh_shared_cookies` 在内存
  *     已有 token 时直接返回它 —— 而调用方正是「刚被 401 顶掉」的场景，返回旧 token 会让
  *     重试再失败、白转一圈。并发重登用 in-flight promise 合并（同一时刻只真登一次）。

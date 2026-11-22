@@ -3,10 +3,11 @@
  *
  * 这是所有取数基座共用的映射字典，不限于运单：每个基座按区块往本文件追加自己的映射，
  * 任何导出或 API 取数的字段映射都只在这里维护，绝不在各自的取数服务里另建映射表或再抄一份。
- * 目前收录的是运单区块（风神运单有两套取数方式）：
- *   · 导出（DeliveryExportService）：xlsx 中文表头 → 中英双键行；
- *   · 分页 API（DeliveryQueryService / queryTracking）：直接返回英文键行。
- * 两者共用同一套字段映射：
+ * 目前收录两个区块：
+ *   · 运单：DeliveryExportService（xlsx 导出）与 DeliveryQueryService（queryTracking 分页）；
+ *   · 违规处罚：ViolationFetchService（CSV 导出）与 ViolationListFetchService（queryList 分页）。
+ * 每个区块的两条取数路径共用同一套字段映射；
+ * 运单区块的映射如下：
  *   · CN2EN    中文表头 → 风神英文真名（也是看板列定义的来源）
  *   · BOOL_EN  布尔列（导出「是/否」↔ 布尔）
  *   · TIME_EN  时间列（北京时间字符串 ↔ 毫秒时间戳）
@@ -175,4 +176,59 @@ export function toMs(v: unknown): unknown {
     return d - 8 * 3600 * 1000;
   }
   return v;
+}
+
+// ───────────── 违规处罚区块：CSV 与 queryList 分页共用 ─────────────
+
+/**
+ * 违规处罚中文表头 → 风神英文真名（沿用已有落库字段 `violationOrderId` / `violationTime`）。
+ * CSV 导出给中文表头，queryList 可能给中文或英文键，两条路径都按本表归一。
+ */
+export const VIOLATION_CN2EN: Record<string, string> = {
+  违规编号: 'violationOrderId',
+  违规来源: 'violationSource',
+  违规时间: 'violationTime',
+  运单号: 'trackingId',
+  骑手ID: 'knightId',
+  骑手名称: 'knightName',
+  团队ID: 'teamId',
+  团队名称: 'teamName',
+  商ID: 'agencyId',
+  商名称: 'agencyName',
+  违规分类: 'violationCategory',
+  违规类型: 'violationType',
+  处罚: 'punishment',
+  违规状态: 'violationStatus',
+  违规原因: 'violationReason',
+  申诉状态: 'appealStatus',
+  剩余申诉时间: 'appealRemainTime',
+};
+
+/** 英文真名 → 中文表头（由 VIOLATION_CN2EN 反向生成，唯一事实源仍是正向表）。 */
+export const VIOLATION_EN2CN: Record<string, string> = Object.fromEntries(
+  Object.entries(VIOLATION_CN2EN).map(([cn, en]) => [en, cn]),
+);
+
+/**
+ * 上游行归一为「中文表头为规范键」的违规行：保留原字段，并把中英两侧都补成中文规范键。
+ * 这样 CSV 解析结果与分页接口结果同构，下游（考核看板 / 违规看板）无需按来源分支。
+ */
+export function normalizeViolationRow(raw: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw || {})) {
+    if (v !== undefined && v !== null) out[k] = typeof v === 'string' ? v : String(v);
+  }
+  for (const [cn, en] of Object.entries(VIOLATION_CN2EN)) {
+    const v = raw?.[cn] ?? raw?.[en];
+    if (v !== undefined && v !== null) {
+      out[cn] = typeof v === 'string' ? v.trim() : String(v);
+    }
+  }
+  return out;
+}
+
+/** 违规业务主键（中英键都认），供去重与 PG (stat_date, violation_no) UPSERT 使用。 */
+export function violationId(row: Record<string, unknown>): string {
+  const v = row?.['违规编号'] ?? row?.[VIOLATION_CN2EN['违规编号']];
+  return v === undefined || v === null ? '' : String(v).trim();
 }

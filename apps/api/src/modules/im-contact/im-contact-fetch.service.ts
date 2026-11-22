@@ -14,7 +14,7 @@ import { ImContactStoreService } from './im-contact-store.service';
  *
  * 本服务独立实现的部分：
  *   · 透视表 → 扁平行（按字段中文名建键，指标 coercion 成数字）；
- *   · 累计历史落库到 SQLite `apps/api/runtime/db/im_contact.db`
+ *   · 累计历史落库到 PG 表 `im_contact_records`
  *     （按 送达日期+骑手id 去重 upsert，跨月自然累计，计算侧按前端区间读取）；
  *   · 同时每月导出可读备份 `apps/api/runtime/IM电联明细.YYYY-MM.json`
  *     （命名见用户要求；与库同源，便于对账 / 人工核对）。
@@ -153,7 +153,7 @@ export class ImContactFetchService {
   }
 
   /**
-   * 拉取 [startDate, endDate] 全站 IM 电联明细 → 扁平化 → 累计落库（SQLite）+
+   * 拉取 [startDate, endDate] 全站 IM 电联明细 → 扁平化 → 累计落库（PG）+
    * 导出当月可读备份（IM电联明细.YYYY-MM.json）。
    *
    * 会**多取一天**（startDate 前一天）作为「较前日环比」的基准：落库的 start/end
@@ -275,7 +275,7 @@ export class ImContactFetchService {
 
   /**
    * 当前落盘状态（已落盘区间 / 取数时间 / fetch_ok / 累计条数），供前端判断是否需要刷新。
-   * 数据源 = SQLite im_contact.db（与计算侧同源）。
+   * 数据源 = PG 表 `im_contact_records`（与计算侧同源）。
    */
   async status(): Promise<{
     ok: boolean;

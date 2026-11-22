@@ -6,7 +6,7 @@ import { ViolationListFetchService } from '../sources/violation-list-fetch.servi
 /**
  * 违规处罚明细定时同步。
  *
- *  · 每日 03:00（北京时间）回补当月 1 号至 T-1（昨天）的全量明细，写入 `violation.db`；
+ *  · 每日 03:00（北京时间）回补当月 1 号至 T-1（昨天）的全量明细，写入 PG 表 `violation`；
  *    跨天/漏抓/会话失效后次日会自动补齐整月缺失日期。
  * 取数复用 `ViolationListFetchService.queryRange`，会话失效时由 AeolusCookieService 自动重登。
  */
@@ -21,7 +21,7 @@ export class ViolationSchedulerService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    this.logger.log('违规记录定时同步已就绪（每日 03:00 北京时间抓取 T-1）');
+    this.logger.log('违规记录定时同步已就绪（每日 03:00 北京时间回补当月 1 号至 T-1 → PG violation）');
   }
 
   /** 北京时间 YYYY-MM-DD（默认入参为 T-1）。 */

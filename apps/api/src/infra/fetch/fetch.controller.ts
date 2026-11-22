@@ -194,9 +194,9 @@ export class FetchController {
     };
   }
 
-  // ───────────── 阶段 1+ 三路取数：供 Python 计算侧回调（原在 get_data/*）─────────────
-  // 统一返回扁平 {ok, ...}；失败时透出 `code`，供 Python `get_data/_nest.py::unwrap`
-  // 判定是否「会话失效」并触发强制重登 —— 与迁移前 Python 直接抛 AuthError 同口径。
+  // ───────────── 阶段 1+ 三路取数（考勤 / 排班 / 违规 CSV）─────────────
+  // 统一返回扁平 {ok, ...}；失败时透出 `code`。风神会话失效判定与强制重登
+  // 由 Nest 侧 AeolusCookieService 负责，Python 计算侧只消费结果。
 
   /** 单站实时考勤原始 JSON（原 `get_data/attendance.py::fetch_team`）。 */
   @RequirePerm('view')
@@ -232,7 +232,7 @@ export class FetchController {
     }
   }
 
-  /** 违规处罚 CSV（原 `get_data/violation.py::download_csv`），返回 `{text, file_url}`。 */
+  /** 违规处罚 CSV，返回 `{text, file_url}`。 */
   @RequirePerm('view')
   @Post('violation-csv')
   async violationCsv(@Body() b: { start_ms?: number; end_ms?: number; cookie?: string }) {
@@ -256,7 +256,15 @@ export class FetchController {
   @Post('violation-list')
   async violationList(
     @Body()
-    b: { start_ms?: number; end_ms?: number; page_no?: number; page_size?: number; cookie?: string },
+    b: {
+      start_ms?: number;
+      end_ms?: number;
+      page_no?: number;
+      page_size?: number;
+      cookie?: string;
+      team_ids?: string | number[];
+      rider?: string;
+    },
   ) {
     if (b?.start_ms == null || b?.end_ms == null) {
       return { ok: false, error: 'start_ms / end_ms 必填' };
@@ -268,6 +276,7 @@ export class FetchController {
         Number(b.page_no ?? 1),
         Number(b.page_size ?? 10),
         b.cookie,
+        { teamIds: b.team_ids, rider: b.rider },
       );
       return { ok: true, result };
     } catch (e) {
@@ -276,11 +285,10 @@ export class FetchController {
   }
 
   /**
-   * 强制重新登录风神 SSO（原 Python `aeolus_sdk.login.refresh_shared_cookies`）。
+   * 强制重新登录风神 SSO：运维手动复位登录态。
    *
-   * 两个用途：① Python 计算侧 `get_data.auth.call_with_relogin` 收到会话失效后触发重登；
-   * ② 运维手动复位登录态。返回新 cookie（与 Python 原接口同契约）—— 该文件本就两边可读，
-   * 且本端点要求机器令牌。
+   * 取数链内的会话自愈由 AeolusCookieService 自己完成；本端点供人工/外部强制重登，
+   * 返回新 cookie，要求机器令牌。
    */
   @RequirePerm('view')
   @Post('aeolus-relogin')
@@ -343,7 +351,14 @@ export class FetchController {
   @Post('violation-range')
   async violationRange(
     @Body()
-    b: { start_ms?: number; end_ms?: number; page_size?: number; cookie?: string },
+    b: {
+      start_ms?: number;
+      end_ms?: number;
+      page_size?: number;
+      cookie?: string;
+      team_ids?: string | number[];
+      rider?: string;
+    },
   ) {
     if (b?.start_ms == null || b?.end_ms == null) {
       return { ok: false, error: 'start_ms / end_ms 必填' };
@@ -354,6 +369,7 @@ export class FetchController {
         Number(b.end_ms),
         Number(b.page_size ?? 200),
         b.cookie,
+        { teamIds: b.team_ids, rider: b.rider },
       );
       return { ok: true, total: r.total, rows: r.rows };
     } catch (e) {
@@ -362,8 +378,8 @@ export class FetchController {
   }
 
   /**
-   * 实时看板"刷新"落盘：将一批违规明细写入独立的 realtime.db（按违规时间日期分桶、按 violationOrderId 去重覆盖）。
-   * 与月累计的 violation.db 完全分离，互不影响。
+   * 实时看板刷新落盘：将一批违规明细写入 PG 表 `violation_realtime`
+   * （按日期分桶、按 violationOrderId 去重覆盖），与历史表 `violation` 互不影响。
    */
   @RequirePerm('view')
   @Post('violation-save')
@@ -377,7 +393,7 @@ export class FetchController {
   }
 
   /**
-   * 实时看板读取本地缓存：按日期区间 [start, end]（YYYY-MM-DD）从 realtime.db 取已落盘数据，不再请求风神。
+   * 实时看板读取已落盘数据：按日期区间 [start, end]（YYYY-MM-DD）从 PG 表 `violation_realtime` 读取，不再请求风神。
    */
   @RequirePerm('view')
   @Post('violation-range-db')

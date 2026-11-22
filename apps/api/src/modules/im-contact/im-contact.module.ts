@@ -11,9 +11,9 @@ import { ImContactStoreService } from './im-contact-store.service';
  *
  * 独立看板：取数 / 落盘 / 配置代码全部自管，不与其他看板共用业务代码。
  *  - `ImContactFetchService`：Quark 报表 473269 取数 + 扁平化 + 累计落库
- *    （SQLite `apps/api/runtime/db/im_contact.db`，按 送达日期+骑手id 去重累计，跨月累计；
+ *    （PG 表 `im_contact_records`，按 送达日期+骑手id 去重累计，跨月累计；
  *    同时每月导出可读备份 `apps/api/runtime/IM电联明细.YYYY-MM.json`）；
- *  - `ImContactStoreService`：IM 电联 SQLite 持久层（落库 + 按区间读取，计算侧同源）；
+ *  - `ImContactStoreService`：IM 电联 PG 持久层（落库 + 按区间读取，计算侧同源）；
  *  - `ImContactConfigService`：「展示站点」配置（由 ProxyModule 的
  *    `im-contact/{*path}` 通配在命中 isConfigPath 时改派 /teams）；
  *  - `ImContactController`：看板自身 HTTP 入口（`/api/im-contact-fetch/refresh`、

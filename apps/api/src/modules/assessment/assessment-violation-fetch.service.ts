@@ -5,9 +5,7 @@ import { AssessmentDetailStoreService } from './assessment-detail-store.service'
 /**
  * 考核看板 —— 违规处罚明细「自有取数入库」（与标准达成 / 服务质量完全解耦）。
  *
- * 历史：本看板的违规取数最早挂在「标准达成全量刷新 stage 0.5」上，落到共享的
- * `apps/api/runtime/raw/violation_{team}_{date}.json`；2026-10-13 起改由本服务独立取数并
- * 落盘 `apps/api/runtime/违规处罚明细-实时.json`；2026-10-23 起**不再落盘**，改写入 PG：
+ * 落盘 PG 两张表：
  *   · `violation_realtime`  实时违规处罚明细（当天覆盖写，source='assessment'）；
  *   · `violation`           历史违规处罚明细（same source，供历史区间聚合）。
  *

@@ -1,10 +1,8 @@
 /**
- * 原生任务处理器契约（任务中心从 spawn(python) 迁到 Nest 内流水线的核心抽象）。
+ * 原生任务处理器契约：任务全部由 Nest 内部流水线执行。
  *
- * 背景见 docs/migration-jobs-to-nest.md：Python 只保留「大数据计算 / Excel」，
- * 取数 / 加工 / 编排 / 出图 / 上传 / 发送全部在 Nest 内完成。
- *
- * 增量迁移：TaskRunnerService 优先查本注册表；查不到才回退旧的 spawn(cmd) 路径。
+ * Python 只保留「大数据计算 / Excel」；取数 / 加工 / 编排 / 出图 / 上传 / 发送
+ * 全部在 Nest 内完成。TaskRunnerService 从本注册表查找处理器后执行。
  */
 
 /** 任务节点（对应 Python 侧 nodeflow 的 NODES 项）。 */

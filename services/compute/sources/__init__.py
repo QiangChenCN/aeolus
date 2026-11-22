@@ -1,44 +1,23 @@
 from analytics.core.paths import ROOT, PY_HOME, _ROOT  # noqa: E402,F401 <<<
 
 
-"""sources —— 风神数据的**取数转发层**（单一来源）。
+"""sources —— 风神数据的取数转发层（单一来源）。
 
-⚠️ 取数已整体迁到 NestJS（ADR：「取数不是计算」）。本包各模块**不自己打风神接口**，
-只把参数转发给 Nest 的 `/api/fetch/*`（分页 / 反爬节奏 / 限流退避 / 会话重登都归 Nest）；
-返回结构与迁移前逐字一致，上层（`analytics/*`）无需关心底层。
+取数由 NestJS 的 `/api/fetch/*` 提供（分页 / 反爬节奏 / 限流退避 / 会话重登都归 Nest）；
+本包各模块不自己打风神接口，只把业务参数转发过去，上层（`analytics/*`）只消费结果。
 
 ★ 约定：
 - 每个模块 = 一个接口，只负责「把这个接口的原始数据拿回来」（dict / list[dict]）
 - 查询参数（日期 / 站点 / page / period …）由调用方传入；模块内不做选日期、选站点
 - 禁止在模块内做：统计 / 筛选 / 格式化、落盘写文件、CLI 解析、自动重登循环
 - 会话失效：Nest 返回的 `code` 命中 `sources.session.SESSION_CODES` 时抛 `AuthError`，
-  由上层作为失败上报即可 —— 重登已归 Nest 独占（`POST /api/fetch/aeolus-relogin` 由
-  Nest 侧 `AeolusCookieService` 实现），Python 不再持有或触发任何登录逻辑
+  由上层作为失败上报即可，重登由 Nest 侧 `AeolusCookieService` 完成
 
 成员：
-- attendance : 实时考勤 → `POST /api/fetch/attendance-raw`，`fetch_team(team_id, time_code, cookie=None)`
-- schedule   : 排班统计 → `POST /api/fetch/sched-raw`，`query(team_id, start_date, end_date, retries=8, cookie=None)`
-- violation  : 风控处罚 CSV → `POST /api/fetch/violation-csv`，`download_csv(start_ms, end_ms, cookie=None)`
-- session    : 会话失效约定与重登原语（**不是取数模块**，被上面三者与调用方共用）
+- attendance : 实时考勤 → `POST /api/fetch/attendance-raw`
+- schedule   : 排班统计 → `POST /api/fetch/sched-raw`
+- session    : 统一会话失效异常类型（与 _http 共用）
 - _http      : 转发 Nest 的薄封装（内部，包外勿直接引用）
-
-────────────────────────────────────────────────────────────
-📦 2026-09-24 重构说明（原名 `get_data`）
-────────────────────────────────────────────────────────────
-改名理由（两条都是实际问题，不是洁癖）：
-1. **同名包冲突**：旧结构里根 `get_data/` 与 `analytics/get_data/`（原 dashboard/get_data）
-   两个包都叫 get_data，`sys.path` 顺序会让裸 `import get_data` 命中嵌套的那个，
-   而它缺 `schedule_statistics` —— 是个会随机炸的隐式依赖。改名后彻底消除。
-2. **名不副实**：本包并不"取数"（Nest 才取数），只是把请求转发出去，故名 `sources`
-   （数据来路）。顺带避免与既有的 `common/nest_client.py`（真正的 HTTP 客户端）混淆。
-
-同时收编了原先散在三处的重复门面（功能等价、实现重复），此处是**唯一入口**：
-  · 原 `get_data/__init__.py`            —— 仅文档，已并入本文件
-  · 原 `dashboard/get_data/__init__.py`  —— 看板友好签名门面，已并入本文件
-  · 原 `dashboard/standard/get_data.py`  —— 纯 re-export shim，其 CLI 已随取数迁 Nest 删除（取数现由 NestJS 独占）
-  · 原 `dashboard/standard/schedule_statistics.py` —— `flatten()` 与门面的
-    `flatten_schedule()` **逐行重复**，只保留本文件的 `flatten_schedule`
-    （保留 `flatten` 别名供旧引用过渡）
 """
 # ===== 直接引用本包内已有的对应功能（无重复实现） =====
 from .schedule import query as _sched_query

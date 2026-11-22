@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { netError } from '../../../common/net-error';
 import { FetchPaceService, MAX_RETRIES, RELOGIN_MAX, RELOGIN_BACKOFF_BASE, BACKOFF_BASE } from '../runners/fetch-pace.service';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
+// 字段映射统一来自公共字典 delivery-field-map.ts（由 delivery-normalize 投影），本服务不自建映射表。
 import { normalizeOrderRow, DeliveryRow } from '../../../modules/delivery/delivery-normalize';
 
 /**

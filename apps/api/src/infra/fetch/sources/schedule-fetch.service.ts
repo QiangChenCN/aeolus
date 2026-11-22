@@ -11,8 +11,8 @@ import { netError } from '../../../common/net-error';
  * 保留 Python 原有的退避策略（这是被限流打过之后的经验值，别改）：
  *   · 网络异常 → 退避 `2 + attempt*2` 秒后重试
  *   · 被限流（code 含 FREQUENT / msg 含「频繁」）→ 退避 `3 + attempt*3` 秒后重试
- *   · 会话失效（result 为 null / 401 / 账户下线）→ **立即抛 SchedAuthError**，
- *     交由上层（`get_data.auth.call_with_relogin`）强制重登后重试
+ *   · 会话失效（result 为 null / 401 / 账户下线）→ **立即抛 SchedAuthError**（带 code），
+ *     由 Nest 统一错误出口上报；cookie 自愈由 AeolusCookieService.ensure() 负责
  */
 export const SCHEDULE_API =
   'https://httpizza.ele.me/xtop/xtop.fs.special.schedule.listScheduleStatistics/1.0';
@@ -27,7 +27,7 @@ const HEADERS_BASE: Record<string, string> = {
 
 const REQ_TIMEOUT_MS = 40_000;
 
-/** 会话失效（与 Python `get_data.auth.AuthError` 同语义，带 code 以便上游判定）。 */
+/** 会话失效异常（带 code，便于 Nest 统一错误出口判定）。 */
 export class SchedAuthError extends Error {
   readonly code: string;
   constructor(message: string, code = '401') {

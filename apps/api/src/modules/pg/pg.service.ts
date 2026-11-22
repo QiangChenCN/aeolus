@@ -11,8 +11,8 @@ import { Pool, PoolClient, QueryResultRow } from 'pg';
  * PostgreSQL 直连接入（方案 B：PGDG 官方源安装的 PG 17）。
  *
  * 这是「模块骨架」：只提供连接池 + 基础查询/事务原语，不含任何业务表逻辑。
- * 业务模块注入 PgService 后自行写 SQL（与现有 node:sqlite 手写 SQL 的范式一致，
- * 不引入 ORM 抽象）。连接串统一从根 .env 的 DATABASE_URL 读取：
+ * 业务模块注入 PgService 后自行写 SQL，不引入 ORM 抽象。
+ * 连接串统一从根 .env 的 DATABASE_URL 读取：
  *   DATABASE_URL=postgresql://aeolus:<密码>@localhost:5432/aeolusdata
  *
  * 设计要点：
@@ -116,7 +116,7 @@ export class PgService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** 是否已启用（DATABASE_URL 已配置且连接池已建）。双模存储据此选择 PG / SQLite 兜底。 */
+  /** 是否已启用（DATABASE_URL 已配置且连接池已建）。 */
   get isEnabled(): boolean {
     return !!this.pool;
   }

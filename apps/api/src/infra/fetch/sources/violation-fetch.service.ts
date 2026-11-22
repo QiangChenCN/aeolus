@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
 
 /**
- * 风控处罚 CSV 取数（移植自 get_data/violation.py，被 appeal 与 unsat 共用）。
+ * 风控处罚 CSV 取数（供考核看板、申诉提醒任务等内部调用）。
  *
- * POST download 接口拿签名链接 → 下载 CSV → GBK 优先、回退 UTF-8 解码。
+ * POST download 接口拿签名链接 → 下载 CSV → 按上游约定用 GBK 解码。
  */
 export const VIOLATION_API_URL =
   'https://httpizza.ele.me/xtop/xtop.lpd.quality.control.violation.violationOrderAeolusCenterApi.download/1.0';
@@ -36,17 +36,41 @@ export class ViolationApiError extends Error {
   }
 }
 
+/** 是否会话失效类错误（CSV 下载与分页列表共用同一口径）。 */
+export function isViolationAuthError(e: ViolationApiError): boolean {
+  return /(^|\D)401(\D|$)/.test(e.code) || /validToken|未登录|会话失效|登录失败|顶号/i.test(e.message);
+}
+
 @Injectable()
 export class ViolationFetchService {
   constructor(private readonly cookies: AeolusCookieService) {}
 
-  /** 拉取 [startMs, endMs] 区间的风控处罚 CSV，返回 { text, fileUrl }。 */
+  /**
+   * 拉取 [startMs, endMs] 区间的风控处罚 CSV，返回 { text, fileUrl }。
+   * 会话失效（业务 401 / 未登录文案）强制重登后重试一次；显式传 cookie 时不重登。
+   */
   async downloadCsv(
     startMs: number,
     endMs: number,
     cookie?: string,
   ): Promise<{ text: string; fileUrl: string }> {
     const ck = cookie || (await this.cookies.ensure());
+    try {
+      return await this.downloadOnce(ck, startMs, endMs);
+    } catch (e) {
+      if (e instanceof ViolationApiError && isViolationAuthError(e) && !cookie) {
+        const fresh = await this.cookies.relogin();
+        return await this.downloadOnce(fresh, startMs, endMs);
+      }
+      throw e;
+    }
+  }
+
+  private async downloadOnce(
+    ck: string,
+    startMs: number,
+    endMs: number,
+  ): Promise<{ text: string; fileUrl: string }> {
     const body = JSON.stringify({
       params: { request: { violationStartTime: startMs, violationEndTime: endMs } },
     });
@@ -89,14 +113,7 @@ export class ViolationFetchService {
       clearTimeout(timer2);
     }
 
-    // 饿了么后端多为 GBK 字节；解码失败回退 UTF-8
-    for (const enc of ['gbk', 'utf-8']) {
-      try {
-        return { text: new TextDecoder(enc, { fatal: true }).decode(buf), fileUrl };
-      } catch {
-        continue;
-      }
-    }
+    // 上游导出固定为 GBK 字节，按唯一口径解码
     return { text: new TextDecoder('gbk').decode(buf), fileUrl };
   }
 }
