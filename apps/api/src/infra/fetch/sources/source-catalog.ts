@@ -62,7 +62,7 @@ export const SOURCE_CATALOG: SourceCatalogItem[] = [
       'start_ms / end_ms：毫秒时间窗（orders-raw 端点）；不传时按 date 取全天',
       'teams：站点列表（refresh-orders 端点，导出时按这些站点过滤并落盘）',
     ],
-    notes: '服务本身不落盘，只返回行数据。\n下游调用方：\n标准达成阶段 0 → runtime/raw/orders_*（按站点分组落 JSON 文件）\n运单明细看板 → PG delivery_realtime（整日覆盖写）\n配送超时看板 → PG delivery_realtime（整日覆盖写）\n考核看板 → PG delivery_realtime（实时整日覆盖）/ PG delivery（每日历史回补 UPSERT）',
+    notes: '取数由 DeliveryExportService 承担：三段式异步导出（触发 → 轮询 → 取签名 URL → 下载 xlsx）并解析成中英双键行，失败或残缺直接报错（无分页兜底）。字段映射（中文表头 ↔ 英文键）收敛在 delivery-field-map.ts，导出与 API 共用。\n服务本身不落盘，只返回行数据。\n下游调用方：\n标准达成阶段 0 → runtime/raw/orders_*（按站点分组落 JSON 文件）\n运单明细看板 → PG delivery_realtime（整日覆盖写）\n配送超时看板 → PG delivery_realtime（整日覆盖写）\n考核看板 → PG delivery_realtime（实时整日覆盖）/ PG delivery（每日历史回补 UPSERT）',
   },
   {
     id: 'delivery-query',
@@ -83,18 +83,6 @@ export const SOURCE_CATALOG: SourceCatalogItem[] = [
       'time_field：trackingFinish / trackingCreated / platformBooked（默认 trackingFinish）',
     ],
     notes: '两层职责：底层 query() 单次请求（OrdersFetchService 对账用）；编排层 queryOrders() 含下推/翻页/切片/会话自愈/限流退避/归一化/去重。\n返回 {ok, date, team_ids, rider, total, rows, columns, elapsed_sec, truncated, stats}。rows 为归一化行（与 /api/delivery/orders 同构）。\n站点/骑手均下推上游，通常命中少量页；全站无骑手且单日>9000 单时按 4 时段切片（可能数十秒）。翻页上限 190 页，超限 truncated=true。',
-  },
-  {
-    id: 'delivery-export',
-    name: '运单导出解析',
-    desc: '运单三段式导出接口的请求与 xlsx 解析；这是运单数据的唯一来源，失败或残缺直接报错。',
-    service: 'DeliveryExportService',
-    file: 'apps/api/src/infra/fetch/sources/delivery-export.service.ts',
-    trigger: '内部调用',
-    endpoints: [],
-    dependsOn: 'aeolus',
-    storage: [],
-    linked: ['OrdersFetchService'],
   },
   {
     id: 'violation-csv',

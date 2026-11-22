@@ -2,7 +2,7 @@
  * 运单明细看板的「原始行 → 展示行」归一化（本看板私有，不与其它看板共享）。
  *
  * 原始行是风神导出的**宽表**（一份行同时带中文表头键与英文键，见
- * `infra/fetch/sources/delivery-export.service.ts` 的 CN2EN，共 70+ 列）。直接整行丢给前端
+ * `infra/fetch/sources/delivery-field-map.ts` 的 CN2EN，共 70+ 列）。直接整行丢给前端
  * 有两个问题：单日全站动辄数千行 × 70 列，包体过大；且中英双键让前端无从下手。
  *
  * 因此这里把原始行投影成一份**固定列定义**的展示行：
@@ -14,7 +14,7 @@
  *   · 布尔列统一成「是 / 否」，避免「否」这类字符串被当成真值。
  */
 
-import { CN2EN, BOOL_EN, TIME_EN } from '../../infra/fetch/sources/delivery-export.service';
+import { CN2EN, BOOL_EN, TIME_EN, ENUM_DICT } from '../../infra/fetch/sources/delivery-field-map';
 
 export type DeliveryColKind = 'text' | 'time' | 'bool' | 'num';
 
@@ -33,18 +33,6 @@ export interface DeliveryColumn {
  * 列取值仍按 `keys` 顺序回落（英文真名优先 + 中文表头兜底），两种取数来源天然兼容。
  */
 const PAGE_ALIAS: Record<string, string> = {};
-
-/**
- * 枚举「分页编码 → 导出中文名」对照表（按**风神英文真名**做 key）。分页接口对部分枚举只回数字编码、
- * 导出回中文名，为让两路径显示一致（且回落分页时也有可读名），按列 key 做编码翻译。
- * 仅含实拉反推确认的一对一映射；未出现的编码原样透传（不猜测，避免翻错责任方等）。
- */
-const ENUM_DICT: Record<string, Record<string, string>> = {
-  deliverTypeName: { '1': '即时单', '2': '预订单' }, // 运单类型：分页 trackingType ↔ 导出 deliverTypeName
-  weatherGradeName: { '0': '正常' }, // 天气等级：分页 weatherGrade=0 ↔ 导出 weatherGradeName=正常
-  cancelSponsor: { '1': '用户' }, // 取消发起方：分页 cancelSponsor=1 ↔ 导出 cancelInitiator=用户
-  cancelDuty: { '3': '用户责' }, // 取消责任方：分页 cancelDuty=3 ↔ 导出 cancelResponsible=用户责
-};
 
 /** 对文本列的取值做枚举编码 → 中文名翻译（无匹配则原样返回）。 */
 function translateEnum(colKey: string, v: unknown): unknown {
