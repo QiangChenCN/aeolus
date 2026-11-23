@@ -210,6 +210,26 @@
             :value="o.value"
           />
         </el-select>
+        <span class="dv-ctl-label">申诉状态</span>
+        <el-select
+          v-model="realtimeAppealStatus"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          clearable
+          filterable
+          style="width: 200px"
+          placeholder="申诉状态"
+          @change="onRealtimeAppealStatusChange"
+        >
+          <el-option label="全选" :value="SELECT_ALL" />
+          <el-option
+            v-for="o in realtimeAppealStatusOptions"
+            :key="o.value"
+            :label="o.label"
+            :value="o.value"
+          />
+        </el-select>
       </div>
       <el-card class="dv-table-wrap" shadow="never">
         <el-table
@@ -257,6 +277,7 @@ import {
   fetchViolationRangeDb,
   saveViolationRows,
 } from '@shared/api/unsatisfied.js';
+import { VIOLATION_CN2EN, VIOLATION_CODE_LABELS } from '@aeolus/shared';
 
 const route = useRoute();
 
@@ -350,6 +371,9 @@ const siteLabel = (v) => v || '—';
 const teamIdOf = (r) => String(r?.teamId ?? '');
 // 违规状态（10=成立 / 20=不成立）；仅下钻时传 status=10，普通浏览不受此过滤影响。
 const statusOf = (r) => String(r?.violationStatus ?? '');
+const appealStatusOf = (r) => String(r?.appealStatus ?? '');
+const appealStatusLabel = (code) =>
+  (CODE_LABELS.appealStatus && CODE_LABELS.appealStatus[code]) || code || '—';
 const distinctOf = (rows, fn) => [...new Set((rows || []).map(fn))];
 // 数据刷新后：保留仍存在的旧选择；若此前未选择（含首次加载）则保持为空，默认不筛选
 const mergeSel = (prev, available) => {
@@ -389,6 +413,12 @@ const realtimeSites = ref([]);
 const realtimeSiteOptions = computed(() =>
   distinctOf(realtimeRows.value, siteOf).map((v) => ({ value: v, label: siteLabel(v) })),
 );
+// 申诉状态（选项 = 数据中出现的申诉状态代码 ∪ 已选值，代码→中文标签）
+const realtimeAppealStatus = ref([]);
+const realtimeAppealStatusOptions = computed(() => {
+  const vals = [...new Set([...distinctOf(realtimeRows.value, appealStatusOf), ...realtimeAppealStatus.value])];
+  return vals.map((v) => ({ value: v, label: appealStatusLabel(v) }));
+});
 // 违规状态过滤（仅下钻带 status 参数时生效；为空=不过滤，保持普通浏览默认行为）。
 const realtimeStatus = ref([]);
 const monthlySites = ref([]);
@@ -418,6 +448,7 @@ const realtimeFilteredRows = computed(() =>
       matchSel(realtimeCats.value, catOf(r)) &&
       matchSel(realtimeTypes.value, typeOf(r)) &&
       (matchSel(realtimeSites.value, siteOf(r)) || matchSel(realtimeSites.value, teamIdOf(r))) &&
+      matchSel(realtimeAppealStatus.value, appealStatusOf(r)) &&
       matchSel(realtimeStatus.value, statusOf(r)),
   ),
 );
@@ -431,15 +462,21 @@ const monthlyFilteredRows = computed(() =>
   ),
 );
 
-// 多选框“全选”：选中占位项 SELECT_ALL 即选中全部真实值，并剔除占位项本身（避免参与过滤）
+// 多选框“全选”：点一次选中全部真实值，再点一次清空（反选）；占位项本身不参与过滤。
 const SELECT_ALL = '__ALL__';
 // 注意：必须在 <script setup> 作用域里捕获真实 ref（模板里直接传 monthlyCats 会被自动解包成数组，
 // 导致下面的 modelRef.value = ... 写到了数组上而非响应式 ref，全选失效）。
 function handleSelectAll(modelRef, optionsRef, selected) {
   const allValues = optionsRef.value.filter((o) => o.value !== SELECT_ALL).map((o) => o.value);
-  modelRef.value = selected.includes(SELECT_ALL)
-    ? allValues.slice()
-    : selected.filter((v) => v !== SELECT_ALL);
+  if (!selected.includes(SELECT_ALL)) {
+    modelRef.value = selected.filter((v) => v !== SELECT_ALL);
+    return;
+  }
+  // 点选了“全选”：此前已全选则反选清空，否则全选
+  const real = selected.filter((v) => v !== SELECT_ALL);
+  const isAllSelected =
+    real.length === allValues.length && allValues.every((v) => real.includes(v));
+  modelRef.value = isAllSelected ? [] : allValues.slice();
 }
 const onMonthlyCatChange = (sel) => handleSelectAll(monthlyCats, monthlyCatOptions, sel);
 const onMonthlyTypeChange = (sel) => handleSelectAll(monthlyTypes, monthlyTypeOptions, sel);
@@ -448,11 +485,9 @@ const onMonthlyRiderChange = (sel) => handleSelectAll(monthlyRiders, monthlyRide
 const onRealtimeCatChange = (sel) => handleSelectAll(realtimeCats, realtimeCatOptions, sel);
 const onRealtimeTypeChange = (sel) => handleSelectAll(realtimeTypes, realtimeTypeOptions, sel);
 const onRealtimeSiteChange = (sel) => handleSelectAll(realtimeSites, realtimeSiteOptions, sel);
+const onRealtimeAppealStatusChange = (sel) =>
+  handleSelectAll(realtimeAppealStatus, realtimeAppealStatusOptions, sel);
 
-const nowDtStr = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-};
 const toMs = (d) => Date.parse(`${d}T00:00:00+08:00`);
 const toMsEnd = (d) => Date.parse(`${d}T23:59:59.999+08:00`);
 // 违规时间：上游返回 ISO（含 T / 可能带 Z），展示为普通日期时间 "2026-10-07 23:41:28"
@@ -479,49 +514,8 @@ const CODE_FIELDS = new Set([
   'violationCategory', 'violationType', 'violationStatus',
   'appealStatus', 'eventSource',
 ]);
-// 英文代码 → 中文。取值来自风神真实数据（按 violationOrderId 关联 download CSV 的中文，已覆盖全量样本）。
-const CODE_LABELS = {
-  eventSource: {
-    APOLLO: '运单平台',
-    RIDER: '骑士作业',
-    USER: '用户',
-    SPZT: '索赔中台',
-    KFPT: '开放平台',
-  },
-  violationCategory: {
-    OVERTIME: '超时',
-    COMPLAIN: '投诉',
-    BAD_REVIEW: '差评',
-    CLAIM: '餐货损',
-    CANCEL: '取消',
-  },
-  violationType: {
-    1001: '超时送达',
-    1004: '违规取消',
-    1005: '违规送达',
-    1028: '少餐错餐 (差评)',
-    1029: '送达不通知',
-    1030: '不送上门 (差评)',
-    1035: '未保持餐品完整（索赔）',
-    1036: '送错位置（索赔）',
-    1037: '少餐错餐（索赔）',
-    1038: '丢餐（索赔）',
-    1039: '提前点送达（索赔）',
-    1053: '配送超时（索赔）',
-  },
-  violationStatus: {
-    10: '成立',
-    20: '不成立',
-  },
-  appealStatus: {
-    10: '待申诉',
-    20: '申诉中',
-    30: '申诉成功',
-    40: '申诉失败',
-    50: '申诉过期',
-    '-1': '不可申诉',
-  },
-};
+// 枚举映射来自 @aeolus/shared 公共字典（唯一事实源）
+const CODE_LABELS = VIOLATION_CODE_LABELS;
 // 代码列 formatter：命中映射则显示中文，否则原样显示（避免误标）
 function fmtCode(_row, column, value) {
   if (!value) return '';
@@ -529,12 +523,42 @@ function fmtCode(_row, column, value) {
   const m = key && CODE_LABELS[key];
   return (m && m[value]) || value;
 }
+// CSV 行的枚举值是中文标签（如「超时」），queryList 行是英文代码（如 OVERTIME）。
+// 同一张表两形态并存会让筛选框出现两个同名选项、且筛选漏掉另一形态的行。
+// 统一归一到英文代码（queryList 原生形态），展示仍由 fmtCode 转回中文。
+const CODE_REVERSE = Object.fromEntries(
+  Object.entries(CODE_LABELS).map(([field, map]) => [
+    field,
+    Object.fromEntries(Object.entries(map).map(([code, label]) => [label, code])),
+  ]),
+);
+function normalizeCode(field, value) {
+  if (value === undefined || value === null || value === '') return value;
+  const s = String(value).trim();
+  return CODE_REVERSE[field]?.[s] ?? s;
+}
+// CSV 落地行（考核看板取数写入 violation_realtime / violation）以中文表头为键，
+// 实时刷新行（风神 queryList）以英文键 + 合并字段 knightInfo/teamInfo 返回。
+// 这里用 @aeolus/shared 的唯一公共字典归一到英文键，两条路径的展示列、筛选选项和代码列格式化保持一致。
 function normalizeRows(rows) {
-  return (rows || []).map(({ knightInfo, teamInfo, ...rest }) => ({
-    ...rest,
-    ...splitKnight(knightInfo),
-    ...splitTeam(teamInfo),
-  }));
+  return (rows || []).map(({ knightInfo, teamInfo, ...rest }) => {
+    const out = { ...rest };
+    for (const [cn, en] of Object.entries(VIOLATION_CN2EN)) {
+      if (out[en] === undefined && out[cn] !== undefined) out[en] = out[cn];
+      delete out[cn];
+    }
+    for (const field of CODE_FIELDS) {
+      if (out[field] !== undefined) out[field] = normalizeCode(field, out[field]);
+    }
+    // 合并字段只在 queryList 行出现，优先以其为准；CSV 行已由映射填好，不被空拆分覆盖
+    if (knightInfo != null) Object.assign(out, splitKnight(knightInfo));
+    if (teamInfo != null) Object.assign(out, splitTeam(teamInfo));
+    out.knightId = out.knightId ?? '';
+    out.knightName = out.knightName ?? '';
+    out.teamId = out.teamId ?? '';
+    out.teamName = out.teamName ?? '';
+    return out;
+  });
 }
 
 // 明确不展示的字段（数据里有但表格不渲染）
@@ -566,6 +590,8 @@ function buildColumns(rows, extraHidden = []) {
     appealStatus: '申诉状态',
     appealExpireTime: '申诉截止',
     eventSource: '数据来源',
+    agencyId: '商ID',
+    agencyName: '商名称',
   };
   const ORDER = [
     'violationTime', 'violationOrderId', 'trackingId', 'knightId', 'knightName', 'teamId', 'teamName',
@@ -677,13 +703,18 @@ function renderRealtime(rows) {
   realtimeCats.value = mergeSel(realtimeCats.value, distinctOf(realtimeRows.value, catOf));
   realtimeTypes.value = mergeSel(realtimeTypes.value, distinctOf(realtimeRows.value, typeOf));
   realtimeSites.value = mergeSel(realtimeSites.value, distinctOf(realtimeRows.value, siteOf));
+  realtimeAppealStatus.value = mergeSel(
+    realtimeAppealStatus.value,
+    distinctOf(realtimeRows.value, appealStatusOf),
+  );
   // 数据渲染后重新套用下钻筛选：抵消 mergeSel 在「空数据渲染（实时库尚未落盘）」
   // 时把已设好的分类/类型筛选清空成 [] 的问题，确保点投诉只看到投诉单而非全站违规。
   applyDrillQuery();
 }
 
-// 读本地已落盘缓存（不请求风神）：切换标签/改区间时调用
-async function loadRealtimeCache() {
+// 读本地已落盘缓存（不请求风神）：切换标签/改区间时调用。
+// allowAutoFetch=false 供刷新后的回读使用，避免「回读为空 → 再刷新」的递归。
+async function loadRealtimeCache(allowAutoFetch = true) {
   const [s, e] = realtimeRange.value;
   if (!s || !e) return;
   loadingRealtime.value = true;
@@ -696,7 +727,7 @@ async function loadRealtimeCache() {
     renderRealtime(r.rows || []);
     // 取数时间 = 该区间最近一次落盘时间
     fetchedAt.value = r.fetchedAt || '—';
-    if ((r.rows || []).length === 0) {
+    if (allowAutoFetch && (r.rows || []).length === 0) {
       // 本地该区间无缓存，自动拉取最新并落盘，避免打开即空白
       ElMessage.info('本地暂无缓存，正在拉取最新数据并落盘…');
       await refreshRealtime();
@@ -708,7 +739,8 @@ async function loadRealtimeCache() {
   }
 }
 
-// 实时拉取最新并落盘（刷新按钮）：请求风神 → 写入 violation.db → 展示
+// 实时拉取最新并落盘（刷新按钮）：取数基座取数 → 落库 → 回读本地库 → 展示。
+// 落盘失败即报错并停止，不用未落盘的内存行兜底展示。
 async function refreshRealtime() {
   const [s, e] = realtimeRange.value;
   if (!s || !e) return;
@@ -719,14 +751,14 @@ async function refreshRealtime() {
       ElMessage.error(r.error || '查询失败');
       return;
     }
-    const rows = r.rows || [];
     try {
-      await saveViolationRows(rows);
-    } catch (_) {
-      /* 落盘失败不影响本次展示 */
+      await saveViolationRows(r.rows || []);
+    } catch (err) {
+      ElMessage.error(`落盘失败：${err?.message || '未知错误'}，本次不展示未落盘数据`);
+      return;
     }
-    renderRealtime(rows);
-    fetchedAt.value = nowDtStr();
+    // 与页面加载走同一条读库展示路径；取数时间取库内落盘时间
+    await loadRealtimeCache(false);
   } catch (err) {
     ElMessage.error(err?.message || '查询失败');
   } finally {

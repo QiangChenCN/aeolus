@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { violationId } from '@aeolus/shared';
 import { PgService } from '../../../modules/pg/pg.service';
 
 /**
@@ -44,7 +45,8 @@ export class RealtimeStoreService {
     let n = 0;
     const now = this.nowStr();
     for (const r of rows || []) {
-      const no = String(r['violationOrderId'] ?? '');
+      // 与考核看板 CSV 路径统一用违规编号作主键（中英键都认），排除动态申诉时间字段
+      const no = violationId(r);
       if (!no) continue;
       await this.pg.query(
         'INSERT INTO violation_realtime (stat_date, violation_no, raw_json, created_at) ' +

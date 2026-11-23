@@ -62,7 +62,7 @@ export const SOURCE_CATALOG: SourceCatalogItem[] = [
       'start_ms / end_ms：毫秒时间窗（orders-raw 端点）；不传时按 date 取全天',
       'teams：站点列表（refresh-orders 端点，导出时按这些站点过滤并落盘）',
     ],
-    notes: '取数由 DeliveryExportService 承担：三段式异步导出（触发 → 轮询 → 取签名 URL → 下载 xlsx）并解析成中英双键行，失败或残缺直接报错（无分页兜底）。字段映射（中文表头 ↔ 英文键）收敛在 delivery-field-map.ts，导出与 API 共用。\n服务本身不落盘，只返回行数据。\n下游调用方：\n标准达成阶段 0 → runtime/raw/orders_*（按站点分组落 JSON 文件）\n运单明细看板 → PG delivery_realtime（整日覆盖写）\n配送超时看板 → PG delivery_realtime（整日覆盖写）\n考核看板 → PG delivery_realtime（实时整日覆盖）/ PG delivery（每日历史回补 UPSERT）',
+    notes: '取数由 DeliveryExportService 承担：三段式异步导出（触发 → 轮询 → 取签名 URL → 下载 xlsx）并解析成中英双键行，失败或残缺直接报错（无分页兜底）。字段映射（中文表头 ↔ 英文键）收敛在 @aeolus/shared 公共字典，导出与 API 共用。\n服务本身不落盘，只返回行数据。\n下游调用方：\n标准达成阶段 0 → runtime/raw/orders_*（按站点分组落 JSON 文件）\n运单明细看板 → PG delivery_realtime（整日覆盖写）\n配送超时看板 → PG delivery_realtime（整日覆盖写）\n考核看板 → PG delivery_realtime（实时整日覆盖）/ PG delivery（每日历史回补 UPSERT）',
   },
   {
     id: 'delivery-query',
@@ -116,7 +116,7 @@ export const SOURCE_CATALOG: SourceCatalogItem[] = [
       'rider：骑手 ID 或姓名，下推上游',
       'page_no / page_size：单页查询参数（violation-list 默认 1/10；violation-range 默认 200）',
     ],
-    notes: '字段映射与 CSV 导出共用 delivery-field-map.ts 的违规区块，行归一后按违规编号去重。\n整段全量先逐日切开；单日总量超 9000 且无下推时再按 4 时段切片，避免上游跨度/翻页上限。\n限流走 AIMD + 指数退避；会话失效强制重登后重试。每日 03:00 回补任务写入历史表 violation。',
+    notes: '字段映射与 CSV 导出共用 @aeolus/shared 公共字典的违规区块，行归一后按违规编号去重。\n整段全量先逐日切开；单日总量超 9000 且无下推时再按 4 时段切片，避免上游跨度/翻页上限。\n限流走 AIMD + 指数退避；会话失效强制重登后重试。每日 03:00 回补任务写入历史表 violation。',
   },
   {
     id: 'attendance',

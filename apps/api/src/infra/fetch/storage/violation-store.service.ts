@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PgService } from '../../../modules/pg/pg.service';
-import { violationId } from '../sources/delivery-field-map';
+import { violationId } from '@aeolus/shared';
 
 /**
  * 违规处罚明细持久层（按月累计看板的数据底座）—— PostgreSQL only，不再保留 SQLite。

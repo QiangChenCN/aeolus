@@ -17,4 +17,6 @@ export declare const AEOLUS_MONOREPO_NAME: "aeolusdata";
 export declare function sleep(ms: number): Promise<void>;
 /** 简单问候（示例导出，便于验证跨包引用）。 */
 export declare function greet(scope: string): string;
+/** 全项目唯一取数字段映射字典（运单 + 违规处罚），前后端共用。 */
+export * from './field-map.js';
 //# sourceMappingURL=index.d.ts.map

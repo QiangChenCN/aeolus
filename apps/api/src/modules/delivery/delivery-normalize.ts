@@ -2,7 +2,7 @@
  * 运单明细看板的「原始行 → 展示行」归一化（本看板私有，不与其它看板共享）。
  *
  * 原始行是风神导出的**宽表**（一份行同时带中文表头键与英文键，见
- * `infra/fetch/sources/delivery-field-map.ts` 的 CN2EN，共 70+ 列）。直接整行丢给前端
+ * `@aeolus/shared` 公共字典的 CN2EN，共 70+ 列）。直接整行丢给前端
  * 有两个问题：单日全站动辄数千行 × 70 列，包体过大；且中英双键让前端无从下手。
  *
  * 因此这里把原始行投影成一份**固定列定义**的展示行：
@@ -14,7 +14,7 @@
  *   · 布尔列统一成「是 / 否」，避免「否」这类字符串被当成真值。
  */
 
-import { CN2EN, BOOL_EN, TIME_EN, ENUM_DICT } from '../../infra/fetch/sources/delivery-field-map';
+import { CN2EN, BOOL_EN, TIME_EN, ENUM_DICT } from '@aeolus/shared';
 
 export type DeliveryColKind = 'text' | 'time' | 'bool' | 'num';
 

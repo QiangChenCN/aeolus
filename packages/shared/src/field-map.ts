@@ -1,11 +1,14 @@
 /**
- * 全项目「取数字段映射」唯一入口。
+ * 全项目「取数字段映射」唯一公共字典（@aeolus/shared）。
  *
- * 这是所有取数基座共用的映射字典，不限于运单：每个基座按区块往本文件追加自己的映射，
- * 任何导出或 API 取数的字段映射都只在这里维护，绝不在各自的取数服务里另建映射表或再抄一份。
+ * apps/api（所有取数基座）与 apps/web（看板展示）共用同一份，任何导出或 API 取数的
+ * 字段映射都只在这里维护，绝不在各自的取数服务 / 前端页面里另建映射表或再抄一份。
+ * 本文件由原 apps/api/src/infra/fetch/sources/delivery-field-map.ts 整体迁入共享包。
+ *
  * 目前收录两个区块：
  *   · 运单：DeliveryExportService（xlsx 导出）与 DeliveryQueryService（queryTracking 分页）；
- *   · 违规处罚：ViolationFetchService（CSV 导出）与 ViolationListFetchService（queryList 分页）。
+ *   · 违规处罚：ViolationFetchService（CSV 导出）与 ViolationListFetchService（queryList 分页），
+ *     前端违规处罚看板读库时也用 VIOLATION_CN2EN 把 CSV 中文表头行归一成英文键。
  * 每个区块的两条取数路径共用同一套字段映射；
  * 运单区块的映射如下：
  *   · CN2EN    中文表头 → 风神英文真名（也是看板列定义的来源）
@@ -183,10 +186,12 @@ export function toMs(v: unknown): unknown {
 /**
  * 违规处罚中文表头 → 风神英文真名（沿用已有落库字段 `violationOrderId` / `violationTime`）。
  * CSV 导出给中文表头，queryList 可能给中文或英文键，两条路径都按本表归一。
+ * 英文键取 queryList 真实字段名（eventSource / bonus / appealExpireTime），
+ * 使 CSV 落地行与 queryList 行同构，前端读库与刷新渲染走同一套列定义。
  */
 export const VIOLATION_CN2EN: Record<string, string> = {
   违规编号: 'violationOrderId',
-  违规来源: 'violationSource',
+  违规来源: 'eventSource',
   违规时间: 'violationTime',
   运单号: 'trackingId',
   骑手ID: 'knightId',
@@ -197,11 +202,11 @@ export const VIOLATION_CN2EN: Record<string, string> = {
   商名称: 'agencyName',
   违规分类: 'violationCategory',
   违规类型: 'violationType',
-  处罚: 'punishment',
+  处罚: 'bonus',
   违规状态: 'violationStatus',
   违规原因: 'violationReason',
   申诉状态: 'appealStatus',
-  剩余申诉时间: 'appealRemainTime',
+  剩余申诉时间: 'appealExpireTime',
 };
 
 /** 英文真名 → 中文表头（由 VIOLATION_CN2EN 反向生成，唯一事实源仍是正向表）。 */
@@ -210,7 +215,69 @@ export const VIOLATION_EN2CN: Record<string, string> = Object.fromEntries(
 );
 
 /**
+ * 枚举「英文代码 → 中文值」。CSV 导出是中文值，queryList 是英文代码。
+ * 落库时把 queryList 行的中文键也补成中文值，保证考核侧 Python 按中文值统计的口径不受写入路径影响。
+ * 取值来自风神真实数据（按 violationOrderId 关联 download CSV 的中文，已覆盖全量样本）。
+ */
+export const VIOLATION_CODE_LABELS: Record<string, Record<string, string>> = {
+  eventSource: {
+    APOLLO: '运单平台',
+    RIDER: '骑士作业',
+    USER: '用户',
+    SPZT: '索赔中台',
+    KFPT: '开放平台',
+  },
+  violationCategory: {
+    OVERTIME: '超时',
+    COMPLAIN: '投诉',
+    BAD_REVIEW: '差评',
+    CLAIM: '餐货损',
+    CANCEL: '取消',
+  },
+  violationType: {
+    1001: '超时送达',
+    1004: '违规取消',
+    1005: '违规送达',
+    1028: '少餐错餐 (差评)',
+    1029: '送达不通知',
+    1030: '不送上门 (差评)',
+    1035: '未保持餐品完整（索赔）',
+    1036: '送错位置（索赔）',
+    1037: '少餐错餐（索赔）',
+    1038: '丢餐（索赔）',
+    1039: '提前点送达（索赔）',
+    1053: '配送超时（索赔）',
+  },
+  violationStatus: {
+    10: '成立',
+    20: '不成立',
+  },
+  appealStatus: {
+    10: '待申诉',
+    20: '申诉中',
+    30: '申诉成功',
+    40: '申诉失败',
+    50: '申诉过期',
+    '-1': '不可申诉',
+  },
+};
+
+/** 枚举「中文值 → 英文代码」（由 VIOLATION_CODE_LABELS 反向生成）。 */
+export const VIOLATION_CODE_REVERSE: Record<string, Record<string, string>> = Object.fromEntries(
+  Object.entries(VIOLATION_CODE_LABELS).map(([field, map]) => [
+    field,
+    Object.fromEntries(Object.entries(map).map(([code, label]) => [label, code])),
+  ]),
+);
+
+/** 把某字段的英文代码转成中文值；非代码（已是中文/空）原样返回。 */
+export function violationCodeToLabel(field: string, value: string): string {
+  return VIOLATION_CODE_LABELS[field]?.[value] ?? value;
+}
+
+/**
  * 上游行归一为「中文表头为规范键」的违规行：保留原字段，并把中英两侧都补成中文规范键。
+ * 枚举字段的中文键统一补中文值（queryList 的英文代码经 VIOLATION_CODE_LABELS 翻译），
  * 这样 CSV 解析结果与分页接口结果同构，下游（考核看板 / 违规看板）无需按来源分支。
  */
 export function normalizeViolationRow(raw: Record<string, unknown>): Record<string, string> {
@@ -221,7 +288,8 @@ export function normalizeViolationRow(raw: Record<string, unknown>): Record<stri
   for (const [cn, en] of Object.entries(VIOLATION_CN2EN)) {
     const v = raw?.[cn] ?? raw?.[en];
     if (v !== undefined && v !== null) {
-      out[cn] = typeof v === 'string' ? v.trim() : String(v);
+      const s = typeof v === 'string' ? v.trim() : String(v);
+      out[cn] = violationCodeToLabel(en, s);
     }
   }
   return out;

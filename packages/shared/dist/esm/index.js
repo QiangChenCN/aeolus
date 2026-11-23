@@ -21,4 +21,6 @@ export function sleep(ms) {
 export function greet(scope) {
     return `[${AEOLUS_MONOREPO_NAME}] hello from ${scope}`;
 }
+/** 全项目唯一取数字段映射字典（运单 + 违规处罚），前后端共用。 */
+export * from './field-map.js';
 //# sourceMappingURL=index.js.map

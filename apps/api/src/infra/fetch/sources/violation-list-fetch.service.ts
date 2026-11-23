@@ -11,7 +11,7 @@ import {
   RELOGIN_MAX,
   RELOGIN_BACKOFF_BASE,
 } from '../runners/fetch-pace.service';
-import { normalizeViolationRow, violationId } from './delivery-field-map';
+import { normalizeViolationRow, violationId } from '@aeolus/shared';
 
 /**
  * 违规处罚明细列表取数（独立于 `violation-fetch.service.ts` 的 CSV 下载）。

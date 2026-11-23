@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
 import { AuthError, TIME_FIELDS, TIME_FIELD } from './delivery-query.service';
 import { netError } from '../../../common/net-error';
-import { CN2EN, TIME_EN, toMs } from './delivery-field-map';
+import { CN2EN, TIME_EN, toMs } from '@aeolus/shared';
 
 /**
  * 运单明细「导出优先」取数（移植自 Python `get_data/delivery_export.py`）。

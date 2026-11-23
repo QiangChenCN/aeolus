@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { createHash } from 'crypto';
+import { violationId } from '@aeolus/shared';
 import { PgService } from '../pg/pg.service';
 
 /**
@@ -64,9 +64,6 @@ CREATE TABLE IF NOT EXISTS assessment_backfill_state (
 const ORDER_NO_KEYS = ['trackingId', '运单id', 'platformTrackingId', '订单号', 'orderNo', 'orderId'];
 /** 站点 id 取值键。 */
 const TEAM_KEYS = ['teamId', '站点id', 'teamID', '团队ID'];
-/** 违规稳定主键的构成键（同站点 + 同运单 + 同类型 + 同原因 → 同一条违规）。 */
-const VIOLATION_KEY_FIELDS = ['团队ID', '运单号', '违规类型', '违规原因'];
-
 @Injectable()
 export class AssessmentDetailStoreService implements OnModuleInit {
   private readonly logger = new Logger(AssessmentDetailStoreService.name);
@@ -286,9 +283,12 @@ export class AssessmentDetailStoreService implements OnModuleInit {
     return Number(r?.c ?? 0);
   }
 
-  /** 违规稳定主键：同站点 + 同运单 + 同类型 + 同原因 → 同一条（状态翻转覆盖而非新增）。 */
+  /**
+   * 违规幂等主键：违规编号（公共字典 violationId，中英键都认）。
+   * 与违规处罚页刷新落盘（RealtimeStoreService）用同一口径，避免同一违规被两条路径写成两行。
+   * 绝不拼入「剩余申诉时间 / 申诉截止时间」等随取数时刻变化的字段。
+   */
   private violationNo(r: Record<string, unknown>): string {
-    const base = VIOLATION_KEY_FIELDS.map((k) => String(r?.[k] ?? '').trim()).join('|');
-    return createHash('sha1').update(base).digest('hex').slice(0, 24);
+    return violationId(r);
   }
 }
