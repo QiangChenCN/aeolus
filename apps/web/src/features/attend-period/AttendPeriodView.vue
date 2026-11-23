@@ -571,6 +571,11 @@ function bjClock() {
   const d = new Date(Date.now() + 8 * 3600 * 1000);
   return { day: d.toISOString().slice(0, 10), hm: d.getUTCHours() * 60 + d.getUTCMinutes() };
 }
+/* 北京时间明天的 YYYY-MM-DD（预排班默认看次日排班） */
+function tomorrowStr() {
+  const d = new Date(Date.now() + 8 * 3600 * 1000 + 24 * 3600 * 1000);
+  return d.toISOString().slice(0, 10);
+}
 function _hmMin(s) {
   if (!s || !String(s).includes(':')) return null;
   const [h, m] = String(s).split(':').map(Number);
@@ -677,8 +682,8 @@ const pagedTpRiderRows = computed(() => {
 watch([date, tpFilterPeriod, tpFilterTeam, tpFilterAch, tpRiderRows], () => { tpPage.value = 1; });
 
 /* —— 预排班：独立走排班统计 xlsx 导出，不复用 dataset —— */
-/* 独立日期范围（与顶部单日 date 解耦）：单日 = 起止相同，多天 = 区间；默认取顶部当前日 */
-const preDates = ref([date.value, date.value]);
+/* 独立日期范围（与顶部单日 date 解耦）：单日 = 起止相同，多天 = 区间；默认看明日排班 */
+const preDates = ref([tomorrowStr(), tomorrowStr()]);
 const preRaw = ref({ rows: [], periods: [] });
 const preLoading = ref(false);
 const preLoaded = ref(false);
