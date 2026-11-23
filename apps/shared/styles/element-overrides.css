@@ -28,6 +28,18 @@
   --r-tab-tail: 12px;
 }
 
+/* daterange 宽度兜底：部分页面（flex 布局 / 深层嵌套）里变量会被拉伸或覆盖，
+   用一层自有 wrapper 定宽 + 强制内部输入框填满，确保稳定 220px。
+   用法：<div class="range-picker"><el-date-picker type="daterange" .../></div>
+   要调整宽度改这里一处即可。 */
+.range-picker {
+  width: 220px;
+  flex: 0 0 auto;
+}
+.range-picker .el-date-editor {
+  width: 100% !important;
+}
+
 /* 卡片（el-card）圆角单独放大到 20px（Element Plus 无独立 --el-card-border-radius token，
    故直接覆盖 .el-card；不影响表格等其他用 --el-border-radius-base 的元素） */
 .el-card {

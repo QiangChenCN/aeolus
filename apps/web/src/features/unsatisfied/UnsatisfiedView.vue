@@ -958,10 +958,7 @@ onMounted(() => {
 .dv-range-wrap {
   flex: 0 0 auto;
 }
-.dv-range-wrap :deep(.el-date-editor) {
-  --el-date-editor-daterange-width: 220px !important;
-  width: 220px !important;
-}
+/* daterange 宽度由全局 element-overrides.css 的 --el-date-editor-daterange-width 统一控制 */
 .dv-range-wrap :deep(.el-range-input) {
   font-size: 13px;
 }

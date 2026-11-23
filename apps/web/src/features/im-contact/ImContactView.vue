@@ -588,9 +588,7 @@ onUnmounted(() => {
    flex:none 防止在窄屏被拉伸撑长整条工具栏。 */
 /* daterange 真实宽度由 EP 变量 --el-date-editor-daterange-width(默认350px) 控制，且 class
    不透传到 date-picker 根元素；用外层包裹 + :deep 命中 .el-date-editor 改该变量。 */
-.dv-range-wrap :deep(.el-date-editor) {
-  --el-date-editor-daterange-width: 220px !important;
-}
+/* daterange 宽度由全局 element-overrides.css 的 --el-date-editor-daterange-width 统一控制 */
 .dv-date-tag { font-size: var(--el-font-size-small); color: var(--el-text-color-secondary); }
 .dv-range-tag { font-size: var(--el-font-size-small); color: var(--el-text-color-secondary); }
 .dv-bar .sp { flex: 1; }

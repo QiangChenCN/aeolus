@@ -157,6 +157,10 @@ export function fetchAttendDataset({ team, date, refresh } = {}) {
   // 实时计算逐站拼装骑手×时段明细，首次约 30~40s；放宽超时避免误报「请求超时」。
   return request('/attend-period/dataset' + (p.length ? '?' + p.join('&') : ''), { timeout: 120000 });
 }
+/* 预排班：排班统计 xlsx 导出 → 各时段排班满足率（触发导出+下载+解析，放宽超时） */
+export function fetchPreSchedule({ teamIds, start, end } = {}) {
+  return request('/fetch/sched-export', j({ team_ids: teamIds, start, end }), { timeout: 120000 });
+}
 
 /* ============ 总览 ============ */
 export function fetchOverviewSiteOrders({ start, end } = {}) {

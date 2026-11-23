@@ -1143,10 +1143,7 @@ onUnmounted(() => {
    不透传到 date-picker 根元素；用外层包裹 + :deep 命中 .el-date-editor 改该变量（与
    UnsatisfiedView / ImContactView 同款写法）。flex:none 防窄屏被拉伸。 */
 .dv-range-wrap { flex: 0 0 auto; }
-.dv-range-wrap :deep(.el-date-editor) {
-  --el-date-editor-daterange-width: 220px !important;
-  width: 220px !important;
-}
+/* daterange 宽度由全局 element-overrides.css 的 --el-date-editor-daterange-width 统一控制 */
 .dv-hist-badge { margin: 0 var(--sp-4); font-weight: 600; letter-spacing: 0.5px; }
 .dv-bar .sp { flex: 1; }
 .dv-updated { margin-left: var(--sp-4); white-space: nowrap; }

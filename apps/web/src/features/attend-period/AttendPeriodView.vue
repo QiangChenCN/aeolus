@@ -1,7 +1,7 @@
 <template>
   <div class="dv">
     <div class="dv-bar">
-      <h2 class="v-title">时段出勤</h2>
+      <h2 class="v-title">排班出勤</h2>
       <el-select v-model="teamSel" class="dv-sel" placeholder="站点">
         <el-option label="全部站点" value="__all__" />
         <el-option v-for="t in teamOptions" :key="t.id" :label="t.name" :value="t.id" />
@@ -20,14 +20,15 @@
       </el-button>
     </div>
 
-    <el-alert v-if="dataError" type="error" :closable="false" show-icon class="dv-hint">
+    <!-- 以下提示仅针对 dataset 三个 tab；预排班独立取数，有自己的状态提示 -->
+    <el-alert v-if="activeTab !== 'preSchedule' && dataError" type="error" :closable="false" show-icon class="dv-hint">
       {{ dataError }}
     </el-alert>
     <!-- 无缓存：提示点刷新（不自动取数，符合「仅刷新按钮才拉取」） -->
-    <el-alert v-else-if="needRefresh" type="info" :closable="false" show-icon class="dv-hint">
+    <el-alert v-else-if="activeTab !== 'preSchedule' && needRefresh" type="info" :closable="false" show-icon class="dv-hint">
       当前日期（{{ date }}）暂无缓存数据，请点「刷新数据」拉取实时数据并生成看板。
     </el-alert>
-    <el-alert v-else-if="dataNote" type="warning" :closable="false" show-icon class="dv-hint">{{ dataNote }}</el-alert>
+    <el-alert v-else-if="activeTab !== 'preSchedule' && dataNote" type="warning" :closable="false" show-icon class="dv-hint">{{ dataNote }}</el-alert>
 
     <el-tabs v-model="activeTab" class="dv-tabs">
       <!-- ============ 站点看板（四张率值表） ============ -->
@@ -222,6 +223,58 @@
           </el-card>
         </div>
       </el-tab-pane>
+
+      <!-- ============ 预排班（排班统计 xlsx → 各时段排班满足率） ============ -->
+      <el-tab-pane label="预排班" name="preSchedule">
+        <div class="dv-pre-wrap">
+          <div class="dv-pre-bar">
+            <span class="dv-pre-note">数据来自风神「排班统计」导出；满足率 = 排班人数 / 应排人数。</span>
+            <div class="range-picker">
+              <el-date-picker
+                v-model="preDates" type="daterange" value-format="YYYY-MM-DD"
+                start-placeholder="开始日期" end-placeholder="结束日期"
+                :clearable="false"
+              />
+            </div>
+            <span class="sp" />
+            <el-button :loading="preLoading" @click="loadPreSchedule(true)">
+              <el-icon><Refresh /></el-icon> {{ preLoaded ? '重新加载' : '加载预排班' }}
+            </el-button>
+          </div>
+          <el-alert v-if="preError" type="error" :closable="false" show-icon class="dv-hint">{{ preError }}</el-alert>
+          <div v-loading="preLoading" class="dv-pre-days">
+            <el-card v-for="day in preDayTables" :key="day.date" class="dv-pre-day-card" shadow="never">
+              <template #header>
+                <span class="dv-pre-day-title">{{ day.date }}</span>
+              </template>
+              <el-table :data="day.rows" stripe border class="dv-table" :row-class-name="stationRowClass">
+                <el-table-column prop="team_name" label="站点" min-width="220" show-overflow-tooltip />
+                <el-table-column label="全天" min-width="150" align="center">
+                  <template #default="{ row }">
+                    <div class="dv-cell">
+                      <span class="dv-cell-rate" :class="rateClass(preCell(row, '全天').rate)">
+                        {{ preCell(row, '全天').rate == null ? '—' : (preCell(row, '全天').rate + '%') }}
+                      </span>
+                      <span class="dv-cell-sub">排{{ preCell(row, '全天').scheduled }} / 应{{ preCell(row, '全天').required }}</span>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column v-for="p in prePeriods" :key="p" :label="p" min-width="150" align="center">
+                  <template #default="{ row }">
+                    <div class="dv-cell">
+                      <span class="dv-cell-rate" :class="rateClass(preCell(row, p).rate)">
+                        {{ preCell(row, p).rate == null ? '—' : (preCell(row, p).rate + '%') }}
+                      </span>
+                      <span class="dv-cell-sub">排{{ preCell(row, p).scheduled }} / 应{{ preCell(row, p).required }}</span>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </el-card>
+            <el-empty v-if="!preDayTables.length && !preLoading" description="暂无预排班数据，点「加载预排班」拉取" />
+          </div>
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <el-dialog v-model="cfgVisible" title="站点配置（选择需要在看板展示的站点）" width="440px">
@@ -239,7 +292,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import { fetchAttendTeams, saveAttendTeams, fetchAttendDataset } from '@shared/api/dashboards.js';
+import { fetchAttendTeams, saveAttendTeams, fetchAttendDataset, fetchPreSchedule } from '@shared/api/dashboards.js';
 
 
 const teamsAll = ref([]);   // 全部可选站点 [{id, name}]
@@ -249,7 +302,7 @@ const date = ref(todayStr());
 const resp = ref(null);     // 后端返回的完整响应
 const loading = ref(false);
 const dataError = ref('');
-const activeTab = ref('station');  // station | rider | period
+const activeTab = ref('station');  // station | rider | period | preSchedule
 const rateFolded = ref({});        // 站点看板 4 张率值表的折叠状态，key 为表格序号
 
 /* 日期默认当天（北京时间） */
@@ -623,6 +676,105 @@ const pagedTpRiderRows = computed(() => {
 });
 watch([date, tpFilterPeriod, tpFilterTeam, tpFilterAch, tpRiderRows], () => { tpPage.value = 1; });
 
+/* —— 预排班：独立走排班统计 xlsx 导出，不复用 dataset —— */
+/* 独立日期范围（与顶部单日 date 解耦）：单日 = 起止相同，多天 = 区间；默认取顶部当前日 */
+const preDates = ref([date.value, date.value]);
+const preRaw = ref({ rows: [], periods: [] });
+const preLoading = ref(false);
+const preLoaded = ref(false);
+const preError = ref('');
+
+/* 时段列（去掉「全天」「休息」，「全天」单列硬编码在前） */
+const prePeriods = computed(() => (preRaw.value.periods || []).filter(p => p !== '全天' && p !== '休息'));
+
+/* 按日期拆成多张表：xlsx 每站每日每时段一行 →
+   [{ date, rows: [当日合计行, 当日各站点行] }, ...]，日期升序，每天各自汇总。 */
+const preDayTables = computed(() => {
+  const byDate = new Map();  // date -> Map(team_id -> 站点行)
+  for (const r of preRaw.value.rows || []) {
+    if (r.period === '休息') continue;
+    if (!byDate.has(r.date)) byDate.set(r.date, new Map());
+    const dayMap = byDate.get(r.date);
+    if (!dayMap.has(r.team_id)) {
+      dayMap.set(r.team_id, { team_id: r.team_id, team_name: r.team_name, cells: {}, _isTotal: false });
+    }
+    dayMap.get(r.team_id).cells[r.period] = {
+      rate: r.rate,
+      scheduled: r.scheduled,
+      required: r.required,
+    };
+  }
+
+  const periods = ['全天', ...prePeriods.value];
+  const tables = [];
+  for (const date of [...byDate.keys()].sort()) {
+    let dataRows = [...byDate.get(date).values()];
+    if (!isAllTeam.value) dataRows = dataRows.filter(r => String(r.team_id) === selTeamId.value);
+    if (!dataRows.length) continue;
+    dataRows.sort((a, b) => String(a.team_name).localeCompare(String(b.team_name), 'zh-Hans-CN'));
+
+    const total = { team_name: '合计', cells: {}, _isTotal: true };
+    for (const p of periods) {
+      let n = 0, d = 0, has = false;
+      for (const r of dataRows) {
+        const c = r.cells[p];
+        if (!c) continue;
+        has = true;
+        n += _num(c.scheduled);
+        d += _num(c.required);
+      }
+      total.cells[p] = has ? { rate: _pct(n, d), scheduled: n, required: d }
+                           : { rate: null, scheduled: '—', required: '—' };
+    }
+    tables.push({ date, rows: [total, ...dataRows] });
+  }
+  return tables;
+});
+
+function preCell(row, period) {
+  return row.cells?.[period] || { rate: null, scheduled: '—', required: '—' };
+}
+
+/* 加载预排班：全部站点时导出所有已配置站点，单站时只导出当前站点；日期取本 tab 的区间（单日=起止相同） */
+async function loadPreSchedule(force = false) {
+  if (preLoading.value) return;
+  if (preLoaded.value && !force) return;
+  const [start, end] = preDates.value || [];
+  if (!start || !end) {
+    preError.value = '请选择日期范围';
+    return;
+  }
+  preLoading.value = true;
+  preError.value = '';
+  try {
+    const ids = isAllTeam.value
+      ? teamOptions.value.map(t => t.id)
+      : [selTeamId.value];
+    if (!ids.length) throw new Error('没有可导出的站点，请先配置展示站点');
+    const res = await fetchPreSchedule({ teamIds: ids, start, end });
+    if (res && res.ok) {
+      preRaw.value = { rows: res.rows || [], periods: res.periods || [] };
+      preLoaded.value = true;
+    } else {
+      preError.value = (res && res.error) || '预排班数据加载失败';
+    }
+  } catch (e) {
+    preError.value = e.message || '预排班数据加载失败';
+  } finally {
+    preLoading.value = false;
+  }
+}
+
+/* 切到预排班 tab 且尚未加载时自动拉取；本 tab 日期范围/站点变化后失效并按需重新拉取 */
+watch(activeTab, (v) => { if (v === 'preSchedule') loadPreSchedule(); });
+watch([preDates, teamSel], () => {
+  const [s, e] = preDates.value || [];
+  if (!s || !e) return;
+  preLoaded.value = false;
+  preRaw.value = { rows: [], periods: [] };
+  if (activeTab.value === 'preSchedule') loadPreSchedule(true);
+}, { deep: true });
+
 /* 读取缓存（进入页面 / 切换日期）：始终读取「全部站点」，选中具体站点在前端筛选，不重新取数。 */
 async function loadCached() {
   loading.value = true;
@@ -719,6 +871,14 @@ onMounted(async () => {
 .dv-period-card :deep(.el-card__body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .dv-table-fill { flex: 1; min-height: 0; }
 .dv-pager { display: flex; justify-content: flex-end; padding-top: var(--sp-12); }
+/* 预排班 tab */
+.dv-pre-wrap { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.dv-pre-bar { display: flex; align-items: center; gap: var(--sp-12); margin-bottom: var(--sp-12); }
+.dv-pre-bar .sp { flex: 1; }
+.dv-pre-note { font-size: var(--el-font-size-extra-small); color: var(--el-text-color-secondary); }
+.dv-pre-days { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: var(--sp-16); }
+.dv-pre-day-card { flex: none; }
+.dv-pre-day-title { font-size: var(--el-font-size-medium); font-weight: var(--fw-semibold); color: var(--el-text-color-primary); }
 .dv-rider-wrap { height: 100%; min-height: 0; display: flex; flex-direction: column; }
 .dv-rider-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .dv-rider-card :deep(.el-card__body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }

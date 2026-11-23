@@ -27,6 +27,7 @@ import { ContactImFetchService } from './sources/contact-im-fetch.service';
 import { TeamsFetchService } from './sources/teams-fetch.service';
 import { CookieStatusService } from './runners/cookie-status.service';
 import { ScheduleFetchService } from './sources/schedule-fetch.service';
+import { ScheduleExportFetchService } from './sources/schedule-export.service';
 import { RawCacheService } from './storage/raw-cache.service';
 
 /**
@@ -74,6 +75,7 @@ import { RawCacheService } from './storage/raw-cache.service';
     TeamsFetchService,
     CookieStatusService,
     ScheduleFetchService,
+    ScheduleExportFetchService,
     RefreshRunnerService,
     RawCacheService,
     ViolationListFetchService,
@@ -101,6 +103,7 @@ import { RawCacheService } from './storage/raw-cache.service';
     TeamsFetchService,
     CookieStatusService,
     ScheduleFetchService,
+    ScheduleExportFetchService,
     RefreshRunnerService,
     RawCacheService,
     ViolationListFetchService,

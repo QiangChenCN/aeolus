@@ -11,6 +11,7 @@ import { AttendanceFetchService } from './sources/attendance-fetch.service';
 import { AeolusCookieService } from './creds/aeolus-cookie.service';
 import { AeolusCredentialsService } from './creds/aeolus-credentials.service';
 import { ScheduleFetchService } from './sources/schedule-fetch.service';
+import { ScheduleExportFetchService } from './sources/schedule-export.service';
 import { ViolationFetchService } from './sources/violation-fetch.service';
 import { ViolationListFetchService } from './sources/violation-list-fetch.service';
 import { ViolationStoreService } from './storage/violation-store.service';
@@ -37,6 +38,7 @@ export class FetchController {
     private readonly aeolusCookie: AeolusCookieService,
     private readonly aeolusCreds: AeolusCredentialsService,
     private readonly schedule: ScheduleFetchService,
+    private readonly scheduleExport: ScheduleExportFetchService,
     private readonly violation: ViolationFetchService,
     private readonly violationListSvc: ViolationListFetchService,
     private readonly violationStore: ViolationStoreService,
@@ -227,6 +229,31 @@ export class FetchController {
     try {
       const rows = await this.schedule.query(b.team_id, b.start, b.end, 8, b.cookie);
       return { ok: true, rows };
+    } catch (e) {
+      return this.fail(e);
+    }
+  }
+
+  /**
+   * 排班统计导出（预排班看板）：多站 team_ids + start/end → 各时段排班满足率行。
+   * 三段式取数（触发导出 → OSS 下载 xlsx → 解析）由 ScheduleExportFetchService 承担。
+   */
+  @RequirePerm('view')
+  @Post('sched-export')
+  async schedExport(
+    @Body() b: { team_ids?: Array<string | number>; team_id?: string | number; start?: string; end?: string; cookie?: string },
+  ) {
+    const ids = b?.team_ids?.length
+      ? b.team_ids
+      : b?.team_id != null
+        ? [b.team_id]
+        : [];
+    if (!ids.length || !b?.start || !b?.end) {
+      return { ok: false, error: 'team_ids（或 team_id）/ start / end 必填' };
+    }
+    try {
+      const r = await this.scheduleExport.fetchStats(ids, b.start, b.end, b.cookie);
+      return { ok: true, rows: r.rows, periods: r.periods, file_url: r.file_url };
     } catch (e) {
       return this.fail(e);
     }
