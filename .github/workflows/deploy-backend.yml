@@ -110,6 +110,17 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             apps/api/dist/ \
             "$ECS_USER@$ECS_HOST:/opt/aeolusdata/apps/api/dist/"
+          # @aeolus/shared 是 workspace 包：后端 dist 里 import '@aeolus/shared' 走 node_modules
+          # 符号链接指向服务器 /opt/aeolusdata/packages/shared。它的 dist 在 CI 现场构建
+          # （上面 Build shared package），不进 git，必须显式同步 —— 否则服务器上的共享包
+          # 停留在旧版、缺新增导出（如 violationId / VIOLATION_CODE_LABELS），后端启动即崩 → nginx 502。
+          # （2026-11-23 字典迁入 shared 后实际踩过）。--delete 保证不残留旧产物。
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            "$ECS_USER@$ECS_HOST" 'mkdir -p /opt/aeolusdata/packages/shared'
+          rsync -az --delete \
+            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            packages/shared/dist/ \
+            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/packages/shared/dist/"
           # /tokens.css 端点读取 apps/shared/tokens.css（令牌已迁出 web/），需显式同步。
           # rsync 不会自动创建多级目标目录，先 mkdir（目录已存在时无副作用）。
           ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
