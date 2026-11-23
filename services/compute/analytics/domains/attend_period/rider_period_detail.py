@@ -250,15 +250,21 @@ def compute(team_id, date):
             "error": None,
         })
         # 实时考勤接口对任意 tc 都返回全站骑手；未排班骑手 timeCode 不含本时段码。
-        # 按「骑手 timeCode 列表是否含本时段码」过滤，才得到「该时段真正排班」的骑手。
+        # 纳入明细的骑手 = 本时段排班（timeCode 含本时段码）OR 本时段有完成单量（timeAttendanceVos[tc].timeFinishOrder>0）。
+        # 后者是「未排班但有单量」的骑手，必须展示；用 scheduled 字段区分，不参与排班/达标/全天统计。
         try:
             _tc_int = int(tc)
         except (TypeError, ValueError):
             _tc_int = tc
-        _in_slot = [rid for rid, _info in _att_index.items() if _tc_int in _info["tcs"]]
-        if not _in_slot:
+        def _is_scheduled(_rid):
+            return _tc_int in _att_index[_rid]["tcs"]
+        def _has_orders(_rid):
+            return _norm_int((_att_index[_rid]["vos"].get(_tc_int) or {}).get("timeFinishOrder")) > 0
+        _scheduled_rids = [rid for rid in _att_index if _is_scheduled(rid)]
+        if not _scheduled_rids:
             period_defs[-1]["error"] = "该时段实时考勤无数据"
             continue
+        _in_slot = [rid for rid in _att_index if _is_scheduled(rid) or _has_orders(rid)]
         for rid in _in_slot:
             _info = _att_index[rid]
             _vo = _info["vos"].get(_tc_int) or {}
@@ -270,10 +276,13 @@ def compute(team_id, date):
                     "team_id": str(_r.get("teamId") or team_id),
                 }
             rider_period.setdefault(rid, {})[tc] = {
+                "scheduled": _is_scheduled(rid),
                 # 各时段单量/时长读 timeAttendanceVos[时段]，不读顶层（顶层只对应 queryTimeCode）
                 "orders": _norm_int(_vo.get("timeFinishOrder")),
                 "online_sec": _to_sec(_vo.get("timeValidOnlineTime")),
                 "work_status": _info["rider"].get("workStatus"),
+                # 配送中单量：仅用于「背单下线」标注（workStatus=3 且 deliveryOrder>0），为 0/缺失记 0
+                "delivery_order": _norm_int(_info["rider"].get("deliveryOrder")),
             }
 
     # 4) 组装每位骑手的逐时段达标矩阵
@@ -294,39 +303,51 @@ def compute(team_id, date):
             tc = pd["time_code"]
             rec = rider_period.get(rid, {}).get(tc)
             if rec is None:
+                # 未排班骑手：单量/时长记 None，但在线状态取顶层实时 workStatus（骑手级，与时段无关），
+                # 否则前端「在线状态」列会全部落进未映射显示「-」。
+                _top = _att_index.get(rid, {}).get("rider") or {}
                 cells[tc] = {"scheduled": False, "orders": None, "online_sec": None,
                              "order_ok": None, "online_ok": None,
-                             "achieved": None, "work_status": None,
+                             "achieved": None, "work_status": _top.get("workStatus"),
+                             "delivery_order": _norm_int(_top.get("deliveryOrder")),
                              "configured": pd["configured"]}
                 continue
-            scheduled_n += 1
+            is_sched = rec.get("scheduled", True)
+            if is_sched:
+                scheduled_n += 1
             orders = rec["orders"]
             online_sec = rec["online_sec"]
             online_h = (online_sec / 3600.0) if online_sec is not None else None
             # 达标规则：订单达标 且 时长达标；任一要求=0 视为该轴免考核
-            order_ok = (pd["orders_req"] == 0) or (orders >= pd["orders_req"])
-            online_ok = (pd["online_req_h"] == 0) or (
-                online_h is not None and online_h >= pd["online_req_h"])
-            if pd["configured"]:
-                achieved = bool(order_ok and online_ok)
-                if achieved:
-                    achieved_n += 1
+            # 未排班但有单量的骑手仅展示单量，不参与达标判定（achieved/order_ok/online_ok 记 None）
+            if is_sched:
+                order_ok = (pd["orders_req"] == 0) or (orders >= pd["orders_req"])
+                online_ok = (pd["online_req_h"] == 0) or (
+                    online_h is not None and online_h >= pd["online_req_h"])
+                if pd["configured"]:
+                    achieved = bool(order_ok and online_ok)
+                    if achieved:
+                        achieved_n += 1
+                else:
+                    achieved = None
             else:
-                achieved = None
+                order_ok = online_ok = achieved = None
             cells[tc] = {
-                "scheduled": True,
+                "scheduled": is_sched,
                 "orders": orders,
                 "online_sec": online_sec,
                 "order_ok": order_ok,
                 "online_ok": online_ok,
                 "achieved": achieved,
                 "work_status": rec["work_status"],
+                "delivery_order": rec.get("delivery_order", 0),
                 "configured": pd["configured"],
             }
             # 累计「全天」判定用的实际值（只统计有排班的时段）
-            full_day_orders += orders or 0
-            if online_sec is not None:
-                full_day_online_sec += online_sec
+            if is_sched:
+                full_day_orders += orders or 0
+                if online_sec is not None:
+                    full_day_online_sec += online_sec
 
         full_day_online_h = round(full_day_online_sec / 3600.0, 2)
         # 全天达标判定：依据系统设置里的「全天」行（name=全天 / 00:00-00:00）

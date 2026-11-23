@@ -31,6 +31,19 @@
     <el-alert v-else-if="activeTab !== 'preSchedule' && dataNote" type="warning" :closable="false" show-icon class="dv-hint">{{ dataNote }}</el-alert>
 
     <el-tabs v-model="activeTab" class="dv-tabs">
+      <!-- ============ 实时看板（时段达成 / 含预估，置于首位） ============ -->
+      <el-tab-pane label="实时看板" name="realtime">
+        <div class="rt-wrap">
+          <AttendRealtimeBoard
+            :rider-rows="riderRowsFiltered"
+            :station-rows="stationRowsFiltered"
+            :periods="riderPeriods"
+            :date="date"
+            :fetched-at="fetchedAt"
+          />
+        </div>
+      </el-tab-pane>
+
       <!-- ============ 站点看板（四张率值表） ============ -->
       <el-tab-pane label="站点看板" name="station">
           <div v-for="(t, i) in stationRateTables" :key="i" class="dv-rate-block">
@@ -187,7 +200,7 @@
           </div>
           <el-card class="dv-period-card" shadow="never">
           <div class="dv-table-fill">
-          <el-table v-loading="loading" :data="pagedTpRiderRows" stripe border size="small" class="dv-table" height="100%" empty-text="暂无时段数据">
+          <el-table v-loading="loading" :data="pagedTpRiderRows" stripe border class="dv-table" height="100%" empty-text="暂无时段数据">
               <el-table-column prop="time_name" label="时段" min-width="130" fixed align="center" show-overflow-tooltip />
               <el-table-column prop="rider_id" label="骑手ID" min-width="120" align="center" show-overflow-tooltip />
               <el-table-column prop="rider_name" label="骑手" min-width="120" align="center" show-overflow-tooltip />
@@ -293,6 +306,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { fetchAttendTeams, saveAttendTeams, fetchAttendDataset, fetchPreSchedule } from '@shared/api/dashboards.js';
+import AttendRealtimeBoard from './AttendRealtimeBoard.vue';
 
 
 const teamsAll = ref([]);   // 全部可选站点 [{id, name}]
@@ -302,7 +316,7 @@ const date = ref(todayStr());
 const resp = ref(null);     // 后端返回的完整响应
 const loading = ref(false);
 const dataError = ref('');
-const activeTab = ref('station');  // station | rider | period | preSchedule
+const activeTab = ref('realtime'); // realtime | station | rider | period | preSchedule
 const rateFolded = ref({});        // 站点看板 4 张率值表的折叠状态，key 为表格序号
 
 /* 日期默认当天（北京时间） */
@@ -866,6 +880,7 @@ onMounted(async () => {
 .dv-tabs :deep(.el-tabs__content) { flex: 1; min-height: 0; overflow: visible; }
 .dv-tabs :deep(.el-tab-pane) { height: 100%; }
 .dv-period-wrap { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.rt-wrap { height: 100%; min-height: 0; }
 .dv-filter { display: flex; gap: var(--sp-12); margin-bottom: var(--sp-12); flex-wrap: wrap; }
 .dv-filter-sel { width: 160px; }
 /* 多选下拉头部：全选 / 反选 / 清空 */
