@@ -4,6 +4,7 @@ import { OrdersFetchService } from './sources/orders-fetch.service';
 import { FetchPaceService } from './runners/fetch-pace.service';
 import { RefreshAllService } from './runners/refresh-all.service';
 import { TIME_FIELDS, TIME_FIELD, DeliveryQueryService } from './sources/delivery-query.service';
+import { KnightDetailQueryService } from './sources/knight-detail-query.service';
 import { QuarkCredsService } from './creds/quark-creds.service';
 import { TeamsFetchService } from './sources/teams-fetch.service';
 import { ContactImFetchService } from './sources/contact-im-fetch.service';
@@ -46,6 +47,7 @@ export class FetchController {
     private readonly violationScheduler: ViolationSchedulerService,
     private readonly contactImSvc: ContactImFetchService,
     private readonly querySvc: DeliveryQueryService,
+    private readonly knightQuerySvc: KnightDetailQueryService,
   ) {}
 
   /**
@@ -143,6 +145,68 @@ export class FetchController {
       ...result,
       columns: DELIVERY_COLUMNS.map((c) => ({ key: c.key, label: c.label, kind: c.kind })),
     };
+  }
+
+  /**
+   * 骑手明细查询（实时点查，不落盘）：风神 HR 接口 kunkka-svr/ehr/staff/knight/list。
+   *
+   * GET /api/fetch/knights-query
+   *   ?page_index=1&page_size=100   分页（page_size 上限 2000）
+   *   &staff_name=张三              姓名（上游 staffName）
+   *   &department_id=917521130      站点 ID（上游 departmentId）
+   *   &work_status=1                1=在职 / 2=离职；不传=不过滤
+   *
+   * 返回 {ok, total, page_index, page_size, rows, columns, elapsed_sec, stats}。
+   * rows 保留上游原生英文键；columns 来自 @aeolus/shared 公共字典。
+   */
+  @RequirePerm('view')
+  @Get('knights-query')
+  async knightsQuery(
+    @Query('page_index') pageIndex?: string,
+    @Query('page_size') pageSize?: string,
+    @Query('staff_name') staffName?: string,
+    @Query('department_id') departmentId?: string,
+    @Query('work_status') workStatus?: string,
+  ) {
+    try {
+      return await this.knightQuerySvc.queryKnights({
+        pageIndex,
+        pageSize,
+        staffName,
+        departmentId,
+        workStatus,
+      });
+    } catch (e) {
+      return this.fail(e);
+    }
+  }
+
+  /**
+   * 骑手明细全量查询：自动翻页 + 按 knightId 去重，不落盘。
+   * 入参同 knights-query（page_index 无意义），page_size 默认 500。
+   * 返回 {ok, total, upstream_total, pages, truncated, rows, columns, elapsed_sec, stats}。
+   */
+  @RequirePerm('view')
+  @Post('knights-all')
+  async knightsAll(
+    @Body()
+    b: {
+      page_size?: number;
+      staff_name?: string;
+      department_id?: string | number;
+      work_status?: string | number;
+    },
+  ) {
+    try {
+      return await this.knightQuerySvc.queryAllKnights({
+        pageSize: b?.page_size,
+        staffName: b?.staff_name,
+        departmentId: b?.department_id,
+        workStatus: b?.work_status,
+      });
+    } catch (e) {
+      return this.fail(e);
+    }
   }
 
   /**

@@ -4,6 +4,7 @@ import { ComputeModule } from '../../modules/compute/compute.module';
 import { RefreshRunnerService } from './runners/refresh-runner.service';
 import { FetchPaceService } from './runners/fetch-pace.service';
 import { DeliveryQueryService } from './sources/delivery-query.service';
+import { KnightDetailQueryService } from './sources/knight-detail-query.service';
 import { DeliveryExportService } from './sources/delivery-export.service';
 import { AeolusCookieService } from './creds/aeolus-cookie.service';
 import { AeolusLoginService } from './creds/aeolus-login.service';
@@ -58,6 +59,7 @@ import { RawCacheService } from './storage/raw-cache.service';
   providers: [
     FetchPaceService,
     DeliveryQueryService,
+    KnightDetailQueryService,
     DeliveryExportService,
     AeolusCookieService,
     AeolusLoginService,
@@ -86,6 +88,7 @@ import { RawCacheService } from './storage/raw-cache.service';
   exports: [
     FetchPaceService,
     DeliveryQueryService,
+    KnightDetailQueryService,
     DeliveryExportService,
     AeolusCookieService,
     AeolusLoginService,

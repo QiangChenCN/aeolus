@@ -5,10 +5,12 @@
  * 字段映射都只在这里维护，绝不在各自的取数服务 / 前端页面里另建映射表或再抄一份。
  * 本文件由原 apps/api/src/infra/fetch/sources/delivery-field-map.ts 整体迁入共享包。
  *
- * 目前收录两个区块：
+ * 目前收录三个区块：
  *   · 运单：DeliveryExportService（xlsx 导出）与 DeliveryQueryService（queryTracking 分页）；
  *   · 违规处罚：ViolationFetchService（CSV 导出）与 ViolationListFetchService（queryList 分页），
  *     前端违规处罚看板读库时也用 VIOLATION_CN2EN 把 CSV 中文表头行归一成英文键。
+ *   · 骑手明细：KnightDetailQueryService（kunkka-svr/ehr/staff/knight/list），上游已是英文键，
+ *     字典只提供展示标签与枚举释义，不改写行数据。
  * 每个区块的两条取数路径共用同一套字段映射；
  * 运单区块的映射如下：
  *   · CN2EN    中文表头 → 风神英文真名（也是看板列定义的来源）
@@ -300,3 +302,59 @@ export function violationId(row: Record<string, unknown>): string {
   const v = row?.['违规编号'] ?? row?.[VIOLATION_CN2EN['违规编号']];
   return v === undefined || v === null ? '' : String(v).trim();
 }
+
+// ───────────── 骑手明细区块：kunkka-svr/ehr/staff/knight/list ─────────────
+
+/**
+ * 骑手明细上游原生字段名 → 中文列名（唯一事实源）。
+ * 上游 list 行已是英文键，本表只供 API columns 与前端展示复用，不改写行数据。
+ */
+export const KNIGHT_FIELD_LABELS: Record<string, string> = {
+  id: '记录ID',
+  accountId: '账户ID',
+  knightId: '骑手ID',
+  staffName: '骑手姓名',
+  mobile: '手机号',
+  idNumber: '证件号',
+  workStatus: '在职状态',
+  workType: '用工类型',
+  workTypeWhitelistDesc: '用工类型白名单说明',
+  entryTime: '入职时间',
+  leaveTime: '离职时间',
+  positionId: '岗位ID',
+  positionCode: '岗位编码',
+  positionName: '岗位名称',
+  departmentId: '站点ID',
+  departmentType: '站点类型',
+  departmentName: '站点名称',
+  agencyName: '商名称',
+  roleNames: '角色',
+  masterType: '主岗类型',
+  contractUploadStatus: '合同上传状态',
+  staffDepartmentMappingId: '站点映射ID',
+  isRemainKnight: '是否保留骑手',
+  dimissionMessage: '离职原因',
+  dimissionMessageDetailInfo: '离职原因详情',
+  offerType: '入职来源',
+  createdAt: '创建时间',
+  updatedAt: '更新时间',
+  aliWorkNo: '阿里工号',
+  squadId: '小队ID',
+  approveStatus: '审批状态',
+  rejectReason: '驳回原因',
+  salaryRuleId: '薪资规则ID',
+  withholdRuleId: '扣款规则ID',
+};
+
+/**
+ * 骑手明细枚举「上游代码 → 中文值」。只收实拉反推确认的字段，未出现的编码原样透传。
+ * workStatus=1 的行 leaveTime 为空且 entryTime 为最近入职；=2 的行 leaveTime 有值。
+ */
+export const KNIGHT_ENUM_DICT: Record<string, Record<string, string>> = {
+  workStatus: { '1': '在职', '2': '离职' },
+};
+
+/** 骑手明细列定义（API columns 与前端共用，唯一事实源）。 */
+export const KNIGHT_COLUMNS: Array<{ key: string; label: string }> = Object.entries(
+  KNIGHT_FIELD_LABELS,
+).map(([key, label]) => ({ key, label }));
