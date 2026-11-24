@@ -12,44 +12,68 @@
 
     <div v-if="selected" class="rt-body">
       <div class="rt-left">
-      <section class="rt-panel rt-overview">
+      <section class="rt-panel rt-online-panel">
         <header class="rt-panel-hd">
           <div>
-            <div class="rt-panel-title">{{ selected.time_name }}</div>
+            <div class="rt-panel-title">实时在线 <em>{{ stationOnlineCards.length }} 站</em></div>
             <div class="rt-panel-sub">
-              {{ selected.start_time }} — {{ selected.end_time }} · {{ runText(selected.run) }}
-              <span v-if="selected.run === 'running'"> · 剩余 {{ remainText(selected) }}</span>
+              {{ selected.start_time }} — {{ selected.end_time }}<span v-if="selected.run === 'running'"> · 剩余 {{ remainText(selected) }}</span>
             </div>
           </div>
+        </header>
+
+        <div v-if="onlineStats" class="rt-donut-row">
+          <div class="rt-donut" :style="onlineDonutStyle">
+            <div class="rt-donut-inner">
+              <div class="rt-donut-num">{{ onlineStats.rate == null ? '—' : onlineStats.rate }}<span class="rt-donut-pct">%</span></div>
+              <div class="rt-donut-unit">在线率</div>
+            </div>
+          </div>
+          <div class="rt-donut-side">
+            <div class="rt-kv"><span>排班人数</span><b>{{ onlineStats.sched }}</b></div>
+            <div class="rt-kv"><span>在线人数</span><b>{{ onlineStats.online }}</b></div>
+            <div class="rt-kv is-bad"><span>未在线</span><b>{{ onlineStats.notOnline }}</b></div>
+          </div>
+        </div>
+        <div v-if="onlineStats" class="rt-online-detail">
+          未在线构成：小休 {{ onlineStats.rest }} 人 · 下线 {{ onlineStats.offline }} 人
+          <span v-if="onlineStats.offlineDeliv" class="rt-online-tag">其中背单下线 {{ onlineStats.offlineDeliv }} 人</span>
+        </div>
+
+        <div class="rt-station-list">
+          <div v-for="s in stationOnlineCards" :key="s.team_id" class="rt-station-row">
+            <div class="rt-station-top">
+              <span class="rt-station-name" :title="s.team_name">{{ s.team_name }}</span>
+              <span class="rt-station-rate" :class="s.tone">
+                {{ s.rate == null ? '—' : s.rate + '%' }}
+              </span>
+            </div>
+            <div class="rt-station-bar"><i :class="s.tone" :style="{ width: barWidth(s.rate) }" /></div>
+            <div class="rt-station-foot">
+              排班 {{ s.sched }} · 在线 {{ s.online }} · 未在线 {{ s.notOnline }}（小休 {{ s.rest }}人 · 下线 {{ s.offline }}<span v-if="s.restDeliv"> · 背单小休 {{ s.restDeliv }}</span><span v-if="s.offlineDeliv"> · 背单下线 {{ s.offlineDeliv }}</span>）
+            </div>
+          </div>
+          <div v-if="!stationOnlineCards.length" class="rt-empty">暂无站点在线数据</div>
+        </div>
+      </section>
+
+      <section class="rt-panel rt-station-panel">
+        <header class="rt-panel-hd">
+          <div class="rt-panel-title">达成情况 <em>{{ stationCards.length }} 站</em></div>
+          <span class="rt-panel-sub">{{ selected.time_name }}</span>
         </header>
 
         <div class="rt-donut-row">
           <div class="rt-donut" :style="donutStyle">
             <div class="rt-donut-inner">
-              <div class="rt-donut-num">{{ overview.rateShown == null ? '—' : overview.rateShown }}</div>
-              <div class="rt-donut-unit">% {{ selected.run === 'running' ? '预计达成率' : '达成率' }}</div>
+              <div class="rt-donut-num">{{ overview.rateShown == null ? '—' : overview.rateShown }}<span class="rt-donut-pct">%</span></div>
+              <div class="rt-donut-unit">{{ selected.run === 'running' ? '预计排班有效' : '排班有效' }}</div>
             </div>
           </div>
           <div class="rt-donut-side">
             <div class="rt-kv"><span>目标人数</span><b>{{ overview.target == null ? '—' : overview.target }}</b></div>
             <div class="rt-kv"><span>排班人数</span><b>{{ overview.scheduled == null ? '—' : overview.scheduled }}</b></div>
             <div class="rt-kv is-brand"><span>已达标 + 预估可达</span><b>{{ overview.achievedN + overview.projectedN }}</b></div>
-          </div>
-        </div>
-
-        <div v-if="onlineStats" class="rt-online">
-          <div class="rt-online-hd">
-            <span class="rt-online-title">实时在线</span>
-            <span class="rt-online-rate">在线率 <b>{{ onlineStats.rate == null ? '—' : onlineStats.rate + '%' }}</b></span>
-          </div>
-          <div class="rt-online-nums">
-            <div class="rt-online-num"><b>{{ onlineStats.sched }}</b><span>排班</span></div>
-            <div class="rt-online-num is-brand"><b>{{ onlineStats.online }}</b><span>在线</span></div>
-            <div class="rt-online-num is-bad"><b>{{ onlineStats.notOnline }}</b><span>未在线</span></div>
-          </div>
-          <div class="rt-online-detail">
-            未在线构成：小休 {{ onlineStats.rest }} 人 · 下线 {{ onlineStats.offline }} 人
-            <span v-if="onlineStats.offlineDeliv" class="rt-online-tag">其中背单下线 {{ onlineStats.offlineDeliv }} 人</span>
           </div>
         </div>
 
@@ -63,21 +87,8 @@
           <div class="rt-brk is-bad">
             <span class="rt-brk-dot" /><span>{{ selected.run === 'running' ? '预估不可达标' : '未达标' }}</span><b>{{ overview.badN }}</b>
           </div>
-          <div class="rt-brk is-mute">
-            <span class="rt-brk-dot" /><span>未排班 / 未开始</span><b>{{ overview.muteN }}</b>
-          </div>
         </div>
 
-        <p class="rt-note">
-          判定口径：<b>已达标</b> = 单量达标 且 有效在线时长达标；<b>预估可达标</b> 仅按时长 —— 已达成时长 + 本时段剩余时长 ≥ 时长要求。
-        </p>
-      </section>
-
-      <section class="rt-panel rt-station-panel">
-        <header class="rt-panel-hd">
-          <div class="rt-panel-title">站点达成情况 <em>{{ stationCards.length }} 站</em></div>
-          <span class="rt-panel-sub">{{ selected.time_name }}</span>
-        </header>
         <div class="rt-station-list">
           <div v-for="s in stationCards" :key="s.team_id" class="rt-station-row">
             <div class="rt-station-top">
@@ -88,7 +99,7 @@
             </div>
             <div class="rt-station-bar"><i :style="{ width: barWidth(s.rateShown) }" /></div>
             <div class="rt-station-foot">
-              达标 {{ s.achievedN }}<span v-if="selected.run === 'running'"> · 预估可达 {{ s.projectedN }}</span> / 目标 {{ s.target == null ? '—' : s.target }} 人
+              排班 {{ s.scheduled == null ? '—' : s.scheduled }} · 达标 {{ s.achievedN }} · 预估达标 {{ s.projectedN }} · {{ selected.run === 'running' ? '预估不可达标' : '未达标' }} {{ s.badN }}
             </div>
           </div>
           <div v-if="!stationCards.length" class="rt-empty">暂无站点数据</div>
@@ -148,18 +159,18 @@
                 <span :class="{ 'rt-deliv': row.deliveryOrder > 0 }">{{ row.deliveryOrder }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="orders" label="完成单量 / 要求" min-width="150" align="center" sortable="custom">
+            <el-table-column prop="orders" label="完成单量" min-width="150" align="center" sortable="custom">
               <template #default="{ row }">
-                <span class="rt-orders" title="已达标需单量与时长同时达标；预估仅按时长">
-                  {{ row.orders == null ? '—' : row.orders }}<em>/ {{ row.orderTarget ? row.orderTarget : '免考核' }}</em>
+                <span class="rt-orders" :class="{ 'is-short': row.ordersShort }" title="已达标需单量与时长同时达标；预估仅按时长">
+                  {{ row.orders == null ? '—' : row.orders }}<em> / {{ row.orderTarget ? row.orderTarget : '免考核' }}</em>
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="有效在线时长 · 已达成 / 要求" min-width="280" align="center">
+            <el-table-column label="有效在线时长" min-width="280" align="center">
               <template #default="{ row }">
                 <span class="rt-prog" :title="gapText(row)">
                   <span class="rt-prog-txt" :class="{ 'is-short': !!gapText(row) }">
-                    {{ row.doneSec == null ? '—' : fmtH(row.doneSec) }} / {{ row.reqSec ? fmtH(row.reqSec) : '免考核' }}
+                    {{ row.doneSec == null ? '—' : fmtH(row.doneSec) }}<em> / {{ row.reqSec ? fmtH(row.reqSec) : '免考核' }}</em>
                   </span>
                   <span class="rt-prog-bar">
                     <i :style="{ width: row.donePct + '%' }" />
@@ -180,7 +191,7 @@
         <div class="rt-pager">
           <el-pagination
             v-model:current-page="page" v-model:page-size="pageSize"
-            :page-sizes="[15, 25, 50]" :total="filteredRiders.length"
+            :page-sizes="[25, 50, 100]" :total="filteredRiders.length"
             layout="total, sizes, prev, pager, next" background
             @size-change="page = 1"
           />
@@ -261,9 +272,6 @@ function gapText(r) {
   const gap = Math.ceil(r.reqSec - r.doneSec);
   if (gap <= 0) return '';
   return `距时长达标还差 ${fmtH(gap)}`;
-}
-function runText(run) {
-  return run === 'running' ? '进行中' : run === 'done' ? '已结束' : '未开始';
 }
 /* 在线状态：1 上班 / 2 小休 / 3 下线 / 4 申请小休 / 5 申请下班；其余未映射显示「-」 */
 function workStatusInfo(row) {
@@ -348,20 +356,20 @@ const periodCards = computed(() => {
       const info = timing(p);
       const tc = String(p.time_code);
       const target = targetOf(tc);
-      let achievedN = 0, projectedN = 0, badN = 0, muteN = 0;
+      let achievedN = 0, projectedN = 0, badN = 0;
       for (const r of props.riderRows || []) {
         const st = riderStatus((r.cells || {})[tc], p, info);
         if (st.key === 'achieved') achievedN++;
         else if (st.key === 'projected') projectedN++;
         else if (st.key === 'impossible' || st.key === 'missed') badN++;
-        else muteN++;
       }
       const shown = info.run === 'running' ? achievedN + projectedN : achievedN;
       const scheduled = scheduledOf(tc);
-      const rate = _pct(shown, target);
+      // 预计达成率 = 预计排班有效（已达标 + 预估可达）/ 排班人数
+      const rate = _pct(shown, scheduled);
       return {
         ...p, run: info.run, remain: info.remain, span: info.span,
-        target, scheduled, achievedN, projectedN, badN, muteN,
+        target, scheduled, achievedN, projectedN, badN,
         shown, rate, rateShown: rate == null ? null : Math.min(100, rate),
       };
     });
@@ -383,10 +391,10 @@ const staleForPeriod = computed(() => {
 
 const overview = computed(() => {
   const s = selected.value;
-  if (!s) return { rate: null, rateShown: null, target: null, scheduled: null, achievedN: 0, projectedN: 0, badN: 0, muteN: 0 };
+  if (!s) return { rate: null, rateShown: null, target: null, scheduled: null, achievedN: 0, projectedN: 0, badN: 0 };
   return {
     rate: s.rate, rateShown: s.rateShown, target: s.target, scheduled: s.scheduled,
-    achievedN: s.achievedN, projectedN: s.projectedN, badN: s.badN, muteN: s.muteN,
+    achievedN: s.achievedN, projectedN: s.projectedN, badN: s.badN,
   };
 });
 function barWidth(rate) { return Math.max(0, Math.min(100, Number(rate) || 0)) + '%'; }
@@ -404,7 +412,7 @@ const stationCards = computed(() => {
       team_id: String(sr.team_id), team_name: sr.team_name,
       target: (sr.metrics || {})[tc]?.target ?? null,
       scheduled: (sr.metrics || {})[tc]?.scheduled ?? null,
-      achievedN: 0, projectedN: 0,
+      achievedN: 0, projectedN: 0, badN: 0,
     });
   }
   for (const r of props.riderRows || []) {
@@ -413,12 +421,13 @@ const stationCards = computed(() => {
     const st = riderStatus((r.cells || {})[tc], s, info);
     if (st.key === 'achieved') g.achievedN++;
     else if (st.key === 'projected') g.projectedN++;
+    else if (st.key === 'impossible' || st.key === 'missed') g.badN++;
   }
   return [...byTeam.values()].map(g => {
     const shown = info.run === 'running' ? g.achievedN + g.projectedN : g.achievedN;
     const rate = _pct(shown, g.target || g.scheduled);
     return { ...g, rate, rateShown: rate == null ? null : Math.min(100, rate) };
-  }).sort((a, b) => (b.rateShown ?? -1) - (a.rateShown ?? -1));
+  }).sort((a, b) => (a.rateShown ?? Infinity) - (b.rateShown ?? Infinity));
 });
 
 const donutStyle = computed(() => {
@@ -452,6 +461,51 @@ const onlineStats = computed(() => {
     rate: _pct(online, sched),
   };
 });
+const onlineDonutStyle = computed(() => {
+  const v = Math.max(0, Math.min(100, Number(onlineStats.value?.rate) || 0));
+  return { background: `conic-gradient(var(--c-brand) 0 ${v}%, var(--c-brand-soft) ${v}% 100%)` };
+});
+
+/* 按站点汇总实时在线：口径与全局一致，只统计本时段排班骑手。
+   在线 = workStatus ∉ {2 小休, 3 下线}；背单下线 = workStatus=3 且 deliveryOrder>0。
+   按在线率升序（最低站排最前），低于 80% 橙色、低于 60% 正红。 */
+const stationOnlineCards = computed(() => {
+  const s = selected.value;
+  if (!s) return [];
+  const tc = String(s.time_code);
+  const byTeam = new Map();
+  for (const sr of props.stationRows || []) {
+    byTeam.set(String(sr.team_id), {
+      team_id: String(sr.team_id), team_name: sr.team_name,
+      sched: 0, online: 0, rest: 0, offline: 0, restDeliv: 0, offlineDeliv: 0,
+    });
+  }
+  for (const r of props.riderRows || []) {
+    const g = byTeam.get(String(r.team_id));
+    if (!g) continue;
+    const cell = (r.cells || {})[tc];
+    if (!cell || !cell.scheduled) continue;
+    g.sched++;
+    const ws = cell.work_status;
+    const hasDeliv = (Number(cell.delivery_order) || 0) > 0;
+    if (ws === 2) {
+      g.rest++;
+      if (hasDeliv) g.restDeliv++;
+    } else if (ws === 3) {
+      g.offline++;
+      if (hasDeliv) g.offlineDeliv++;
+    } else {
+      g.online++;
+    }
+  }
+  return [...byTeam.values()].map(g => {
+    const rate = _pct(g.online, g.sched);
+    return {
+      ...g, notOnline: g.rest + g.offline, rate,
+      tone: rate == null ? '' : rate < 60 ? 'is-bad' : rate < 80 ? 'is-warn' : '',
+    };
+  }).sort((a, b) => (a.rate ?? Infinity) - (b.rate ?? Infinity));
+});
 
 /* 骑手明细行：按选中时段展开，附时长进度（实线=已达成，虚线=剩余可争取） */
 const keyword = ref('');
@@ -469,7 +523,7 @@ const wsOptions = computed(() => {
   return WS_ORDER.filter(k => keys.has(k)).concat([...keys].filter(k => !WS_ORDER.includes(k)).sort());
 });
 const page = ref(1);
-const pageSize = ref(15);
+const pageSize = ref(25);
 /* 完成单量排序：'' 默认按达成状态 | 'asc' 升序 | 'desc' 降序（由 el-table sort-change 驱动，对全量数据排序） */
 const orderSort = ref('');
 function onOrderSortChange({ prop, order }) {
@@ -484,18 +538,25 @@ const allRiderRows = computed(() => {
   const tc = String(s.time_code);
   const reqSec = Math.max(0, Number(s.online_req_h) || 0) * 3600;
   const remainSec = info.run === 'running' ? info.remain * 60 : 0;
-  return (props.riderRows || []).map(r => {
+  return (props.riderRows || []).filter(r => {
+    const cell = (r.cells || {})[tc] || {};
+    // 骑手明细是跨时段累积的，只展示本时段排班或本时段有单量的骑手
+    return cell.scheduled === true || (cell.orders != null && Number(cell.orders) > 0);
+  }).map(r => {
     const cell = (r.cells || {})[tc] || {};
     const status = riderStatus(cell, s, info);
     const doneSec = cell.online_sec == null ? null : Math.max(0, Number(cell.online_sec));
     const donePct = reqSec > 0 && doneSec != null ? Math.min(100, doneSec / reqSec * 100) : (status.key === 'achieved' ? 100 : 0);
     const potentialPct = reqSec > 0 ? Math.min(100, ((doneSec || 0) + remainSec) / reqSec * 100) : donePct;
+    const orders = cell.orders;
+    const orderTarget = Number(s.orders_req) || 0;
+    const ordersShort = orderTarget > 0 && orders != null && Number(orders) < orderTarget;
     return {
       rider_id: r.rider_id, rider_name: r.rider_name, team_name: r.team_name,
       status, doneSec, reqSec,
       scheduled: cell.scheduled === true,
       workStatus: cell.work_status, deliveryOrder: Number(cell.delivery_order) || 0,
-      orders: cell.orders, orderTarget: Number(s.orders_req) || 0,
+      orders, orderTarget, ordersShort,
       donePct: Math.round(donePct * 10) / 10,
       potentialPct: Math.round(potentialPct * 10) / 10,
       canProject: info.run === 'running',
@@ -560,7 +621,7 @@ watch([keyword, statusFilter, schedFilter, wsFilter], () => { page.value = 1; })
 /* ── 主体两栏 ── */
 .rt-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); gap: var(--sp-16); }
 .rt-left { min-height: 0; display: flex; flex-direction: column; gap: var(--sp-16); }
-.rt-overview { flex: none; }
+.rt-online-panel { flex: 1; min-height: 0; }
 .rt-station-panel { flex: 1; min-height: 0; }
 .rt-panel { min-height: 0; display: flex; flex-direction: column; border: var(--bw) solid var(--el-border-color-lighter); border-radius: var(--r-modal); background: var(--el-bg-color); overflow: hidden; }
 .rt-panel-hd { flex: none; display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-12); padding: var(--sp-16) var(--sp-18) var(--sp-12); border-bottom: var(--bw) solid var(--el-border-color-lighter); }
@@ -569,29 +630,25 @@ watch([keyword, statusFilter, schedFilter, wsFilter], () => { page.value = 1; })
 .rt-panel-sub { font-size: var(--el-font-size-extra-small); color: var(--el-text-color-secondary); margin-top: var(--sp-4); font-variant-numeric: tabular-nums; }
 
 /* 概览：甜甜圈 + 状态分布 */
-.rt-donut-row { display: flex; align-items: center; gap: var(--sp-20); padding: var(--sp-20) var(--sp-18) var(--sp-12); }
+.rt-donut-row { display: flex; align-items: center; gap: var(--sp-20); padding: var(--sp-12) var(--sp-18) var(--sp-8); }
 .rt-donut { flex: none; width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 6px 18px color-mix(in srgb, var(--c-brand) 14%, transparent); }
 .rt-donut-inner { width: 100px; height: 100px; border-radius: 50%; background: var(--el-bg-color); display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .rt-donut-num { font-size: 32px; font-weight: var(--fw-bold); color: var(--c-brand); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.rt-donut-pct { font-size: 18px; margin-left: 2px; }
 .rt-donut-unit { font-size: 11px; color: var(--el-text-color-secondary); margin-top: var(--sp-2); }
 .rt-donut-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-10); }
 .rt-kv { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-8); font-size: var(--el-font-size-extra-small); color: var(--el-text-color-secondary); }
 .rt-kv b { font-size: var(--el-font-size-large); color: var(--el-text-color-primary); font-variant-numeric: tabular-nums; }
 .rt-kv.is-brand b { color: var(--c-brand); }
-/* 进行中时段 · 实时在线概况 */
-.rt-online { margin: 0 var(--sp-18) var(--sp-12); padding: var(--sp-12) var(--sp-14); border: var(--bw) solid var(--el-border-color-lighter); border-radius: var(--el-border-radius-base); background: var(--el-fill-color-lighter); }
-.rt-online-hd { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-8); }
-.rt-online-title { font-size: var(--el-font-size-extra-small); font-weight: var(--fw-semibold); color: var(--el-text-color-primary); }
-.rt-online-rate { font-size: 11px; color: var(--el-text-color-secondary); }
-.rt-online-rate b { font-size: var(--el-font-size-medium); color: var(--c-brand); font-variant-numeric: tabular-nums; }
-.rt-online-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-8); margin-top: var(--sp-10); }
-.rt-online-num { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.rt-online-num b { font-size: 20px; font-weight: var(--fw-bold); color: var(--el-text-color-primary); font-variant-numeric: tabular-nums; }
-.rt-online-num span { font-size: 11px; color: var(--el-text-color-secondary); }
-.rt-online-num.is-brand b { color: var(--c-brand); }
-.rt-online-num.is-bad b { color: var(--el-color-danger); }
-.rt-online-detail { font-size: 11px; color: var(--el-text-color-secondary); margin-top: var(--sp-10); line-height: var(--lh-relaxed); }
+.rt-kv.is-bad b { color: var(--el-color-danger); }
+/* 未在线构成明细（位于在线甜甜圈行下方） */
+.rt-online-detail { font-size: 11px; color: var(--el-text-color-secondary); margin: 0 var(--sp-18) var(--sp-8); line-height: var(--lh-relaxed); text-align: center; }
 .rt-online-tag { display: inline-block; margin-left: var(--sp-6); padding: 1px var(--sp-8); border-radius: var(--r-pill); color: var(--el-color-danger); background: var(--el-color-danger-light-9); }
+/* 低在线率着色（与达成列表共通行布局，仅在线行带这两个类） */
+.rt-station-rate.is-warn { color: var(--el-color-warning); }
+.rt-station-rate.is-bad { color: #FF0000; }
+.rt-station-bar i.is-warn { background: var(--el-color-warning); }
+.rt-station-bar i.is-bad { background: #FF0000; }
 
 .rt-breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-8); padding: 0 var(--sp-18) var(--sp-12); }
 .rt-brk { display: flex; align-items: center; gap: var(--sp-6); padding: var(--sp-8) var(--sp-10); border-radius: var(--el-border-radius-base); background: var(--el-fill-color-lighter); font-size: var(--el-font-size-extra-small); color: var(--el-text-color-regular); }
@@ -600,9 +657,6 @@ watch([keyword, statusFilter, schedFilter, wsFilter], () => { page.value = 1; })
 .rt-brk.is-done .rt-brk-dot { background: var(--c-brand); }
 .rt-brk.is-project .rt-brk-dot { background: var(--c-brand-soft); border: var(--bw) solid var(--c-brand); }
 .rt-brk.is-bad .rt-brk-dot { background: var(--el-color-danger); }
-.rt-brk.is-mute .rt-brk-dot { background: var(--el-text-color-placeholder); }
-.rt-note { margin: 0; padding: var(--sp-12) var(--sp-18); border-top: var(--bw) dashed var(--el-border-color-lighter); font-size: 11px; line-height: var(--lh-relaxed); color: var(--el-text-color-secondary); }
-.rt-note b { color: var(--c-brand); font-weight: var(--fw-semibold); }
 
 /* 站点达成情况 */
 .rt-station-list { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sp-12) var(--sp-18); display: flex; flex-direction: column; gap: var(--sp-14); }
@@ -651,10 +705,12 @@ watch([keyword, statusFilter, schedFilter, wsFilter], () => { page.value = 1; })
 .rt-ws.is-mute { color: var(--el-text-color-secondary); background: var(--el-fill-color-light); }
 .rt-deliv { color: var(--c-brand); font-weight: var(--fw-semibold); font-variant-numeric: tabular-nums; }
 .rt-orders { font-variant-numeric: tabular-nums; color: var(--el-text-color-primary); white-space: nowrap; }
-.rt-orders em { font-style: normal; color: var(--el-text-color-secondary); margin-left: 2px; }
+/* 要求值（单量 / 时长）统一置灰弱化，与已达成实绩区分 */
+.rt-orders em, .rt-prog-txt em { font-style: normal; color: var(--el-text-color-placeholder); }
 .rt-prog { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
 .rt-prog-txt { color: var(--el-text-color-regular); font-variant-numeric: tabular-nums; }
-.rt-prog-txt.is-short { color: var(--el-color-danger); }
+/* 单量 / 时长未达成 → 完成值统一正红；要求值 em 有自己的灰色规则，不受父级影响 */
+.rt-orders.is-short, .rt-prog-txt.is-short { color: #FF0000; }
 .rt-prog-bar { position: relative; height: 6px; border-radius: var(--r-pill); background: var(--el-fill-color); overflow: hidden; }
 .rt-prog-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--r-pill); background: var(--c-brand); transition: width var(--dur-slow); }
 .rt-prog-bar em { position: absolute; top: 0; bottom: 0; border-radius: var(--r-pill); border: 1px dashed var(--c-brand); background: color-mix(in srgb, var(--c-brand) 14%, transparent); }
