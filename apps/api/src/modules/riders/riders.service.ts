@@ -48,6 +48,11 @@ export class RidersService {
     return this.details.update(data, allowed);
   }
 
+  /** 单独查看结算单价真实值（列表只返回打码占位）。 */
+  settlement(knightId: string, allowed: Set<string> | null = null) {
+    return this.details.settlement(knightId, allowed);
+  }
+
   /** 骑手管理页列表：读 rider_roster 新结构，筛选/权限/分页都在 SQL 层。 */
   listDetailRows(opts: {
     keyword?: string;

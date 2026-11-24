@@ -74,7 +74,10 @@ const SELECT_COLS = [
     return `${DATE_COLS.has(col) ? `${col}::text` : col} AS "${apiKey(k)}"`;
   }),
   `${REFRESHED} AS "refreshedAt"`,
-  ...LOCAL_FIELDS.map((f) => `${DATE_COLS.has(f.col) ? `${f.col}::text` : f.col} AS "${f.key}"`),
+  ...LOCAL_FIELDS.map((f) => f.key === 'settlementPrice'
+    ? `'' AS "settlementPrice",
+       CASE WHEN settlement_price IS NOT NULL AND settlement_price <> '' THEN true ELSE false END AS "hasSettlementPrice"`
+    : `${DATE_COLS.has(f.col) ? `${f.col}::text` : f.col} AS "${f.key}"`),
 ].join(', ');
 const COLUMNS = [
   ...KNIGHT_COLUMNS.map((c) => ({ ...c, key: apiKey(c.key) })),
@@ -314,6 +317,22 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
       [knightId, ...cols.map((c) => fields[c] ?? (DATE_COLS.has(c) ? null : ''))],
     );
     return { ok: true as const, knightId, workStatus: str(fields.work_status || existing.work_status) };
+  }
+
+  /** 单独查看结算单价真实值（列表只返回打码占位）。 */
+  async settlement(knightId: string, allowed: Set<string> | null = null) {
+    this.assertReady();
+    const kid = str(knightId);
+    if (!kid) throw new BizError('骑手ID不能为空');
+    const row = await this.pg.queryOne<{ department_id: string; settlement_price: string }>(
+      'SELECT department_id, settlement_price FROM rider_roster WHERE knight_id = $1',
+      [kid],
+    );
+    if (!row) throw new BizError('骑手不存在');
+    if (allowed && str(row.department_id) && !allowed.has(str(row.department_id))) {
+      throw new BizError('该站点不在你的数据权限范围内');
+    }
+    return { ok: true as const, knightId: kid, settlementPrice: str(row.settlement_price) };
   }
 
   /** 页面读库：筛选/权限/分页都在 SQL 层。 */

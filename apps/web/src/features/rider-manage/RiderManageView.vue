@@ -36,7 +36,16 @@
           v-for="c in columns" :key="c.key" :prop="c.key" :label="c.label"
           :min-width="colWidth(c.key)" align="center" show-overflow-tooltip
         >
-          <template #default="{ row }">{{ displayCell(row, c.key) }}</template>
+          <template #default="{ row }">
+            <template v-if="c.key === 'settlementPrice'">
+              <span>{{ priceCell(row) }}</span>
+              <el-button
+                v-if="priceMasked(row)" link type="primary" size="default"
+                :loading="priceLoading[row.knightId]" @click="revealPrice(row)"
+              >查看</el-button>
+            </template>
+            <template v-else>{{ displayCell(row, c.key) }}</template>
+          </template>
         </el-table-column>
         <el-table-column v-if="canWrite && workStatus === '1'" label="操作" width="190" fixed="right" align="center">
           <template #default="{ row }">
@@ -193,7 +202,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Search, Plus } from '@element-plus/icons-vue';
 import { KNIGHT_COLUMNS } from '@aeolus/shared';
-import { fetchRiderDetails, createRider, updateRider } from '@shared/api/riders.js';
+import { fetchRiderDetails, createRider, updateRider, fetchRiderSettlement } from '@shared/api/riders.js';
 import { fetchTeams } from '@shared/api/dashboards.js';
 import { useAuthStore } from '@shared/stores/auth.js';
 
@@ -227,6 +236,9 @@ const workStatus = ref('1');
 const teamSel = ref('');
 const keyword = ref('');
 const apiColumns = ref([]);
+/** 结算单价真实值缓存：knightId -> 真实值；未命中则显示后端打码占位。 */
+const revealedPrices = reactive({});
+const priceLoading = reactive({});
 
 const formVisible = ref(false);
 const isEdit = ref(false);
@@ -293,6 +305,36 @@ function displayCell(row, key) {
   return cellText(v);
 }
 
+function priceMasked(row) {
+  return !!row.hasSettlementPrice
+    && !(Object.prototype.hasOwnProperty.call(revealedPrices, row.knightId));
+}
+
+function priceCell(row) {
+  if (Object.prototype.hasOwnProperty.call(revealedPrices, row.knightId)) {
+    return revealedPrices[row.knightId] || '—';
+  }
+  return '';
+}
+
+async function revealPrice(row) {
+  const kid = row.knightId;
+  if (!kid || priceLoading[kid]) return;
+  priceLoading[kid] = true;
+  try {
+    const res = await fetchRiderSettlement(kid);
+    if (res && res.ok === false) {
+      ElMessage.error(res.error || '查看结算单价失败');
+      return;
+    }
+    revealedPrices[kid] = res?.settlementPrice || '';
+  } catch (e) {
+    ElMessage.error(e.message || '查看结算单价失败');
+  } finally {
+    delete priceLoading[kid];
+  }
+}
+
 async function loadTeams() {
   try {
     const t = await fetchTeams();
@@ -304,6 +346,7 @@ async function loadTeams() {
 async function load() {
   loading.value = true;
   error.value = '';
+  for (const k of Object.keys(revealedPrices)) delete revealedPrices[k];
   try {
     const res = await fetchRiderDetails({
       keyword: keyword.value.trim(),

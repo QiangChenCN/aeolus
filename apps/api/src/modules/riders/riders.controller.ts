@@ -11,6 +11,7 @@ import { RidersService } from './riders.service';
  *
  *  · GET  /api/riders/detail?keyword=&team=&workStatus=&page=&pageSize=
  *                                                              页面读库展示（view，SQL 层筛选/权限/分页）
+ *  · GET  /api/riders/settlement?knightId=                     单独查看结算单价真实值（view，列表仅打码）
  *  · POST /api/riders                                          手动新增骑手到 rider_roster（config:write）
  */
 @Controller('api')
@@ -40,6 +41,17 @@ export class RidersController {
       pageSize: Number(pageSize) || 50,
       allowed: requestAllowedTeamIds(this.auth, this.dataPerm, req),
     });
+  }
+
+  /** 单独查看结算单价真实值（列表只返回打码占位）。 */
+  @RequirePerm('view')
+  @Get('riders/settlement')
+  settlement(@Query('knightId') knightId: string, @Req() req: Request) {
+    try {
+      return this.riders.settlement(knightId, requestAllowedTeamIds(this.auth, this.dataPerm, req));
+    } catch (e) {
+      return { ok: false, error: (e as Error).message || String(e) };
+    }
   }
 
   /** 手动新增骑手：只写本地 rider_roster，不触发外部取数。 */

@@ -14,6 +14,11 @@ export function fetchRiderDetails({ keyword, team, workStatus, page = 1, pageSiz
   return request('/riders/detail?' + q.join('&'));
 }
 
+/* 单独查看结算单价真实值（列表只返回打码占位） */
+export function fetchRiderSettlement(knightId) {
+  return request('/riders/settlement?knightId=' + encodeURIComponent(knightId));
+}
+
 /* 手动新增骑手：只写本地 rider_roster */
 export function createRider(data) { return request('/riders', j(data)); }
 
