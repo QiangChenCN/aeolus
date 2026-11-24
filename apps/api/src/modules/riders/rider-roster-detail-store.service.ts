@@ -173,7 +173,9 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
          work_status, entry_date, leave_date, updated_at)
       SELECT knight_id, name, mobile, team_id, team_name,
              CASE status WHEN 'quit' THEN '2' ELSE '1' END,
-             hired_at, left_at, ''
+             CASE WHEN hired_at ~ '^\\d{4}-\\d{2}-\\d{2}' THEN left(hired_at, 10)::date ELSE NULL END,
+             CASE WHEN left_at ~ '^\\d{4}-\\d{2}-\\d{2}' THEN left(left_at, 10)::date ELSE NULL END,
+             ''
       FROM rider_roster
       WHERE knight_id IS NOT NULL AND knight_id <> ''
       ON CONFLICT (knight_id) DO NOTHING
