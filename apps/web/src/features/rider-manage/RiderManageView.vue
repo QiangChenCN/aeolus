@@ -2,26 +2,25 @@
   <div class="rm">
     <div class="rm-bar">
       <h2 class="v-title">骑手管理</h2>
-      <el-select v-model="statusSel" class="rm-sel" placeholder="状态" clearable>
-        <el-option label="全部状态" value="" />
-        <el-option label="在职" value="active" />
-        <el-option label="离职" value="quit" />
-        <el-option label="停用" value="suspended" />
-      </el-select>
-      <el-select v-model="teamSel" class="rm-sel" placeholder="站点" clearable filterable>
+      <el-select v-model="teamSel" class="rm-sel" placeholder="站点" clearable filterable @change="reload">
         <el-option label="全部站点" value="" />
         <el-option v-for="t in teamOptions" :key="t.id" :label="t.name" :value="String(t.id)" />
       </el-select>
       <el-input
-        v-model="keyword" class="rm-search" placeholder="搜索姓名 / 骑手ID / 手机号 / 备注" clearable
-        :prefix-icon="Search" @keyup.enter="reload"
+        v-model="keyword" class="rm-search" placeholder="搜索姓名 / 骑手ID / 手机号" clearable
+        :prefix-icon="Search" @input="onKeywordInput" @clear="reload"
       />
-      <el-button @click="reload">查询</el-button>
-      <span class="sp" />
-      <el-button v-if="canWrite" :loading="syncing" @click="onSync">
-        <el-icon><Refresh /></el-icon> 同步考勤名册
-      </el-button>
-      <el-button v-if="canWrite" type="primary" @click="openCreate">
+    </div>
+
+    <div class="rm-tabs-row">
+      <el-tabs v-model="workStatus" class="rm-tabs" @tab-change="reload">
+        <el-tab-pane label="在职骑手" name="1" />
+        <el-tab-pane label="离职骑手" name="2" />
+      </el-tabs>
+      <el-button
+        v-if="canWrite && workStatus === '1'" class="rm-tabs-add"
+        type="primary" size="default" @click="openCreate"
+      >
         <el-icon><Plus /></el-icon> 新增骑手
       </el-button>
     </div>
@@ -30,37 +29,20 @@
 
     <el-card class="rm-table-card" shadow="never">
       <el-table
-        v-loading="loading" :data="rows" stripe border size="small" class="rm-table" height="100%"
-        empty-text="花名册暂无记录（可点右上角「同步考勤名册」导入，或手动新增）"
+        v-loading="loading" :data="rows" stripe size="default" class="rm-table" height="100%"
+        :empty-text="emptyText"
       >
-        <el-table-column prop="name" label="姓名" min-width="100" align="center" show-overflow-tooltip />
-        <el-table-column prop="knight_id" label="骑手ID" min-width="110" align="center" show-overflow-tooltip />
-        <el-table-column prop="mobile" label="手机号" min-width="120" align="center" show-overflow-tooltip />
-        <el-table-column prop="team_name" label="站点" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="work_type" label="工作类型" min-width="90" align="center" />
-        <el-table-column label="状态" min-width="80" align="center">
+        <el-table-column
+          v-for="c in columns" :key="c.key" :prop="c.key" :label="c.label"
+          :min-width="colWidth(c.key)" align="center" show-overflow-tooltip
+        >
+          <template #default="{ row }">{{ displayCell(row, c.key) }}</template>
+        </el-table-column>
+        <el-table-column v-if="canWrite && workStatus === '1'" label="操作" width="190" fixed="right" align="center">
           <template #default="{ row }">
-            <span class="rm-tag" :class="'is-' + row.status">{{ statusLabel(row.status) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="入职日期" min-width="100" align="center">
-          <template #default="{ row }">{{ row.hired_at || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="离职日期" min-width="100" align="center">
-          <template #default="{ row }">{{ row.left_at || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="最近出现" min-width="100" align="center">
-          <template #default="{ row }">{{ row.last_seen || '—' }}</template>
-        </el-table-column>
-        <el-table-column prop="note" label="备注" min-width="160" show-overflow-tooltip />
-        <el-table-column label="更新时间" min-width="150" align="center" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.updated_at || '—' }}</template>
-        </el-table-column>
-        <el-table-column v-if="canWrite" label="操作" width="170" align="center" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="info" size="small" @click="openChanges(row)">异动</el-button>
-            <el-button link type="danger" size="small" @click="onDelete(row)">删除</el-button>
+            <el-button link type="primary" size="default" @click="openEdit(row)">编辑</el-button>
+            <el-button link type="warning" size="default" @click="openTransfer(row)">调站</el-button>
+            <el-button link type="danger" size="default" @click="openLeave(row)">离职</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -68,7 +50,7 @@
         <el-pagination
           v-model:current-page="page"
           v-model:page-size="pageSize"
-          :page-sizes="[25, 50, 100]"
+          :page-sizes="[50, 100, 200, 500]"
           :total="total"
           layout="total, sizes, prev, pager, next, jumper"
           background
@@ -78,70 +60,161 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="dlg" :title="form.id ? '编辑骑手' : '新增骑手'" width="560px" destroy-on-close>
-      <el-form :model="form" label-width="90px">
-        <el-form-item label="姓名" required>
-          <el-input v-model="form.name" placeholder="骑手姓名" maxlength="30" />
+    <el-dialog v-model="formVisible" :title="isEdit ? '编辑骑手' : '新增骑手'" width="640px" top="5vh" destroy-on-close :close-on-click-modal="false">
+      <el-form :model="form" label-width="100px">
+        <el-form-item label="骑手ID" required>
+          <el-input v-model="form.knightId" placeholder="风神 knightId" :readonly="isEdit" />
         </el-form-item>
-        <el-form-item label="骑手ID">
-          <el-input v-model="form.knight_id" placeholder="风神 knightId（可留空后补）" />
+        <el-form-item label="骑手姓名" required>
+          <el-input v-model="form.staffName" placeholder="骑手姓名" maxlength="30" />
         </el-form-item>
         <el-form-item label="手机号">
           <el-input v-model="form.mobile" placeholder="手机号" maxlength="20" />
         </el-form-item>
-        <el-form-item label="所属站点">
-          <el-select v-model="form.team_id" placeholder="选择站点" clearable filterable style="width: 100%">
+        <el-form-item label="站点">
+          <el-select v-model="form.departmentId" placeholder="选择站点" clearable filterable style="width: 100%">
             <el-option v-for="t in teamOptions" :key="t.id" :label="t.name" :value="String(t.id)" />
           </el-select>
+          <div v-if="teamSel" class="form-tip">将按当前筛选站点预填，可修改</div>
         </el-form-item>
-        <el-form-item label="工作类型">
-          <el-select v-model="form.work_type" style="width: 100%">
-            <el-option v-for="t in ['全职', '兼职', '众包']" :key="t" :label="t" :value="t" />
+        <el-form-item label="骑手属性">
+          <el-select v-model="form.riderAttribute" placeholder="请选择" clearable style="width: 100%" @change="onRiderAttributeChange">
+            <el-option v-for="v in RIDER_ATTRIBUTES" :key="v" :label="v" :value="v" />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="form.status" style="width: 100%">
-            <el-option label="在职" value="active" />
-            <el-option label="离职" value="quit" />
-            <el-option label="停用" value="suspended" />
+        <el-form-item label="入职来源">
+          <el-select v-model="form.entrySource" placeholder="请选择" clearable style="width: 100%">
+            <el-option v-for="v in ENTRY_SOURCES" :key="v" :label="v" :value="v" />
           </el-select>
         </el-form-item>
-        <el-form-item label="入职日期">
-          <el-date-picker v-model="form.hired_at" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+        <el-form-item label="来源详情">
+          <el-input v-model="form.sourceDetail" placeholder="可选" />
         </el-form-item>
-        <el-form-item v-if="form.status !== 'active'" label="离职日期">
-          <el-date-picker v-model="form.left_at" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+        <el-form-item v-if="form.riderAttribute === '兼职'" label="结算方式">
+          <el-select v-model="form.settlementMethod" placeholder="请选择" clearable style="width: 100%" @change="onSettlementMethodChange">
+            <el-option v-for="v in SETTLEMENT_METHODS" :key="v" :label="v" :value="v" />
+          </el-select>
+          <el-input
+            v-if="form.settlementMethod === '其他'" v-model="form.settlementOther"
+            class="form-gap" placeholder="请输入结算方式"
+          />
+        </el-form-item>
+        <el-form-item v-if="form.riderAttribute === '兼职' && form.settlementMethod" label="结算单价">
+          <el-input v-model="form.settlementPrice" placeholder="仅填写，可选" />
         </el-form-item>
         <el-form-item label="备注">
-          <el-input v-model="form.note" type="textarea" :rows="2" maxlength="200" placeholder="备注（可选）" />
+          <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="可选" />
+        </el-form-item>
+        <el-form-item label="证件号">
+          <el-input v-model="form.idNumber" placeholder="可选" />
+        </el-form-item>
+        <el-form-item label="入职日期">
+          <el-date-picker v-model="form.entryDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+        </el-form-item>
+        <el-form-item v-if="isEdit && form.preLeaveDate" label="预离职日期">
+          <el-date-picker v-model="form.preLeaveDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dlg = false">取消</el-button>
+        <el-button @click="formVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="onSave">保存</el-button>
       </template>
     </el-dialog>
 
-    <PersonnelChangesDrawer
-      v-model:visible="changesVisible"
-      target-type="rider"
-      :target-id="changesTarget.id"
-      :target-name="changesTarget.name"
-    />
+    <el-dialog v-model="leaveVisible" title="办理离职" width="560px" top="5vh" destroy-on-close :close-on-click-modal="false">
+      <el-form :model="leaveForm" label-width="110px">
+        <el-form-item label="骑手姓名">
+          <el-input v-model="leaveForm.staffName" disabled />
+        </el-form-item>
+        <el-form-item label="骑手ID">
+          <el-input v-model="leaveForm.knightId" disabled />
+        </el-form-item>
+        <el-form-item label="站点名称">
+          <el-input v-model="leaveForm.departmentName" disabled />
+        </el-form-item>
+        <el-form-item label="申请日期">
+          <el-date-picker v-model="leaveForm.applyDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="预离职日期">
+          <el-date-picker v-model="leaveForm.preLeaveDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="实际离职日期">
+          <el-date-picker v-model="leaveForm.leaveDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="删号日期">
+          <el-date-picker v-model="leaveForm.deleteAccountDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="删号操作人">
+          <el-input v-model="leaveForm.deleteOperator" placeholder="可选" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="leaveVisible = false">取消</el-button>
+        <el-button type="danger" :loading="leaving" @click="onLeaveSave">确认离职</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="transferVisible" title="调整站点" width="560px" top="5vh" destroy-on-close :close-on-click-modal="false">
+      <el-form :model="transferForm" label-width="110px">
+        <el-form-item label="骑手姓名">
+          <el-input v-model="transferForm.staffName" disabled />
+        </el-form-item>
+        <el-form-item label="骑手ID">
+          <el-input v-model="transferForm.knightId" disabled />
+        </el-form-item>
+        <el-form-item label="原站点">
+          <el-input v-model="transferForm.fromDepartmentName" disabled />
+        </el-form-item>
+        <el-form-item label="调入站点" required>
+          <el-select v-model="transferForm.toDepartmentId" placeholder="选择调入站点" clearable filterable style="width: 100%">
+            <el-option v-for="t in teamOptions" :key="t.id" :label="t.name" :value="String(t.id)" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="调站日期">
+          <el-date-picker v-model="transferForm.transferDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="调站操作人">
+          <el-input v-model="transferForm.transferOperator" placeholder="可选" />
+        </el-form-item>
+        <el-form-item label="调站备注">
+          <el-input v-model="transferForm.transferNote" type="textarea" :rows="2" placeholder="可选" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="transferVisible = false">取消</el-button>
+        <el-button type="primary" :loading="transferring" @click="onTransferSave">确认调站</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { Search, Plus, Refresh } from '@element-plus/icons-vue';
-import { fetchRiders, createRider, updateRider, deleteRider, syncRiders } from '@shared/api/riders.js';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { ElMessage } from 'element-plus';
+import { Search, Plus } from '@element-plus/icons-vue';
+import { KNIGHT_COLUMNS } from '@aeolus/shared';
+import { fetchRiderDetails, createRider, updateRider } from '@shared/api/riders.js';
 import { fetchTeams } from '@shared/api/dashboards.js';
 import { useAuthStore } from '@shared/stores/auth.js';
-import PersonnelChangesDrawer from '@shared/components/common/PersonnelChangesDrawer.vue';
 
 const auth = useAuthStore();
 const canWrite = computed(() => auth.hasPerm('config:write'));
+
+const VISIBLE_KEYS = [
+  'staffName', 'knightId', 'mobile', 'departmentName', 'entryDate', 'riderAttribute',
+  'entrySource', 'sourceDetail', 'settlementMethod', 'settlementPrice', 'remark',
+  'leaveDate', 'idNumber', 'preLeaveDate', 'refreshedAt',
+];
+const FALLBACK_COLUMNS = [
+  ...KNIGHT_COLUMNS,
+  { key: 'entryDate', label: '入职日期' },
+  { key: 'leaveDate', label: '离职日期' },
+  { key: 'refreshedAt', label: '更新时间' },
+  { key: 'preLeaveDate', label: '预离职日期' },
+];
+const RIDER_ATTRIBUTES = ['全职', '兼职'];
+const ENTRY_SOURCES = ['骑手推荐', '三方推荐', '站长自招', '二次入职'];
+const SETTLEMENT_METHODS = ['日结', '周结', '半月结', '月结', '其他'];
 
 const loading = ref(false);
 const error = ref('');
@@ -150,95 +223,205 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = ref(50);
 
-const statusSel = ref('');
+const workStatus = ref('1');
 const teamSel = ref('');
 const keyword = ref('');
+const apiColumns = ref([]);
+
+const formVisible = ref(false);
+const isEdit = ref(false);
+const saving = ref(false);
+const form = reactive({
+  knightId: '', staffName: '', mobile: '', departmentId: '', departmentName: '',
+  riderAttribute: '', entrySource: '', sourceDetail: '',
+  settlementMethod: '', settlementOther: '', settlementPrice: '', remark: '',
+  idNumber: '', entryDate: todayStr(), preLeaveDate: '',
+});
+
+const leaveVisible = ref(false);
+const leaving = ref(false);
+const leaveForm = reactive({
+  knightId: '', staffName: '', departmentName: '',
+  applyDate: todayStr(), preLeaveDate: '', leaveDate: todayStr(),
+  deleteAccountDate: '', deleteOperator: '',
+});
+
+const transferVisible = ref(false);
+const transferring = ref(false);
+const transferForm = reactive({
+  knightId: '', staffName: '', fromDepartmentName: '',
+  toDepartmentId: '', transferDate: todayStr(), transferOperator: '', transferNote: '',
+});
 
 const teamsAll = ref([]);
 const teamOptions = computed(() => teamsAll.value);
+const columns = computed(() => {
+  const source = apiColumns.value.length ? apiColumns.value : FALLBACK_COLUMNS;
+  return source
+    .filter(
+      (c) => VISIBLE_KEYS.includes(c.key)
+        && (c.key !== 'preLeaveDate' || workStatus.value === '1')
+        && (c.key !== 'leaveDate' || workStatus.value === '2'),
+    )
+    .sort((a, b) => VISIBLE_KEYS.indexOf(a.key) - VISIBLE_KEYS.indexOf(b.key));
+});
+const emptyText = computed(
+  () => `暂无${workStatus.value === '1' ? '在职' : '离职'}骑手`,
+);
 
-const dlg = ref(false);
-const saving = ref(false);
-const syncing = ref(false);
-const form = reactive({ id: null, name: '', knight_id: '', mobile: '', team_id: '', work_type: '全职', status: 'active', hired_at: '', left_at: '', note: '' });
-
-const changesVisible = ref(false);
-const changesTarget = reactive({ id: null, name: '' });
-function openChanges(row) {
-  changesTarget.id = row.id;
-  changesTarget.name = row.name;
-  changesVisible.value = true;
+function colWidth(key) {
+  return ['departmentName', 'idNumber', 'refreshedAt', 'sourceDetail', 'remark'].includes(key) ? 180 : 120;
 }
 
-function emptyForm() {
-  Object.assign(form, { id: null, name: '', knight_id: '', mobile: '', team_id: '', work_type: '全职', status: 'active', hired_at: '', left_at: '', note: '' });
+function cellText(v) {
+  return v === undefined || v === null || v === '' ? '—' : String(v);
+}
+
+function displayCell(row, key) {
+  const v = row[key];
+  if (['entryDate', 'leaveDate', 'preLeaveDate'].includes(key) && v instanceof Date && !Number.isNaN(v.getTime())) {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${v.getUTCFullYear()}-${p(v.getUTCMonth() + 1)}-${p(v.getUTCDate())}`;
+  }
+  if (['createdAt', 'updatedAt', 'refreshedAt'].includes(key) && typeof v === 'number') {
+    const d = new Date(v);
+    if (!Number.isNaN(d.getTime())) {
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    }
+  }
+  return cellText(v);
 }
 
 async function loadTeams() {
   try {
     const t = await fetchTeams();
     teamsAll.value = (t && t.teams) || [];
-  } catch { /* 站点目录失败不阻塞名册展示 */ }
+  } catch { /* 站点目录失败不阻塞明细展示 */ }
 }
 
+/** 页面只读 rider_roster：筛选、分页、权限过滤都在后端 SQL 层完成。 */
 async function load() {
   loading.value = true;
   error.value = '';
   try {
-    const res = await fetchRiders({
-      keyword: keyword.value.trim(), team: teamSel.value, status: statusSel.value,
-      page: page.value, pageSize: pageSize.value,
+    const res = await fetchRiderDetails({
+      keyword: keyword.value.trim(),
+      team: teamSel.value,
+      workStatus: workStatus.value,
+      page: page.value,
+      pageSize: pageSize.value,
     });
-    if (res && res.ok) {
-      rows.value = res.rows || [];
-      total.value = res.total || 0;
-    } else {
-      error.value = (res && res.error) || '加载失败';
+    if (res && res.ok === false) {
+      error.value = res.error || '加载失败';
       rows.value = [];
       total.value = 0;
+      return;
     }
+    rows.value = (res && res.rows) || [];
+    total.value = (res && res.total) || 0;
+    apiColumns.value = (res && res.columns) || [];
   } catch (e) {
     error.value = e.message || '加载失败';
+    rows.value = [];
+    total.value = 0;
   } finally {
     loading.value = false;
   }
 }
 
-function reload() { page.value = 1; load(); }
+function reload() {
+  page.value = 1;
+  load();
+}
 
-function statusLabel(s) {
-  return { active: '在职', quit: '离职', suspended: '停用' }[s] || s || '—';
+let searchTimer = null;
+function onKeywordInput() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => reload(), 300);
+}
+onUnmounted(() => clearTimeout(searchTimer));
+
+function onRiderAttributeChange() {
+  if (form.riderAttribute !== '兼职') {
+    form.settlementMethod = '';
+    form.settlementOther = '';
+    form.settlementPrice = '';
+  }
+}
+
+function onSettlementMethodChange() {
+  if (form.settlementMethod !== '其他') form.settlementOther = '';
+  if (!form.settlementMethod) form.settlementPrice = '';
+}
+
+const EDIT_FIELDS = [
+  'knightId', 'staffName', 'mobile', 'departmentId', 'departmentName',
+  'riderAttribute', 'entrySource', 'sourceDetail', 'settlementMethod',
+  'settlementPrice', 'remark', 'idNumber', 'entryDate', 'preLeaveDate',
+];
+
+function emptyForm() {
+  Object.assign(form, {
+    knightId: '', staffName: '', mobile: '', departmentId: '', departmentName: '',
+    riderAttribute: '', entrySource: '', sourceDetail: '',
+    settlementMethod: '', settlementOther: '', settlementPrice: '', remark: '',
+    idNumber: '', entryDate: todayStr(), preLeaveDate: '',
+  });
 }
 
 function openCreate() {
+  isEdit.value = false;
   emptyForm();
-  if (teamSel.value) form.team_id = teamSel.value; // 预填当前筛选站点
-  dlg.value = true;
+  if (teamSel.value) {
+    form.departmentId = teamSel.value;
+    form.departmentName = teamOptions.value.find((t) => String(t.id) === teamSel.value)?.name || '';
+  }
+  formVisible.value = true;
 }
 
 function openEdit(row) {
-  Object.assign(form, {
-    id: row.id, name: row.name, knight_id: row.knight_id || '', mobile: row.mobile || '',
-    team_id: row.team_id || '', work_type: row.work_type || '全职', status: row.status || 'active',
-    hired_at: row.hired_at || '', left_at: row.left_at || '', note: row.note || '',
-  });
-  dlg.value = true;
+  isEdit.value = true;
+  emptyForm();
+  for (const key of EDIT_FIELDS) form[key] = row[key] ?? '';
+  form.settlementPrice = row.settlementPrice ?? '';
+  if (form.settlementMethod && !SETTLEMENT_METHODS.includes(form.settlementMethod)) {
+    form.settlementOther = form.settlementMethod;
+    form.settlementMethod = '其他';
+  } else {
+    form.settlementOther = '';
+  }
+  formVisible.value = true;
+}
+
+function todayStr() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 async function onSave() {
-  if (!form.name.trim()) { ElMessage.warning('姓名不能为空'); return; }
+  if (!form.knightId.trim()) { ElMessage.warning('骑手ID不能为空'); return; }
+  if (!form.staffName.trim()) { ElMessage.warning('骑手姓名不能为空'); return; }
   saving.value = true;
   try {
     const payload = { ...form };
-    if (!payload.left_at) payload.left_at = '';
-    const res = payload.id ? await updateRider(payload) : await createRider(payload);
-    if (res && res.ok) {
-      ElMessage.success(payload.id ? '已保存' : '已新增');
-      dlg.value = false;
-      load();
-    } else {
-      ElMessage.error((res && res.error) || '保存失败');
+    if (payload.riderAttribute !== '兼职') {
+      payload.settlementMethod = '';
+      payload.settlementPrice = '';
+    } else if (payload.settlementMethod === '其他') {
+      payload.settlementMethod = payload.settlementOther || '';
     }
+    delete payload.settlementOther;
+    const res = isEdit.value ? await updateRider(payload) : await createRider(payload);
+    if (res && res.ok === false) {
+      ElMessage.error(res.error || '保存失败');
+      return;
+    }
+    ElMessage.success(isEdit.value ? '已保存骑手' : '已新增骑手');
+    formVisible.value = false;
+    if (!isEdit.value) workStatus.value = '1';
+    reload();
   } catch (e) {
     ElMessage.error(e.message || '保存失败');
   } finally {
@@ -246,52 +429,85 @@ async function onSave() {
   }
 }
 
-async function onDelete(row) {
+function openLeave(row) {
+  Object.assign(leaveForm, {
+    knightId: row.knightId || '',
+    staffName: row.staffName || '',
+    departmentName: row.departmentName || '',
+    applyDate: todayStr(),
+    preLeaveDate: row.preLeaveDate || '',
+    leaveDate: todayStr(),
+    deleteAccountDate: '',
+    deleteOperator: auth.name || auth.user || '',
+  });
+  leaveVisible.value = true;
+}
+
+async function onLeaveSave() {
+  leaving.value = true;
   try {
-    await ElMessageBox.confirm(
-      `确定从花名册删除「${row.name}」（${row.team_name || '未分配站点'}）？此操作不可恢复。`,
-      '删除确认', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
-    );
-  } catch { return; }
-  try {
-    const res = await deleteRider(row.id);
-    if (res && res.ok) {
-      ElMessage.success('已删除');
-      load();
-    } else {
-      ElMessage.error((res && res.error) || '删除失败');
+    const res = await updateRider({
+      knightId: leaveForm.knightId,
+      workStatus: '2',
+      applyDate: leaveForm.applyDate,
+      preLeaveDate: leaveForm.preLeaveDate,
+      leaveDate: leaveForm.leaveDate,
+      deleteAccountDate: leaveForm.deleteAccountDate,
+      deleteOperator: leaveForm.deleteOperator,
+    });
+    if (res && res.ok === false) {
+      ElMessage.error(res.error || '离职操作失败');
+      return;
     }
+    ElMessage.success('已办理离职');
+    leaveVisible.value = false;
+    workStatus.value = '2';
+    reload();
   } catch (e) {
-    ElMessage.error(e.message || '删除失败');
+    ElMessage.error(e.message || '离职操作失败');
+  } finally {
+    leaving.value = false;
   }
 }
 
-async function onSync() {
+function openTransfer(row) {
+  Object.assign(transferForm, {
+    knightId: row.knightId || '',
+    staffName: row.staffName || '',
+    fromDepartmentName: row.departmentName || '',
+    toDepartmentId: '',
+    transferDate: todayStr(),
+    transferOperator: auth.name || auth.user || '',
+    transferNote: '',
+  });
+  transferVisible.value = true;
+}
+
+async function onTransferSave() {
+  if (!transferForm.toDepartmentId) { ElMessage.warning('请选择调入站点'); return; }
+  const target = teamOptions.value.find((t) => String(t.id) === transferForm.toDepartmentId);
+  if (!target) { ElMessage.warning('调入站点无效，请重新选择'); return; }
+  transferring.value = true;
   try {
-    await ElMessageBox.confirm(
-      '将以最近一次考勤快照为准同步花名册：新增缺失的骑手（在职），并刷新已有骑手的姓名/手机号/站点。在职状态、备注等人事属性不会被覆盖。继续？',
-      '同步考勤名册', { type: 'info', confirmButtonText: '开始同步', cancelButtonText: '取消' },
-    );
-  } catch { return; }
-  syncing.value = true;
-  try {
-    const res = await syncRiders();
-    if (res && res.ok) {
-      ElMessage.success(`同步完成（${res.date}）：新增 ${res.added}，更新 ${res.updated}，快照共 ${res.total} 人`);
-      if (res.stale_teams && res.stale_teams.length) {
-        ElMessage.warning({
-          message: `以下站点当日无考勤快照，未参与本次同步：${res.stale_teams.join('、')}`,
-          duration: 10000, showClose: true,
-        });
-      }
-      reload();
-    } else {
-      ElMessage.error((res && res.error) || '同步失败');
+    const res = await updateRider({
+      knightId: transferForm.knightId,
+      departmentId: transferForm.toDepartmentId,
+      departmentName: target.name,
+      transferDate: transferForm.transferDate,
+      transferOperator: transferForm.transferOperator,
+      transferNote: transferForm.transferNote,
+    });
+    if (res && res.ok === false) {
+      ElMessage.error(res.error || '调站操作失败');
+      return;
     }
+    ElMessage.success('已调站');
+    transferVisible.value = false;
+    reload();
   } catch (e) {
-    ElMessage.error(e.message || '同步失败');
+    ElMessage.error(e.message || '调站操作失败');
   } finally {
-    syncing.value = false;
+    transferring.value = false;
   }
 }
 
@@ -307,14 +523,19 @@ onMounted(() => {
 .v-title { margin: 0; font-size: var(--el-font-size-extra-large); }
 .rm-sel { width: 150px; }
 .rm-search { width: 230px; }
-.rm-bar .sp { flex: 1; }
+.rm-tabs-row { display: flex; align-items: flex-end; border-bottom: 1px solid var(--el-border-color-light); margin-bottom: var(--sp-12); }
+.rm-tabs-row .rm-tabs { flex: 1; min-width: 0; }
+.rm-tabs-row :deep(.el-tabs__header) { margin: 0; border-bottom: none; }
+.rm-tabs-add { margin-bottom: var(--sp-8); }
+.form-tip { color: var(--el-text-color-secondary); font-size: var(--el-font-size-small); line-height: 1.4; padding-top: var(--sp-4); }
+.form-gap { margin-top: var(--sp-8); }
 .rm-hint { margin-bottom: var(--sp-12); }
 .rm-table-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .rm-table-card :deep(.el-card__body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.rm-table { border-radius: var(--el-border-radius-base); }
+.rm-table {
+  --el-table-header-bg-color: var(--el-color-primary);
+  --el-table-header-text-color: #fff;
+  border-radius: var(--el-border-radius-base);
+}
 .rm-pager { display: flex; justify-content: flex-end; padding-top: var(--sp-12); }
-.rm-tag { font-size: 12px; font-weight: var(--fw-semibold); padding: 1px 6px; border-radius: 4px; }
-.rm-tag.is-active { color: #2e7d32; background: #e8f5e9; }
-.rm-tag.is-quit { color: #757575; background: #eeeeee; }
-.rm-tag.is-suspended { color: #ed6c02; background: #fff3e0; }
 </style>

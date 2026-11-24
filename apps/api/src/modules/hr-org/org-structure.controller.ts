@@ -43,7 +43,7 @@ export class OrgStructureController {
     let staffByTeam: Record<string, number> = {};
     try {
       for (const [k, sql] of [
-        ['riders', `SELECT team_id, count(*)::int cnt FROM rider_roster WHERE status = 'active' AND team_id <> '' GROUP BY team_id`],
+        ['riders', `SELECT department_id AS team_id, count(*)::int cnt FROM rider_roster WHERE work_status = '1' AND department_id <> '' GROUP BY department_id`],
         ['staff', `SELECT team_id, count(*)::int cnt FROM staff_roster WHERE status = 'active' AND team_id <> '' GROUP BY team_id`],
       ] as const) {
         const rows = await this.pg.query<{ team_id: string; cnt: number }>(sql);

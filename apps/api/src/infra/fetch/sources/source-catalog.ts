@@ -95,7 +95,7 @@ export const SOURCE_CATALOG: SourceCatalogItem[] = [
     endpoints: ['GET /api/fetch/knights-query', 'POST /api/fetch/knights-all'],
     dependsOn: 'aeolus',
     storage: [],
-    linked: ['其他程序 / AI Agent 调用'],
+    linked: ['骑手管理页', '其他程序 / AI Agent 调用'],
     params: [
       'page_index / page_size：分页参数（单页入口，page_size 上限 2000，默认 100）',
       'staff_name：骑手姓名，下推上游 staffName（实测 count 会变化）',

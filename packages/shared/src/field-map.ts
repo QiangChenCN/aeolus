@@ -319,8 +319,8 @@ export const KNIGHT_FIELD_LABELS: Record<string, string> = {
   workStatus: '在职状态',
   workType: '用工类型',
   workTypeWhitelistDesc: '用工类型白名单说明',
-  entryTime: '入职时间',
-  leaveTime: '离职时间',
+  entryTime: '入职日期',
+  leaveTime: '离职日期',
   positionId: '岗位ID',
   positionCode: '岗位编码',
   positionName: '岗位名称',
@@ -358,3 +358,23 @@ export const KNIGHT_ENUM_DICT: Record<string, Record<string, string>> = {
 export const KNIGHT_COLUMNS: Array<{ key: string; label: string }> = Object.entries(
   KNIGHT_FIELD_LABELS,
 ).map(([key, label]) => ({ key, label }));
+
+/**
+ * 骑手明细上游字段 → rider_roster 列（重设计后的表结构）。
+ * 保持上游原生 key 不变；本表列名按 snake_case，日期字段落到 *_date DATE 列。
+ */
+const KNIGHT_DB_COLUMN_OVERRIDES: Record<string, string> = {
+  updatedAt: 'upstream_updated_at',
+  entryTime: 'entry_date',
+  leaveTime: 'leave_date',
+};
+
+/** 本表对外暴露的日期字段 key（上游 key 仍为 entryTime/leaveTime）。 */
+export const KNIGHT_API_KEY_OVERRIDES: Record<string, string> = {
+  entryTime: 'entryDate',
+  leaveTime: 'leaveDate',
+};
+
+export function knightDbColumn(key: string): string {
+  return KNIGHT_DB_COLUMN_OVERRIDES[key] || key.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
+}
