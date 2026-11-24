@@ -28,6 +28,7 @@ describe('navTo', () => {
     ['sys-credentials', '/settings/credentials'],
     ['hr-org', '/hr/org'],
     ['hr-org-positions', '/hr/positions'],
+    ['photoRectify', '/common-tools/photo-rectify'],
   ];
 
   it.each(cases)('kind=%s -> %s', (kind, expected) => {

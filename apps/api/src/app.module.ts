@@ -33,6 +33,7 @@ import { RidersModule } from './modules/riders/riders.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { HrOrgModule } from './modules/hr-org/hr-org.module';
 import { PersonnelModule } from './modules/personnel/personnel.module';
+import { PhotoRectifyModule } from './modules/photo-rectify/photo-rectify.module';
 import { OperationLogMiddleware } from './modules/operation-log/operation-log.middleware';
 
 @Module({
@@ -71,6 +72,7 @@ import { OperationLogMiddleware } from './modules/operation-log/operation-log.mi
     StaffModule,
     HrOrgModule,
     PersonnelModule,
+    PhotoRectifyModule,
   ],
   // 统一访问闸门：机器令牌闸门 + RBAC 会话鉴权（见 AccessGuard）
   providers: [{ provide: APP_GUARD, useClass: AccessGuard }],

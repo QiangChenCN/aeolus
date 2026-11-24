@@ -78,6 +78,12 @@ const navItems = computed(() => {
   ];
   items.push({ type: 'parent', key: 'hr', name: '人事管理', icon: 'UserFilled', children: hrSubs });
 
+  // 常用工具：纯本地小工具集合；照片矫正全程在浏览器内处理，原图不上传。
+  const toolSubs = [
+    { type: 'leaf', kind: 'photoRectify', id: '', name: '照片矫正', icon: 'Camera' },
+  ];
+  items.push({ type: 'parent', key: 'common-tools', name: '常用工具', icon: 'Tools', children: toolSubs });
+
   // 系统设置：个人中心对所有登录用户可见（账号信息 + 个人改密），置于分组首位便于快速找到。
   // 管理类子项不再一刀切 isAdmin，而是按后端下发的权限点逐项收敛（perms 数组为「任一满足」）：
   // 例如 operator 有 config:write 可见站点负责人设置（已提升为一级），但看不到风神/MinIO/权限等管理员项。

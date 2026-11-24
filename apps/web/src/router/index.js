@@ -35,6 +35,7 @@ import BotRobotView from '../features/bot-robot/BotRobotView.vue';
 import BotInstancesView from '../features/bot-instances/BotInstancesView.vue';
 import BotAssemblyView from '../features/bot-assembly/BotAssemblyView.vue';
 import ProfileInfoView from '../features/profile-info/ProfileInfoView.vue';
+import PhotoRectifyView from '../features/photo-rectify/PhotoRectifyView.vue';
 import RiderManageView from '../features/rider-manage/RiderManageView.vue';
 import StaffManageView from '../features/staff-manage/StaffManageView.vue';
 import StationConfigView from '../features/hr-org/StationConfigView.vue';
@@ -74,6 +75,8 @@ const routes = [
       { path: 'im-contact', name: 'im-contact', component: ImContactView, meta: { title: 'IM 电联', kind: 'imContact', id: '' } },
       { path: 'unsatisfied', name: 'unsatisfied', component: UnsatisfiedView, meta: { title: '违规处罚', kind: 'unsatisfied', id: '' } },
       { path: 'operation-log', name: 'operation-log', component: OperationLogView, meta: { title: '操作日志', kind: 'operationLog', id: '', perm: 'admin:roles' } },
+      // 常用工具：照片矫正（纯前端处理，原图不离开设备）
+      { path: 'common-tools/photo-rectify', name: 'photo-rectify', component: PhotoRectifyView, meta: { title: '照片矫正', kind: 'photoRectify', id: '' } },
       { path: 'groups', name: 'groups', component: GroupsView, meta: { title: '群组' } },
       { path: 'settings', name: 'system-settings', component: SystemSettingsView, meta: { title: '系统设置', kind: 'syscfg' } },
       // 三方集成：留在系统设置，承载钉钉授权 / SSO / DWS（平台侧配置，与机器人实例配置解耦）。

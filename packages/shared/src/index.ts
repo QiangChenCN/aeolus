@@ -27,3 +27,6 @@ export function greet(scope: string): string {
 
 /** 全项目唯一取数字段映射字典（运单 + 违规处罚），前后端共用。 */
 export * from './field-map.js';
+
+/** 证件照透视矫正公共算法（前端 Worker 与 NestJS 后端共用同一份实现）。 */
+export * from './photo-rectify/index.js';
