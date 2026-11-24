@@ -1,5 +1,29 @@
 <template>
   <div class="home">
+    <section class="hero">
+      <div class="hero-deco hero-deco-a" aria-hidden="true"></div>
+      <div class="hero-deco hero-deco-b" aria-hidden="true"></div>
+      <div class="hero-main">
+        <div class="hero-eyebrow">
+          <span class="hero-eyebrow-dot"></span>
+          Aeolus WorkBench · 数据运营中枢
+        </div>
+        <h1 class="hero-title">{{ greeting }}，{{ displayName }}</h1>
+        <p class="hero-sub">{{ dateText }} · {{ activeCount ? `当前 ${activeCount} 个任务进行中` : '所有任务已就绪' }}</p>
+        <div class="hero-actions">
+          <button type="button" class="hero-cta hero-cta-primary" @click="go('/tasks')">
+            进入任务中心 <el-icon><ArrowRight /></el-icon>
+          </button>
+          <button type="button" class="hero-cta hero-cta-ghost" @click="go('/assessment')">查看考核看板</button>
+        </div>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat"><b>{{ doneCount }}</b><span>近期完成</span></div>
+        <div class="hero-stat"><b>{{ successCount }}</b><span>成功任务</span></div>
+        <div class="hero-stat"><b>{{ activeCount }}</b><span>进行中</span></div>
+      </div>
+    </section>
+
     <section class="cards">
       <el-card class="quick" shadow="hover" @click="go('/tasks')">
         <el-icon class="quick-ic"><Grid /></el-icon>
@@ -42,18 +66,40 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import StatusCapsule from '@shared/components/common/StatusCapsule.vue';
 import { useRunsStore } from '@shared/stores/runs.js';
 import { useAppStore } from '@shared/stores/app.js';
+import { useAuthStore } from '@shared/stores/auth.js';
 import { STATUS_TXT } from '@shared/utils/tokens.js';
 
 const router = useRouter();
 const runs = useRunsStore();
 const app = useAppStore();
+const auth = useAuthStore();
 
 const recentRuns = computed(() => (runs.history || []).slice(0, 8));
+
+const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+const pad = (n) => String(n).padStart(2, '0');
+const now = ref(Date.now());
+let clockTimer = null;
+onMounted(() => { clockTimer = setInterval(() => { now.value = Date.now(); }, 30_000); });
+onUnmounted(() => { if (clockTimer) clearInterval(clockTimer); });
+
+const displayName = computed(() => auth.name || auth.user || '伙伴');
+const greeting = computed(() => {
+  const h = new Date(now.value).getHours();
+  return h < 6 ? '夜深了' : h < 11 ? '早上好' : h < 13 ? '中午好' : h < 18 ? '下午好' : '晚上好';
+});
+const dateText = computed(() => {
+  const d = new Date(now.value);
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${WEEKDAYS[d.getDay()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+});
+const doneCount = computed(() => (runs.history || []).length);
+const successCount = computed(() => (runs.history || []).filter((h) => h.status === 'success').length);
+const activeCount = computed(() => (runs.queuedIds || []).length + (runs.current ? 1 : 0));
 
 function go(p) { router.push(p); }
 function openRun(h) { runs.openLog(h.run_id); }
@@ -101,6 +147,44 @@ const quarkText = computed(() => {
   display: flex; flex-direction: column; gap: var(--sp-16);
   overflow: hidden;
 }
+
+/* 顶部品牌 Hero：与主色横幅（实时看板）同族，承载问候 / 快捷入口 / 运行概览 */
+.hero {
+  position: relative; flex: none; overflow: hidden;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-24);
+  min-height: 136px; padding: var(--sp-22) var(--sp-28);
+  border-radius: var(--r-modal); color: #fff;
+  background: linear-gradient(115deg, var(--c-brand-dark), var(--c-brand) 62%, var(--c-heat-4));
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--c-brand) 22%, transparent);
+}
+.hero-deco { position: absolute; border-radius: 50%; background: rgba(255,255,255,.12); pointer-events: none; }
+.hero-deco-a { width: 220px; height: 220px; right: 180px; top: -120px; }
+.hero-deco-b { width: 140px; height: 140px; right: -40px; bottom: -80px; background: rgba(255,255,255,.08); }
+.hero-main, .hero-stats { position: relative; z-index: 1; }
+.hero-eyebrow { display: flex; align-items: center; gap: var(--sp-8); font-size: var(--el-font-size-extra-small); letter-spacing: .08em; opacity: .88; }
+.hero-eyebrow-dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(255,255,255,.18); }
+.hero-title { margin: var(--sp-8) 0 0; font-size: 26px; line-height: 1.25; font-weight: var(--fw-bold); }
+.hero-sub { margin: var(--sp-8) 0 0; font-size: var(--el-font-size-small); opacity: .88; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: var(--sp-10); margin-top: var(--sp-16); }
+.hero-cta {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-6);
+  height: 36px; padding: 0 var(--sp-16); border-radius: var(--r-pill);
+  border: 1px solid transparent; font-size: var(--el-font-size-small); font-weight: var(--fw-medium);
+  cursor: pointer; transition: transform var(--dur-base), background var(--dur-base), box-shadow var(--dur-base);
+}
+.hero-cta:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.hero-cta-primary { color: var(--c-brand-dark); background: #fff; }
+.hero-cta-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,.12); }
+.hero-cta-ghost { color: #fff; border-color: rgba(255,255,255,.55); background: rgba(255,255,255,.12); }
+.hero-cta-ghost:hover { background: rgba(255,255,255,.22); }
+.hero-stats { display: flex; gap: var(--sp-10); flex: none; }
+.hero-stat {
+  min-width: 92px; padding: var(--sp-12) var(--sp-16); border-radius: var(--r-modal);
+  background: rgba(255,255,255,.16); backdrop-filter: blur(8px); text-align: center;
+}
+.hero-stat b { display: block; font-size: 24px; line-height: 1.1; font-weight: var(--fw-bold); }
+.hero-stat span { display: block; margin-top: var(--sp-6); font-size: var(--el-font-size-extra-small); opacity: .85; }
+
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--sp-12); flex: none; }
 .quick { cursor: pointer; display: flex; align-items: center; gap: var(--sp-12); }
 .quick-ic { font-size: 26px; color: var(--el-color-primary); }
@@ -124,6 +208,18 @@ const quarkText = computed(() => {
 .run-go { color: var(--el-text-color-secondary); }
 .svc { display: flex; flex-direction: column; gap: var(--sp-12); }
 .svc-row { display: flex; align-items: center; justify-content: space-between; }
+
+/* Hero 响应式：先竖排、再把三块统计均分，避免窄屏挤压标题 */
+@media (max-width: 900px) {
+  .hero { flex-direction: column; align-items: flex-start; }
+  .hero-stats { width: 100%; }
+  .hero-stat { flex: 1; }
+}
+@media (max-width: 560px) {
+  .hero { width: 100%; padding: var(--sp-18); }
+  .hero-title { font-size: 22px; }
+  .hero-stat { min-width: 0; padding: var(--sp-10); }
+}
 
 /* 响应式：窄屏堆叠两栏、收紧内边距，保持铺满不溢出 */
 @media (max-width: 768px) {
