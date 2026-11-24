@@ -92,6 +92,24 @@ jobs:
         run: |
           eval "$(ssh-agent -s)"
           echo "$ECS_SSH_KEY" | tr -d '\r' | ssh-add -
+          # 服务器 ssh.socket + MaxStartups=10:30:100：并发 SSH 连接触顶后新连接会被随机 reset
+          # （2026-11-24 实际踩过：rsync kex_exchange_identification: Connection reset by peer）。
+          # 用 ControlMaster 把本 step 的 ssh/rsync 复用同一条连接（只占 1 个 sshd 槽位），
+          # 探活若仍被 reset 则退避重试 3 次。
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '\n' >> ~/.ssh/config
+          cat >> ~/.ssh/config <<EOF
+          Host $ECS_HOST
+            ControlMaster auto
+            ControlPath /tmp/aeolus-cm-%r@%h:%p
+            ControlPersist 10m
+          EOF
+          chmod 600 ~/.ssh/config
+          for i in 1 2 3; do
+            ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$ECS_USER@$ECS_HOST" true && break
+            echo "SSH 探活失败（第 $i/3 次），5s 后重试"
+            sleep 5
+          done
           pnpm --filter aeolus-workbench-backend build
           # 仓库级路径契约（config/paths.json，原 contracts/ 已于 386c2cf 重命名为 config/）：
           # 后端 dist/config/paths.js 在启动时 readFileSync 读取它，但它不属于任何 dist 产物 —— 不同步的话服务器会
@@ -150,6 +168,24 @@ jobs:
         run: |
           eval "$(ssh-agent -s)"
           echo "$ECS_SSH_KEY" | tr -d '\r' | ssh-add -
+          # 服务器 ssh.socket + MaxStartups=10:30:100：并发 SSH 连接触顶后新连接会被随机 reset
+          # （2026-11-24 实际踩过：rsync kex_exchange_identification: Connection reset by peer）。
+          # 用 ControlMaster 把本 step 的 ssh/rsync 复用同一条连接（只占 1 个 sshd 槽位），
+          # 探活若仍被 reset 则退避重试 3 次。
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '\n' >> ~/.ssh/config
+          cat >> ~/.ssh/config <<EOF
+          Host $ECS_HOST
+            ControlMaster auto
+            ControlPath /tmp/aeolus-cm-%r@%h:%p
+            ControlPersist 10m
+          EOF
+          chmod 600 ~/.ssh/config
+          for i in 1 2 3; do
+            ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$ECS_USER@$ECS_HOST" true && break
+            echo "SSH 探活失败（第 $i/3 次），5s 后重试"
+            sleep 5
+          done
           pnpm --filter aeolus-workbench-web build
           rsync -az --delete \
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
@@ -165,6 +201,24 @@ jobs:
         run: |
           eval "$(ssh-agent -s)"
           echo "$ECS_SSH_KEY" | tr -d '\r' | ssh-add -
+          # 服务器 ssh.socket + MaxStartups=10:30:100：并发 SSH 连接触顶后新连接会被随机 reset
+          # （2026-11-24 实际踩过：rsync kex_exchange_identification: Connection reset by peer）。
+          # 用 ControlMaster 把本 step 的 ssh/rsync 复用同一条连接（只占 1 个 sshd 槽位），
+          # 探活若仍被 reset 则退避重试 3 次。
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '\n' >> ~/.ssh/config
+          cat >> ~/.ssh/config <<EOF
+          Host $ECS_HOST
+            ControlMaster auto
+            ControlPath /tmp/aeolus-cm-%r@%h:%p
+            ControlPersist 10m
+          EOF
+          chmod 600 ~/.ssh/config
+          for i in 1 2 3; do
+            ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$ECS_USER@$ECS_HOST" true && break
+            echo "SSH 探活失败（第 $i/3 次），5s 后重试"
+            sleep 5
+          done
           pnpm --filter aeolus-mobile-web build
           # 服务器上首次部署时 mobile/dist 目录不存在，先建目录再 rsync
           ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
@@ -187,6 +241,24 @@ jobs:
         run: |
           eval "$(ssh-agent -s)"
           echo "$ECS_SSH_KEY" | tr -d '\r' | ssh-add -
+          # 服务器 ssh.socket + MaxStartups=10:30:100：并发 SSH 连接触顶后新连接会被随机 reset
+          # （2026-11-24 实际踩过：rsync kex_exchange_identification: Connection reset by peer）。
+          # 用 ControlMaster 把本 step 的 ssh/rsync 复用同一条连接（只占 1 个 sshd 槽位），
+          # 探活若仍被 reset 则退避重试 3 次。
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '\n' >> ~/.ssh/config
+          cat >> ~/.ssh/config <<EOF
+          Host $ECS_HOST
+            ControlMaster auto
+            ControlPath /tmp/aeolus-cm-%r@%h:%p
+            ControlPersist 10m
+          EOF
+          chmod 600 ~/.ssh/config
+          for i in 1 2 3; do
+            ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$ECS_USER@$ECS_HOST" true && break
+            echo "SSH 探活失败（第 $i/3 次），5s 后重试"
+            sleep 5
+          done
           rsync -az \
             --exclude='.venv' --exclude='__pycache__' --exclude='*.pyc' \
             --exclude='*.err' --exclude='*.log' --exclude='logs/' \
