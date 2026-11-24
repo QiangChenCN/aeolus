@@ -36,7 +36,8 @@ describe('1920×1080 端到端性能', () => {
     // 本地隔离约 4x，GitHub Actions 多 worker 争抢时约 7x。
     // 若回退到 4K 全分辨率逐像素跑多档 Canny 会到 20x 以上，故用 12x 作数量级护栏。
     expect(ratio).toBeLessThan(12);
-  });
+    // CI 多 worker 争抢时 3 次基准 + 3 次端到端需 7s 左右，显式放宽默认 5s 超时。
+  }, 15000);
 
   it('手动模式单次矫正计算 < 500ms（bicubic 采样，拖动实时刷新预算）', () => {
     const img = makeTrapezoidRgba(1920, 1080);

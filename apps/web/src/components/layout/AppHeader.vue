@@ -18,7 +18,7 @@
 </template>
 
 <script setup>
-import { computed, defineEmits } from 'vue';
+import { computed } from 'vue';
 import StatusCapsule from '@shared/components/common/StatusCapsule.vue';
 import UserChip from '@shared/components/common/UserChip.vue';
 import { useAppStore } from '@shared/stores/app.js';
