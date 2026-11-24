@@ -82,5 +82,5 @@ cd ../api && pnpm test -- photo-rectify      # 后端接口单测
 - `detect.test.js`：合成梯形 + `fixtures/trapezoid-clean.png` 角点误差 <3px；低对比度证件（灰度差 11）仍可识别；纹理背景不得误选整图边界；`noise.png` / `solid.png` 必须检测失败；角度偏差 >15° 标记 warn。
 - `rectify.test.js`：单应矩阵/求逆、内缩 6px、四角映射到期望位置 ±2px、输出像素取被摄证件颜色。
 - `corners-editor.test.js`：拖拽按显示比例换算原图坐标、方向键微调。
-- `performance.test.js`：1920×1080 检测+矫正护栏 1200ms；单次矫正（bicubic 采样）护栏 300ms（隔离实测约 230ms / 178ms，vitest 并行 worker 会抖动）。
+- `performance.test.js`：1920×1080 检测+矫正用「相对同环境 rectify 基准的倍数」护栏（<12x，本地约 4.7x / CI 多 worker 约 7x），避免墙钟时间在 CI 上误报；单次矫正（bicubic 采样）护栏 500ms。
 - 后端 `apps/api/src/modules/photo-rectify/photo-rectify.service.spec.ts`：自动检测 / 纯色失败 / 指定四角 / 缺参 4 个用例。
