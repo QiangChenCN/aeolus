@@ -85,7 +85,7 @@
             <span class="rt-brk-dot" /><span>预估可达标</span><b>{{ overview.projectedN }}</b>
           </div>
           <div class="rt-brk is-bad">
-            <span class="rt-brk-dot" /><span>{{ selected.run === 'running' ? '预估不可达标' : '未达标' }}</span><b>{{ overview.badN }}</b>
+            <span class="rt-brk-dot" /><span>不可达标</span><b>{{ overview.badN }}</b>
           </div>
         </div>
 
@@ -99,7 +99,7 @@
             </div>
             <div class="rt-station-bar"><i :style="{ width: barWidth(s.rateShown) }" /></div>
             <div class="rt-station-foot">
-              排班 {{ s.scheduled == null ? '—' : s.scheduled }} · 达标 {{ s.achievedN }} · 预估达标 {{ s.projectedN }} · {{ selected.run === 'running' ? '预估不可达标' : '未达标' }} {{ s.badN }}
+              排班 {{ s.scheduled == null ? '—' : s.scheduled }} · 达标 {{ s.achievedN }} · 预估达标 {{ s.projectedN }} · 不可达标 {{ s.badN }}
             </div>
           </div>
           <div v-if="!stationCards.length" class="rt-empty">暂无站点数据</div>
@@ -123,8 +123,8 @@
             <el-radio-group v-model="statusFilter">
               <el-radio-button value="all">全部</el-radio-button>
               <el-radio-button value="achieved">已达标</el-radio-button>
-              <el-radio-button value="projected">预估可达</el-radio-button>
-              <el-radio-button value="bad">不可达 / 未达标</el-radio-button>
+              <el-radio-button value="projected">可达标</el-radio-button>
+              <el-radio-button value="bad">不可达标</el-radio-button>
             </el-radio-group>
           </div>
         </header>
@@ -320,13 +320,13 @@ function riderStatus(cell, p, info) {
   if (cell.configured === false) return { key: 'unconfigured', text: '未配置', tone: 'mute' };
   // 已达标：单量达标 且 有效在线时长达标（后端 achieved 即两项都满足的口径）
   if (cell.achieved === true) return { key: 'achieved', text: '达标', tone: 'done' };
-  if (info.run === 'done') return { key: 'missed', text: '未达标', tone: 'bad' };
+  if (info.run === 'done') return { key: 'missed', text: '不可达标', tone: 'bad' };
   // 预估：只看有效在线时长 —— 已达成时长 + 本时段剩余时长 ≥ 时长要求（不看单量）
   const reqSec = Math.max(0, Number(p.online_req_h) || 0) * 3600;
   const doneSec = cell.online_sec == null ? 0 : Math.max(0, Number(cell.online_sec));
   return (reqSec <= 0 || doneSec + info.remain * 60 + 0.5 >= reqSec)
     ? { key: 'projected', text: '预估可达标', tone: 'project' }
-    : { key: 'impossible', text: '预估不可达标', tone: 'bad' };
+    : { key: 'impossible', text: '不可达标', tone: 'bad' };
 }
 
 /* 目标人数：跨站点汇总该时段 metrics.target（无目标时回落排班人数） */
