@@ -32,6 +32,7 @@ const LOCAL_FIELDS: Array<{ col: string; key: string; label: string }> = [
   { col: 'settlement_method', key: 'settlementMethod', label: '结算方式' },
   { col: 'settlement_price', key: 'settlementPrice', label: '结算单价' },
   { col: 'remark', key: 'remark', label: '备注' },
+  { col: 'leave_reason', key: 'leaveReason', label: '离职原因' },
   { col: 'pre_leave_date', key: 'preLeaveDate', label: '预离职日期' },
   { col: 'apply_date', key: 'applyDate', label: '申请日期' },
   { col: 'delete_account_date', key: 'deleteAccountDate', label: '删号日期' },
@@ -129,6 +130,7 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
       );
       const cols = new Set((rows || []).map((r) => r.column_name));
       const types = new Map((rows || []).map((r) => [r.column_name, r.data_type] as const));
+      const hadLeaveReason = cols.has('leave_reason');
       let legacyMigrated = false;
       if (cols.has('status')) {
         await this.migrateLegacy();
@@ -146,6 +148,13 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
       }
       await this.pg.query(CREATE_SQL);
       await this.pg.query(LOCAL_MIGRATE);
+      if (!hadLeaveReason) {
+        // 新增离职原因列时把历史备注带过来，避免离职页原备注数据消失。
+        await this.pg.query(
+          `UPDATE rider_roster SET leave_reason = remark
+           WHERE remark IS NOT NULL AND remark <> '' AND (leave_reason IS NULL OR leave_reason = '')`,
+        );
+      }
       await this.pg.query(INDEX_SQL);
       this.tableReady = true;
     } catch (e) {

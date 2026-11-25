@@ -151,6 +151,9 @@
           <el-date-picker v-model="leaveForm.leaveDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
           <div class="form-tip">不填实际离职日期时骑手仍保留在在职列表，申请日期/预离职日期照常记录</div>
         </el-form-item>
+        <el-form-item label="离职原因">
+          <el-input v-model="leaveForm.leaveReason" type="textarea" :rows="2" placeholder="可选" />
+        </el-form-item>
         <el-form-item label="删号日期">
           <el-date-picker v-model="leaveForm.deleteAccountDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
         </el-form-item>
@@ -213,12 +216,20 @@ const canWrite = computed(() => auth.hasPerm('config:write'));
 const VISIBLE_KEYS = [
   'staffName', 'knightId', 'mobile', 'departmentName', 'entryDate', 'riderAttribute',
   'entrySource', 'sourceDetail', 'settlementMethod', 'settlementPrice', 'remark',
-  'leaveDate', 'idNumber', 'preLeaveDate', 'refreshedAt',
+  'leaveDate', 'leaveReason', 'idNumber', 'preLeaveDate', 'refreshedAt',
+];
+/** 离职页：离职日期、离职原因紧跟站点名称；备注只在在职页显示。 */
+const LEAVE_VISIBLE_KEYS = [
+  'staffName', 'knightId', 'mobile', 'departmentName', 'leaveDate', 'leaveReason',
+  ...VISIBLE_KEYS.filter((k) => ![
+    'staffName', 'knightId', 'mobile', 'departmentName', 'leaveDate', 'leaveReason',
+  ].includes(k)),
 ];
 const FALLBACK_COLUMNS = [
   ...KNIGHT_COLUMNS,
   { key: 'entryDate', label: '入职日期' },
   { key: 'leaveDate', label: '离职日期' },
+  { key: 'leaveReason', label: '离职原因' },
   { key: 'refreshedAt', label: '更新时间' },
   { key: 'preLeaveDate', label: '预离职日期' },
 ];
@@ -255,7 +266,7 @@ const leaveVisible = ref(false);
 const leaving = ref(false);
 const leaveForm = reactive({
   knightId: '', staffName: '', departmentName: '',
-  applyDate: todayStr(), preLeaveDate: '', leaveDate: '',
+  applyDate: todayStr(), preLeaveDate: '', leaveDate: '', leaveReason: '',
   deleteAccountDate: '', deleteOperator: '',
 });
 
@@ -281,20 +292,23 @@ function onDepartmentChange(id) {
 
 const columns = computed(() => {
   const source = apiColumns.value.length ? apiColumns.value : FALLBACK_COLUMNS;
+  const order = workStatus.value === '2' ? LEAVE_VISIBLE_KEYS : VISIBLE_KEYS;
   return source
     .filter(
       (c) => VISIBLE_KEYS.includes(c.key)
         && (c.key !== 'preLeaveDate' || workStatus.value === '1')
-        && (c.key !== 'leaveDate' || workStatus.value === '2'),
+        && (c.key !== 'leaveDate' || workStatus.value === '2')
+        && (c.key !== 'leaveReason' || workStatus.value === '2')
+        && (c.key !== 'remark' || workStatus.value === '1'),
     )
-    .sort((a, b) => VISIBLE_KEYS.indexOf(a.key) - VISIBLE_KEYS.indexOf(b.key));
+    .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
 });
 const emptyText = computed(
   () => `暂无${workStatus.value === '1' ? '在职' : '离职'}骑手`,
 );
 
 function colWidth(key) {
-  return ['departmentName', 'idNumber', 'refreshedAt', 'sourceDetail', 'remark'].includes(key) ? 180 : 120;
+  return ['departmentName', 'idNumber', 'refreshedAt', 'sourceDetail', 'remark', 'leaveReason'].includes(key) ? 180 : 120;
 }
 
 function cellText(v) {
@@ -495,6 +509,7 @@ function openLeave(row) {
     applyDate: row.applyDate || todayStr(),
     preLeaveDate: row.preLeaveDate || '',
     leaveDate: '',
+    leaveReason: row.leaveReason || '',
     deleteAccountDate: row.deleteAccountDate || '',
     deleteOperator: auth.name || auth.user || '',
   });
@@ -512,6 +527,7 @@ async function onLeaveSave() {
       applyDate: leaveForm.applyDate,
       preLeaveDate: leaveForm.preLeaveDate,
       leaveDate: leaveForm.leaveDate,
+      leaveReason: leaveForm.leaveReason,
       deleteAccountDate: leaveForm.deleteAccountDate,
       deleteOperator: leaveForm.deleteOperator,
     });
