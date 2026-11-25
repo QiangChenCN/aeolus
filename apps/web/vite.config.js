@@ -43,7 +43,8 @@ export default defineConfig({
       // （否则绕过 Nest 会话与 x-scope 数据权限链路）。
       '/api': {
         target: 'http://localhost:8787',
-        changeOrigin: true,
+        // 保留浏览器原始 Host，避免钉钉 OAuth 回跳地址被生成为 localhost:8787
+        changeOrigin: false,
         // SSE（/api/events）默认会被 http-proxy 缓冲，导致实时日志/状态事件延迟或丢失。
         // 对 text/event-stream 关闭缓冲、禁用缓存与转换，确保逐块实时转发。
         configure: (proxy) => {
