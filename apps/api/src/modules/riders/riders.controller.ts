@@ -3,7 +3,7 @@ import { Request } from 'express';
 import { RequirePerm } from '../../common/decorators/require-perm.decorator';
 import { AuthService } from '../auth/auth.service';
 import { DataPermService } from '../auth/data-perm.service';
-import { requestAllowedTeamIds } from '../../common/perm-request.util';
+import { requestActor, requestAllowedTeamIds } from '../../common/perm-request.util';
 import { RidersService } from './riders.service';
 
 /**
@@ -54,6 +54,21 @@ export class RidersController {
     }
   }
 
+  /** 骑手入离职履历：不可变事件流时间线。 */
+  @RequirePerm('view')
+  @Get('riders/employment-history')
+  employmentHistory(
+    @Query('knightId') knightId: string,
+    @Query('page') page: string,
+    @Query('pageSize') pageSize: string,
+  ) {
+    try {
+      return this.riders.employmentHistory(knightId, Number(page) || 1, Number(pageSize) || 20);
+    } catch (e) {
+      return { ok: false, error: (e as Error).message || String(e) };
+    }
+  }
+
   /** 手动新增骑手：只写本地 rider_roster，不触发外部取数。 */
   @RequirePerm('config:write')
   @Post('riders')
@@ -62,6 +77,7 @@ export class RidersController {
       return this.riders.createRider(
         body || {},
         requestAllowedTeamIds(this.auth, this.dataPerm, req),
+        requestActor(this.auth, req),
       );
     } catch (e) {
       return { ok: false, error: (e as Error).message || String(e) };
@@ -76,6 +92,7 @@ export class RidersController {
       return this.riders.updateRider(
         body || {},
         requestAllowedTeamIds(this.auth, this.dataPerm, req),
+        requestActor(this.auth, req),
       );
     } catch (e) {
       return { ok: false, error: (e as Error).message || String(e) };

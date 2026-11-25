@@ -9,6 +9,7 @@ import { BizError } from '../../common/biz.error';
 import { beijingNowStr, escapeLike, str } from '../../common/format.util';
 import { PgService } from '../pg/pg.service';
 import { readKnownTeams } from '../../infra/fetch/sources/teams-fetch.service';
+import { RiderEmploymentHistoryService } from './rider-employment-history.service';
 
 /**
  * rider_roster：保留表名，按骑手明细新数据重新设计的表结构。
@@ -97,6 +98,15 @@ function raw(v: unknown): string {
   return v === undefined || v === null ? '' : String(v);
 }
 
+/** PG DATE 读出来是本地零点 Date，按本地年月日格式化，避免 String(Date) 错位。 */
+function ymd(v: unknown): string {
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())}`;
+  }
+  return str(v).slice(0, 10);
+}
+
 /** 日期列空字符串写 NULL；其余列保持空字符串。 */
 function dbVal(col: string, v: unknown): string | null {
   const s = raw(v);
@@ -121,7 +131,10 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
   private readonly logger = new Logger(RiderRosterDetailStoreService.name);
   private tableReady = false;
 
-  constructor(private readonly pg: PgService) {}
+  constructor(
+    private readonly pg: PgService,
+    private readonly history: RiderEmploymentHistoryService,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     try {
@@ -157,6 +170,7 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
       }
       await this.pg.query(INDEX_SQL);
       this.tableReady = true;
+      await this.history.ensureSchemaAndBackfill();
     } catch (e) {
       this.logger.warn(`rider_roster 初始化失败：${(e as Error).message}`);
     }
@@ -211,32 +225,10 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
     if (!this.tableReady) throw new Error('rider_roster 不可用（PostgreSQL 未配置或初始化失败）');
   }
 
-  /** 全量 upsert：上游字段按新结构直接落库，不保留旧花名册人工字段。 */
+  /** 全量 upsert：当前态落库 + 上游快照 + 生命周期事件，同一事务完成。 */
   async upsertAll(rows: Record<string, unknown>[], refreshedAt: string) {
     this.assertReady();
-    const existing = await this.pg.query<{ knight_id: string }>('SELECT knight_id FROM rider_roster');
-    const known = new Set((existing || []).map((r) => str(r.knight_id)));
-
-    const seen = new Set<string>();
-    const arrays: (string | null)[][] = ALL_COLS.map(() => []);
-    let added = 0;
-    let updated = 0;
-    for (const row of rows || []) {
-      const kid = str(row['knightId'] ?? row['knight_id']);
-      if (!kid || seen.has(kid)) continue;
-      seen.add(kid);
-      if (known.has(kid)) updated++;
-      else added++;
-      const leaveDate = str(row[DB_TO_FIELD.get('leave_date') || 'leaveTime']);
-      ALL_COLS.forEach((col, i) => {
-        const value = col === REFRESHED ? refreshedAt : dbVal(col, row[DB_TO_FIELD.get(col) || '']);
-        // 上游标记离职但实际离职日期为空：按在职落库，避免刷新覆盖本地口径。
-        arrays[i].push(col === 'work_status' && str(value) === '2' && !leaveDate ? '1' : value);
-      });
-    }
-    if (!seen.size) return { ok: true as const, total: 0, added: 0, updated: 0 };
-
-    const aliases = ALL_COLS.map((_, i) => `x.c${i}`).join(', ');
+    const aliases = ALL_COLS.map((col, i) => `x.c${i}${DATE_COLS.has(col) ? '::date' : ''}`).join(', ');
     const aliasDefs = ALL_COLS.map((_, i) => `c${i}`).join(', ');
     const unnest = ALL_COLS.map((_, i) => `$${i + 1}::text[]`).join(', ');
     const updateSet = DETAIL_COLS.filter((c) => c !== 'knight_id')
@@ -244,18 +236,87 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
       .concat(`${REFRESHED} = EXCLUDED.${REFRESHED}`)
       .join(', ');
 
-    await this.pg.query(
-      `INSERT INTO rider_roster (${ALL_COLS.join(', ')})
-       SELECT ${aliases}
-       FROM unnest(${unnest}) AS x(${aliasDefs})
-       ON CONFLICT (knight_id) DO UPDATE SET ${updateSet}`,
-      arrays,
-    );
-    return { ok: true as const, total: seen.size, added, updated };
+    return this.pg.tx(async (client) => {
+      const oldRes = await client.query<{
+        knight_id: string; work_status: string; entry_date: string | null;
+        leave_date: string | null; department_id: string; department_name: string;
+      }>(
+        `SELECT knight_id, work_status::text, entry_date::text, leave_date::text,
+                department_id, department_name FROM rider_roster`,
+      );
+      const oldMap = new Map((oldRes.rows || []).map((r) => [str(r.knight_id), r]));
+
+      const seen = new Set<string>();
+      const arrays: (string | null)[][] = ALL_COLS.map(() => []);
+      const snapshots: Array<{
+        knightId: string; workStatus: string; entryDate?: string; leaveDate?: string;
+        departmentId?: string; departmentName?: string; raw: Record<string, unknown>;
+      }> = [];
+      let added = 0;
+      let updated = 0;
+      for (const row of rows || []) {
+        const kid = str(row['knightId'] ?? row['knight_id']);
+        if (!kid || seen.has(kid)) continue;
+        seen.add(kid);
+        const old = oldMap.get(kid);
+        if (old) updated++;
+        else added++;
+        const leaveDate = str(row[DB_TO_FIELD.get('leave_date') || 'leaveTime']).slice(0, 10);
+        let newStatus = '';
+        let newEntry = '';
+        let newLeave = '';
+        ALL_COLS.forEach((col, i) => {
+          let value = col === REFRESHED ? refreshedAt : dbVal(col, row[DB_TO_FIELD.get(col) || '']);
+          // 上游标记离职但实际离职日期为空：按在职落库，避免刷新覆盖本地口径。
+          if (col === 'work_status' && str(value) === '2' && !leaveDate) value = '1';
+          if (col === 'work_status') newStatus = str(value);
+          if (col === 'entry_date') newEntry = str(value).slice(0, 10);
+          if (col === 'leave_date') newLeave = str(value).slice(0, 10);
+          arrays[i].push(value);
+        });
+        const deptId = str(row['departmentId'] ?? row['department_id']);
+        const deptName = str(row['departmentName'] ?? row['department_name']);
+        snapshots.push({ knightId: kid, workStatus: newStatus, entryDate: newEntry, leaveDate: newLeave, departmentId: deptId, departmentName: deptName, raw: row });
+
+        const oldStatus = str(old?.work_status);
+        const oldEntry = ymd(old?.entry_date);
+        const oldLeave = ymd(old?.leave_date);
+        const payload = { staffName: str(row['staffName'] ?? row['staff_name']), departmentId: deptId, departmentName: deptName };
+        if (newEntry && !oldEntry) {
+          await this.history.append(client, {
+            knightId: kid, eventType: 'entry', effectiveFrom: newEntry,
+            payload, source: 'upstream', idempotencyKey: `upstream:entry:${kid}:${newEntry}`,
+          });
+        }
+        if (newStatus === '2' && oldStatus !== '2' && newLeave) {
+          await this.history.append(client, {
+            knightId: kid, eventType: 'leave', effectiveFrom: newLeave,
+            payload, source: 'upstream', idempotencyKey: `upstream:leave:${kid}:${newLeave}`,
+          });
+        }
+        if (newStatus === '1' && oldStatus === '2' && newEntry) {
+          await this.history.append(client, {
+            knightId: kid, eventType: 'rehire', effectiveFrom: newEntry,
+            payload, source: 'upstream', idempotencyKey: `upstream:rehire:${kid}:${newEntry}`,
+          });
+        }
+      }
+      if (!seen.size) return { ok: true as const, total: 0, added: 0, updated: 0 };
+
+      await client.query(
+        `INSERT INTO rider_roster (${ALL_COLS.join(', ')})
+         SELECT ${aliases}
+         FROM unnest(${unnest}) AS x(${aliasDefs})
+         ON CONFLICT (knight_id) DO UPDATE SET ${updateSet}`,
+        arrays,
+      );
+      await this.history.snapshot(client, refreshedAt, snapshots);
+      return { ok: true as const, total: seen.size, added, updated };
+    });
   }
 
-  /** 手动新增：只填写表单字段，其余列留空；更新时间由服务端生成。 */
-  async create(data: Record<string, unknown>, allowed: Set<string> | null = null) {
+  /** 手动新增：当前态与 entry 事件在同一事务写入。 */
+  async create(data: Record<string, unknown>, allowed: Set<string> | null = null, actor = '') {
     this.assertReady();
     const knightId = str(data.knightId ?? data.knight_id);
     const staffName = str(data.staffName ?? data.staff_name);
@@ -265,11 +326,6 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
     if (allowed && departmentId && !allowed.has(departmentId)) {
       throw new BizError('该站点不在你的数据权限范围内');
     }
-    const dup = await this.pg.queryOne<{ knight_id: string }>(
-      'SELECT knight_id FROM rider_roster WHERE knight_id = $1',
-      [knightId],
-    );
-    if (dup) throw new BizError(`骑手ID ${knightId} 已存在`);
 
     const values: Record<string, string | null> = {};
     for (const [col, field] of DB_TO_FIELD) values[col] = dbVal(col, pickField(data, field));
@@ -278,74 +334,173 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
     values.department_id = departmentId;
     values.department_name = resolveDeptName(departmentId, data.departmentName ?? data.department_name);
     values.work_status = '1';
-    values[REFRESHED] = beijingNowStr();
+    const now = beijingNowStr();
+    values[REFRESHED] = now;
     for (const f of LOCAL_FIELDS) values[f.col] = dbVal(f.col, data[f.key]);
 
-    await this.pg.query(
-      `INSERT INTO rider_roster (${TABLE_COLS.join(', ')})
-       VALUES (${TABLE_COLS.map((_, i) => `$${i + 1}`).join(', ')})`,
-      TABLE_COLS.map((c) => values[c] ?? (DATE_COLS.has(c) ? null : '')),
-    );
-    return { ok: true as const, knightId };
+    return this.pg.tx(async (client) => {
+      const dup = await client.query('SELECT knight_id FROM rider_roster WHERE knight_id = $1', [knightId]);
+      if (dup.rows.length) throw new BizError(`骑手ID ${knightId} 已存在`);
+      await client.query(
+        `INSERT INTO rider_roster (${TABLE_COLS.join(', ')})
+         VALUES (${TABLE_COLS.map((_, i) => `$${i + 1}`).join(', ')})`,
+        TABLE_COLS.map((c) => values[c] ?? (DATE_COLS.has(c) ? null : '')),
+      );
+      await this.history.append(client, {
+        knightId,
+        eventType: 'entry',
+        effectiveFrom: ymd(values.entry_date) || now.slice(0, 10),
+        payload: {
+          staffName,
+          departmentId,
+          departmentName: str(values.department_name),
+        },
+        actor,
+        source: 'manual',
+      });
+      return { ok: true as const, knightId };
+    });
   }
 
-  /** 手动编辑：只更新表单字段， KnightId 不可变；没填实际离职日期仍视为在职。 */
-  async update(data: Record<string, unknown>, allowed: Set<string> | null = null) {
+  /** 手动编辑：当前态更新与生命周期事件在同一事务写入。 */
+  async update(data: Record<string, unknown>, allowed: Set<string> | null = null, actor = '') {
     this.assertReady();
     const knightId = str(data.knightId ?? data.knight_id);
     if (!knightId) throw new BizError('骑手ID不能为空');
-    const existing = await this.pg.queryOne<Record<string, string>>(
-      'SELECT * FROM rider_roster WHERE knight_id = $1',
-      [knightId],
-    );
-    if (!existing) throw new BizError('骑手不存在');
-    const currentDept = str(existing.department_id);
-    if (allowed && currentDept && !allowed.has(currentDept)) {
-      throw new BizError('该站点不在你的数据权限范围内');
-    }
-    const deptProvided = data.departmentId !== undefined || data.department_id !== undefined;
-    const nextDept = deptProvided
-      ? str(data.departmentId ?? data.department_id)
-      : currentDept;
-    if (allowed && nextDept && !allowed.has(nextDept)) {
-      throw new BizError('该站点不在你的数据权限范围内');
-    }
 
-    const fields: Record<string, string | null> = {};
-    for (const [col, field] of DB_TO_FIELD) {
-      const v = pickField(data, field);
-      if (v !== undefined) fields[col] = dbVal(col, v);
-    }
-    const staffName = str(data.staffName ?? data.staff_name) || str(existing.staff_name);
-    if (!staffName) throw new BizError('骑手姓名不能为空');
-    fields.knight_id = knightId;
-    fields.staff_name = staffName;
-    fields.department_id = nextDept;
-    fields.department_name = resolveDeptName(
-      nextDept,
-      deptProvided ? (data.departmentName ?? data.department_name) : str(existing.department_name),
-    );
+    return this.pg.tx(async (client) => {
+      const found = await client.query<Record<string, string>>(
+        'SELECT * FROM rider_roster WHERE knight_id = $1',
+        [knightId],
+      );
+      const existing = found.rows[0];
+      if (!existing) throw new BizError('骑手不存在');
+      const currentDept = str(existing.department_id);
+      if (allowed && currentDept && !allowed.has(currentDept)) {
+        throw new BizError('该站点不在你的数据权限范围内');
+      }
+      const deptProvided = data.departmentId !== undefined || data.department_id !== undefined;
+      const nextDept = deptProvided ? str(data.departmentId ?? data.department_id) : currentDept;
+      if (allowed && nextDept && !allowed.has(nextDept)) {
+        throw new BizError('该站点不在你的数据权限范围内');
+      }
 
-    if (data.workStatus !== undefined || data.work_status !== undefined) {
-      const ws = str(data.workStatus ?? data.work_status);
-      if (!['1', '2'].includes(ws)) throw new BizError('在职状态只能是 1 或 2');
-      const leaveDate = str(pickField(data, 'leaveTime'));
-      // 填了离职但没填实际离职日期：保留在职，申请/预离职日期照常记录。
-      fields.work_status = ws === '2' && !leaveDate ? '1' : ws;
-      if (fields.work_status === '1') fields.leave_date = null;
-    }
-    for (const f of LOCAL_FIELDS) {
-      if (data[f.key] !== undefined) fields[f.col] = dbVal(f.col, data[f.key]);
-    }
-    fields[REFRESHED] = beijingNowStr();
+      const fields: Record<string, string | null> = {};
+      for (const [col, field] of DB_TO_FIELD) {
+        const v = pickField(data, field);
+        if (v !== undefined) fields[col] = dbVal(col, v);
+      }
+      const staffName = str(data.staffName ?? data.staff_name) || str(existing.staff_name);
+      if (!staffName) throw new BizError('骑手姓名不能为空');
+      fields.knight_id = knightId;
+      fields.staff_name = staffName;
+      fields.department_id = nextDept;
+      fields.department_name = resolveDeptName(
+        nextDept,
+        deptProvided ? (data.departmentName ?? data.department_name) : str(existing.department_name),
+      );
 
-    const cols = Object.keys(fields).filter((c) => c !== 'knight_id');
-    await this.pg.query(
-      `UPDATE rider_roster SET ${cols.map((c, i) => `${c} = $${i + 2}`).join(', ')}
-       WHERE knight_id = $1`,
-      [knightId, ...cols.map((c) => fields[c] ?? (DATE_COLS.has(c) ? null : ''))],
-    );
-    return { ok: true as const, knightId, workStatus: str(fields.work_status || existing.work_status) };
+      if (data.workStatus !== undefined || data.work_status !== undefined) {
+        const ws = str(data.workStatus ?? data.work_status);
+        if (!['1', '2'].includes(ws)) throw new BizError('在职状态只能是 1 或 2');
+        const leaveDate = str(pickField(data, 'leaveTime'));
+        // 填了离职但没填实际离职日期：保留在职，申请/预离职日期照常记录。
+        fields.work_status = ws === '2' && !leaveDate ? '1' : ws;
+        if (fields.work_status === '1') fields.leave_date = null;
+      }
+      for (const f of LOCAL_FIELDS) {
+        if (data[f.key] !== undefined) fields[f.col] = dbVal(f.col, data[f.key]);
+      }
+      fields[REFRESHED] = beijingNowStr();
+
+      const cols = Object.keys(fields).filter((c) => c !== 'knight_id');
+      await client.query(
+        `UPDATE rider_roster SET ${cols.map((c, i) => `${c} = $${i + 2}`).join(', ')}
+         WHERE knight_id = $1`,
+        [knightId, ...cols.map((c) => fields[c] ?? (DATE_COLS.has(c) ? null : ''))],
+      );
+      await this.appendManualEvents(client, existing, fields, data, actor);
+      return { ok: true as const, knightId, workStatus: str(fields.work_status || existing.work_status) };
+    });
+  }
+
+  /** 从新旧值差异推导人工操作产生的生命周期事件。 */
+  private async appendManualEvents(
+    client: import('pg').PoolClient,
+    existing: Record<string, string>,
+    fields: Record<string, string | null>,
+    data: Record<string, unknown>,
+    actor: string,
+  ): Promise<void> {
+    const kid = str(existing.knight_id);
+    const dateVal = (col: string, fallback: string) =>
+      fields[col] !== undefined ? ymd(fields[col]) : fallback;
+    const old = {
+      status: str(existing.work_status),
+      entry: ymd(existing.entry_date),
+      leave: ymd(existing.leave_date),
+      apply: ymd(existing.apply_date),
+      pre: ymd(existing.pre_leave_date),
+      dept: str(existing.department_id),
+      reason: str(existing.leave_reason),
+    };
+    const next = {
+      status: fields.work_status !== undefined ? str(fields.work_status) : old.status,
+      entry: dateVal('entry_date', old.entry),
+      leave: dateVal('leave_date', old.leave),
+      apply: dateVal('apply_date', old.apply),
+      pre: dateVal('pre_leave_date', old.pre),
+      dept: fields.department_id !== undefined ? str(fields.department_id) : old.dept,
+      reason: fields.leave_reason !== undefined ? str(fields.leave_reason) : old.reason,
+    };
+    const base = {
+      staffName: str(fields.staff_name || existing.staff_name),
+      departmentId: next.dept,
+      departmentName: str(fields.department_name || existing.department_name),
+    };
+    const now = beijingNowStr();
+    const common = { knightId: kid, actor, source: 'manual' };
+    const isRehireTransition = old.status === '2' && next.status === '1';
+
+    if (next.status === '2' && old.status !== '2' && next.leave) {
+      await this.history.append(client, {
+        ...common, eventType: 'leave', effectiveFrom: next.leave,
+        payload: { ...base, applyDate: next.apply, preLeaveDate: next.pre, leaveReason: next.reason },
+      });
+    }
+    if (next.status === '1' && old.status === '2') {
+      await this.history.append(client, {
+        ...common, eventType: 'rehire',
+        effectiveFrom: fields.entry_date !== undefined && next.entry ? next.entry : now.slice(0, 10),
+        payload: base,
+      });
+    }
+    if (next.status === '1' && !next.leave && (next.apply || next.pre)
+      && (next.apply !== old.apply || next.pre !== old.pre)) {
+      await this.history.append(client, {
+        ...common, eventType: 'leave_apply', effectiveFrom: next.apply || next.pre,
+        payload: { ...base, applyDate: next.apply, preLeaveDate: next.pre },
+      });
+    }
+    if (!isRehireTransition && next.entry && next.entry !== old.entry) {
+      await this.history.append(client, {
+        ...common, eventType: 'correction', effectiveFrom: next.entry,
+        payload: { ...base, field: 'entry_date', oldValue: old.entry, newValue: next.entry },
+      });
+    }
+    if (next.dept && next.dept !== old.dept) {
+      await this.history.append(client, {
+        ...common, eventType: 'transfer',
+        effectiveFrom: str(pickField(data, 'transferDate')).slice(0, 10) || now.slice(0, 10),
+        payload: { ...base, fromDepartmentId: old.dept, toDepartmentId: next.dept },
+      });
+    }
+    if (!isRehireTransition && next.reason !== old.reason && !(next.status === '2' && old.status !== '2')) {
+      await this.history.append(client, {
+        ...common, eventType: 'correction', effectiveFrom: now.slice(0, 10),
+        payload: { ...base, field: 'leave_reason', oldValue: old.reason, newValue: next.reason },
+      });
+    }
   }
 
   /** 单独查看结算单价真实值（列表只返回打码占位）。 */
@@ -389,7 +544,11 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
     }
     const workStatus = str(opts.workStatus);
     if (workStatus === '1') {
+      // 在职：含已申请但未填实际离职日期的记录。
       where.push(`(work_status = '1' OR (work_status = '2' AND leave_date IS NULL))`);
+    } else if (workStatus === 'applied') {
+      where.push(`work_status = '1' AND leave_date IS NULL
+                  AND (apply_date IS NOT NULL OR pre_leave_date IS NOT NULL)`);
     } else if (workStatus === '2') {
       where.push(`work_status = '2' AND leave_date IS NOT NULL`);
     } else if (workStatus) {
@@ -405,12 +564,13 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
       where.push(`department_id = ANY($${params.length})`);
     }
     const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
-    const orderBy = workStatus === '1'
-      ? `entry_date DESC NULLS LAST,
+    const entryOrder = `entry_date DESC NULLS LAST,
          CASE WHEN knight_id ~ '^\\d+$' THEN knight_id::bigint END DESC NULLS LAST,
-         knight_id DESC`
-      : workStatus === '2'
-        ? 'leave_date DESC NULLS LAST, department_name, staff_name'
+         knight_id DESC`;
+    const orderBy = workStatus === '2'
+      ? 'leave_date DESC NULLS LAST, department_name, staff_name'
+      : workStatus === '1' || workStatus === 'applied' || !workStatus
+        ? entryOrder
         : 'department_name, staff_name';
     const page = Math.max(1, Number(opts.page) || 1);
     const pageSize = Math.min(500, Math.max(1, Number(opts.pageSize) || 50));

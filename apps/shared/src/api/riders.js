@@ -26,3 +26,13 @@ export function createRider(data) { return request('/riders', j(data)); }
 export function updateRider(data) {
   return request('/riders', { ...j(data), method: 'PUT' });
 }
+
+/* 骑手入离职履历（不可变事件流） */
+export function fetchRiderEmploymentHistory(knightId, page = 1, pageSize = 20) {
+  const q = [
+    'knightId=' + encodeURIComponent(knightId || ''),
+    'page=' + page,
+    'pageSize=' + pageSize,
+  ];
+  return request('/riders/employment-history?' + q.join('&'));
+}

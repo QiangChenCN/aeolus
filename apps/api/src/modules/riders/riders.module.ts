@@ -5,6 +5,7 @@ import { PgModule } from '../pg/pg.module';
 import { RiderRosterDetailStoreService } from './rider-roster-detail-store.service';
 import { RidersController } from './riders.controller';
 import { RidersService } from './riders.service';
+import { RiderEmploymentHistoryService } from './rider-employment-history.service';
 
 /**
  * 骑手管理页。
@@ -15,6 +16,6 @@ import { RidersService } from './riders.service';
 @Module({
   imports: [AuthModule, FetchModule, PgModule],
   controllers: [RidersController],
-  providers: [RidersService, RiderRosterDetailStoreService],
+  providers: [RidersService, RiderRosterDetailStoreService, RiderEmploymentHistoryService],
 })
 export class RidersModule {}

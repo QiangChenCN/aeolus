@@ -3,6 +3,7 @@ import { beijingNowStr, str } from '../../common/format.util';
 import { BizError } from '../../common/biz.error';
 import { KnightDetailQueryService } from '../../infra/fetch/sources/knight-detail-query.service';
 import { RiderRosterDetailStoreService } from './rider-roster-detail-store.service';
+import { RiderEmploymentHistoryService } from './rider-employment-history.service';
 
 /**
  * 骑手管理页业务层。
@@ -17,6 +18,7 @@ export class RidersService {
   constructor(
     private readonly knights: KnightDetailQueryService,
     private readonly details: RiderRosterDetailStoreService,
+    private readonly history: RiderEmploymentHistoryService,
   ) {}
 
   /** 刷新链路：骑手明细查询基座全量取数 → rider_roster 新结构。 */
@@ -39,13 +41,18 @@ export class RidersService {
   }
 
   /** 手动新增骑手：只写本地 rider_roster，不触发外部取数。 */
-  createRider(data: Record<string, unknown>, allowed: Set<string> | null = null) {
-    return this.details.create(data, allowed);
+  createRider(data: Record<string, unknown>, allowed: Set<string> | null = null, actor = '') {
+    return this.details.create(data, allowed, actor);
   }
 
-  /** 手动编辑/离职：只写本地 rider_roster，不触发外部取数。 */
-  updateRider(data: Record<string, unknown>, allowed: Set<string> | null = null) {
-    return this.details.update(data, allowed);
+  /** 手动编辑/离职：写当前态并追加生命周期事件，不触发外部取数。 */
+  updateRider(data: Record<string, unknown>, allowed: Set<string> | null = null, actor = '') {
+    return this.details.update(data, allowed, actor);
+  }
+
+  /** 骑手入离职履历时间线。 */
+  employmentHistory(knightId: string, page = 1, pageSize = 20) {
+    return this.history.list({ knightId, page, pageSize });
   }
 
   /** 单独查看结算单价真实值（列表只返回打码占位）。 */
