@@ -69,10 +69,16 @@ CREATE INDEX IF NOT EXISTS idx_rider_roster_work_status ON rider_roster(work_sta
 CREATE INDEX IF NOT EXISTS idx_rider_roster_updated ON rider_roster(updated_at);
 `;
 
+/** 有效在职状态：填了离职但没填实际离职日期，仍算在职。 */
+const EFFECTIVE_WORK_STATUS = `CASE WHEN work_status = '2' AND leave_date IS NULL THEN '1' ELSE work_status END`;
+
 const SELECT_COLS = [
   ...FIELDS.map((k) => {
     const col = knightDbColumn(k);
-    return `${DATE_COLS.has(col) ? `${col}::text` : col} AS "${apiKey(k)}"`;
+    const expr = k === 'workStatus'
+      ? EFFECTIVE_WORK_STATUS
+      : DATE_COLS.has(col) ? `${col}::text` : col;
+    return `${expr} AS "${apiKey(k)}"`;
   }),
   `${REFRESHED} AS "refreshedAt"`,
   ...LOCAL_FIELDS.map((f) => f.key === 'settlementPrice'
@@ -212,8 +218,11 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
       seen.add(kid);
       if (known.has(kid)) updated++;
       else added++;
+      const leaveDate = str(row[DB_TO_FIELD.get('leave_date') || 'leaveTime']);
       ALL_COLS.forEach((col, i) => {
-        arrays[i].push(col === REFRESHED ? refreshedAt : dbVal(col, row[DB_TO_FIELD.get(col) || '']));
+        const value = col === REFRESHED ? refreshedAt : dbVal(col, row[DB_TO_FIELD.get(col) || '']);
+        // 上游标记离职但实际离职日期为空：按在职落库，避免刷新覆盖本地口径。
+        arrays[i].push(col === 'work_status' && str(value) === '2' && !leaveDate ? '1' : value);
       });
     }
     if (!seen.size) return { ok: true as const, total: 0, added: 0, updated: 0 };
@@ -271,7 +280,7 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
     return { ok: true as const, knightId };
   }
 
-  /** 手动编辑：只更新表单字段， KnightId 不可变；离职时自动补离职日期。 */
+  /** 手动编辑：只更新表单字段， KnightId 不可变；没填实际离职日期仍视为在职。 */
   async update(data: Record<string, unknown>, allowed: Set<string> | null = null) {
     this.assertReady();
     const knightId = str(data.knightId ?? data.knight_id);
@@ -311,11 +320,10 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
     if (data.workStatus !== undefined || data.work_status !== undefined) {
       const ws = str(data.workStatus ?? data.work_status);
       if (!['1', '2'].includes(ws)) throw new BizError('在职状态只能是 1 或 2');
-      fields.work_status = ws;
-      if (ws === '2' && !str(pickField(data, 'leaveTime'))) {
-        fields.leave_date = beijingNowStr().slice(0, 10);
-      }
-      if (ws === '1') fields.leave_date = null;
+      const leaveDate = str(pickField(data, 'leaveTime'));
+      // 填了离职但没填实际离职日期：保留在职，申请/预离职日期照常记录。
+      fields.work_status = ws === '2' && !leaveDate ? '1' : ws;
+      if (fields.work_status === '1') fields.leave_date = null;
     }
     for (const f of LOCAL_FIELDS) {
       if (data[f.key] !== undefined) fields[f.col] = dbVal(f.col, data[f.key]);
@@ -371,7 +379,11 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
       where.push(`department_id = $${params.length}`);
     }
     const workStatus = str(opts.workStatus);
-    if (workStatus) {
+    if (workStatus === '1') {
+      where.push(`(work_status = '1' OR (work_status = '2' AND leave_date IS NULL))`);
+    } else if (workStatus === '2') {
+      where.push(`work_status = '2' AND leave_date IS NOT NULL`);
+    } else if (workStatus) {
       params.push(workStatus);
       where.push(`work_status = $${params.length}`);
     }

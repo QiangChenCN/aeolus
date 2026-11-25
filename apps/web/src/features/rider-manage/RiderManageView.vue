@@ -149,6 +149,7 @@
         </el-form-item>
         <el-form-item label="实际离职日期">
           <el-date-picker v-model="leaveForm.leaveDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
+          <div class="form-tip">不填实际离职日期时骑手仍保留在在职列表，申请日期/预离职日期照常记录</div>
         </el-form-item>
         <el-form-item label="删号日期">
           <el-date-picker v-model="leaveForm.deleteAccountDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
@@ -254,7 +255,7 @@ const leaveVisible = ref(false);
 const leaving = ref(false);
 const leaveForm = reactive({
   knightId: '', staffName: '', departmentName: '',
-  applyDate: todayStr(), preLeaveDate: '', leaveDate: todayStr(),
+  applyDate: todayStr(), preLeaveDate: '', leaveDate: '',
   deleteAccountDate: '', deleteOperator: '',
 });
 
@@ -491,10 +492,10 @@ function openLeave(row) {
     knightId: row.knightId || '',
     staffName: row.staffName || '',
     departmentName: row.departmentName || '',
-    applyDate: todayStr(),
+    applyDate: row.applyDate || todayStr(),
     preLeaveDate: row.preLeaveDate || '',
-    leaveDate: todayStr(),
-    deleteAccountDate: '',
+    leaveDate: '',
+    deleteAccountDate: row.deleteAccountDate || '',
     deleteOperator: auth.name || auth.user || '',
   });
   leaveVisible.value = true;
@@ -503,9 +504,11 @@ function openLeave(row) {
 async function onLeaveSave() {
   leaving.value = true;
   try {
+    // 没填实际离职日期只记录离职申请，骑手仍属于在职。
+    const hasLeaveDate = !!leaveForm.leaveDate;
     const res = await updateRider({
       knightId: leaveForm.knightId,
-      workStatus: '2',
+      workStatus: hasLeaveDate ? '2' : '1',
       applyDate: leaveForm.applyDate,
       preLeaveDate: leaveForm.preLeaveDate,
       leaveDate: leaveForm.leaveDate,
@@ -516,9 +519,9 @@ async function onLeaveSave() {
       ElMessage.error(res.error || '离职操作失败');
       return;
     }
-    ElMessage.success('已办理离职');
+    ElMessage.success(hasLeaveDate ? '已办理离职' : '已记录离职申请，骑手仍在职');
     leaveVisible.value = false;
-    workStatus.value = '2';
+    workStatus.value = hasLeaveDate ? '2' : '1';
     reload();
   } catch (e) {
     ElMessage.error(e.message || '离职操作失败');
