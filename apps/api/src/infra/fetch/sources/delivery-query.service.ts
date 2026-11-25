@@ -4,6 +4,7 @@ import { FetchPaceService, MAX_RETRIES, RELOGIN_MAX, RELOGIN_BACKOFF_BASE, BACKO
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
 // 字段映射统一来自 @aeolus/shared 公共字典（由 delivery-normalize 投影），本服务不自建映射表。
 import { normalizeOrderRow, DeliveryRow } from '../../../modules/delivery/delivery-normalize';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 
 /**
  * 运单明细查询基座（实时点查，不落盘）。
@@ -141,6 +142,7 @@ export class DeliveryQueryService {
   constructor(
     private readonly pace: FetchPaceService,
     private readonly cookies: AeolusCookieService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
   ) {}
 
   /**
@@ -175,18 +177,37 @@ export class DeliveryQueryService {
     teamIds?: number[];
     rider?: string;
   }): Promise<QueryResult> {
-    const body = buildBody(
+    let url = API;
+    let method = 'POST';
+    let body: unknown = buildBody(
       opts.startMs, opts.endMs, opts.current, opts.pageSize,
       opts.period, opts.timeField, opts.teamIds || [], opts.rider,
     );
+    // 生产配置覆盖（仅 enabled + published）：失败一律保留上面的内建值。
+    const active = await this.sourceConfig.active('delivery-query');
+    if (active?.http) {
+      url = active.http.url || url;
+      method = active.http.method || method;
+      const rendered = this.sourceConfig.renderBody(
+        active,
+        active.http.body ?? {},
+        {
+          startMs: opts.startMs, endMs: opts.endMs, current: opts.current,
+          pageSize: opts.pageSize, period: opts.period, timeField: opts.timeField,
+          teamIds: opts.teamIds || [], rider: opts.rider,
+        },
+        opts.pageSize,
+      );
+      if (rendered != null) body = rendered;
+    }
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), REQ_TIMEOUT_MS);
     let j: any;
     try {
-      const res = await fetch(API, {
-        method: 'POST',
+      const res = await fetch(url, {
+        method,
         headers: { ...HEADERS_BASE, cookie: opts.cookie },
-        body: JSON.stringify(body),
+        body: method === 'GET' ? undefined : JSON.stringify(body),
         signal: ctrl.signal,
       });
       j = await res.json();

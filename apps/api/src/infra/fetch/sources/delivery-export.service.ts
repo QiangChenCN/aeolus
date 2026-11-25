@@ -4,6 +4,7 @@ import { AeolusCookieService } from '../creds/aeolus-cookie.service';
 import { AuthError, TIME_FIELDS, TIME_FIELD } from './delivery-query.service';
 import { netError } from '../../../common/net-error';
 import { CN2EN, TIME_EN, toMs } from '@aeolus/shared';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 
 /**
  * 运单明细「导出优先」取数（移植自 Python `get_data/delivery_export.py`）。
@@ -57,7 +58,10 @@ function checkTimeField(f?: string): string {
 export class DeliveryExportService {
   private readonly logger = new Logger(DeliveryExportService.name);
 
-  constructor(private readonly cookies: AeolusCookieService) {}
+  constructor(
+    private readonly cookies: AeolusCookieService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
+  ) {}
 
   /**
    * 完整链路：触发 → 轮询认领 → 拿URL → 下载 → 解析，返回 dict 列表（中文+英文双键）。
@@ -92,10 +96,34 @@ export class DeliveryExportService {
     teamIds: number[] = [],
   ): Promise<Record<string, unknown>[]> {
     const f = checkTimeField(timeField);
+    // 生产配置覆盖（仅 enabled + published）：读取/渲染失败一律回退内建常量。
+    const active = await this.sourceConfig.active('orders');
+    const ex = active?.export;
+    const triggerUrl = ex?.triggerUrl || EXPORT_URL;
+    const taskListUrl = ex?.taskListUrl || TASK_URL;
+    const taskUrlEndpoint = ex?.taskUrlUrl || URL_URL;
+    const pollIntervalMs = ex ? Number(ex.pollIntervalMs) || POLL_INTERVAL * 1000 : POLL_INTERVAL * 1000;
+    const pollTimeoutMs = ex ? Number(ex.pollTimeoutMs) || DEFAULT_POLL_TIMEOUT * 1000 : DEFAULT_POLL_TIMEOUT * 1000;
+    const readyStatus = ex ? Number(ex.claim.readyStatus) : 1;
+    let body: unknown = this.buildExportBody(startMs, endMs, f, teamIds);
+    if (ex) {
+      const rendered = this.sourceConfig.renderBody(
+        active!, ex.triggerBody ?? {},
+        {
+          startMs, endMs, timeField: f, teamIds,
+          period: '0-86400', pageSize: 50, current: 1,
+        },
+        50,
+      );
+      if (rendered != null) body = rendered;
+      if (ex.claim.idPath !== 'id' || ex.claim.statusPath !== 'status') {
+        this.logger.warn('orders 生产配置 claim 路径非默认，仍按原生 id/status 解析（生产路径暂不支持自定义路径）');
+      }
+    }
     // 1) 记录当前最大 taskId，用于认领本次导出（历史任务 id<=max_id 自动排除）
     let maxId = 0;
     try {
-      const tasks = await this.listTasks(cookie);
+      const tasks = await this.listTasks(cookie, taskListUrl);
       for (const t of tasks) {
         const id = Number((t as TaskRow).id);
         if (id > maxId) maxId = id;
@@ -104,31 +132,30 @@ export class DeliveryExportService {
       maxId = 0;
     }
     // 2) 触发导出
-    const body = this.buildExportBody(startMs, endMs, f, teamIds);
-    if (!(await this.triggerExport(body, cookie))) {
+    if (!(await this.triggerExport(body, cookie, triggerUrl))) {
       throw new Error('运单导出触发未受理（data 非 true）');
     }
-    // 3) 轮询认领 id>maxId 且 status=1 的任务
-    const deadline = Date.now() + DEFAULT_POLL_TIMEOUT * 1000;
+    // 3) 轮询认领 id>maxId 且 status=ready 的任务
+    const deadline = Date.now() + pollTimeoutMs;
     let myId: number | null = null;
     while (Date.now() < deadline) {
-      const tasks = await this.listTasks(cookie);
+      const tasks = await this.listTasks(cookie, taskListUrl);
       for (const t of tasks) {
         const id = Number((t as TaskRow).id) || 0;
         const status = Number((t as TaskRow).status) || 0;
-        if (id > maxId && status === 1) {
+        if (id > maxId && status === readyStatus) {
           myId = id;
           break;
         }
       }
       if (myId != null) break;
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL * 1000));
+      await new Promise((r) => setTimeout(r, pollIntervalMs));
     }
     if (myId == null) {
-      throw new Error(`运单导出任务超时未完成（${DEFAULT_POLL_TIMEOUT}s）`);
+      throw new Error(`运单导出任务超时未完成（${pollTimeoutMs}ms）`);
     }
     // 4) 拿 URL → 下载 → 解析
-    const url = await this.taskUrl(myId, cookie);
+    const url = await this.taskUrl(myId, cookie, taskUrlEndpoint);
     const buf = await this.download(url);
     return parseXlsxBytes(buf);
   }
@@ -177,8 +204,8 @@ export class DeliveryExportService {
     }
   }
 
-  private async triggerExport(body: unknown, cookie: string): Promise<boolean> {
-    const j = await this.post(EXPORT_URL, body, cookie);
+  private async triggerExport(body: unknown, cookie: string, url = EXPORT_URL): Promise<boolean> {
+    const j = await this.post(url, body, cookie);
     const res = j && j.result;
     if (res == null) throw new AuthError('导出触发 result is null（会话被顶号）');
     const code = String(res.code);
@@ -188,9 +215,9 @@ export class DeliveryExportService {
     return Boolean(res.data);
   }
 
-  private async listTasks(cookie: string): Promise<TaskRow[]> {
+  private async listTasks(cookie: string, url = TASK_URL): Promise<TaskRow[]> {
     const j = await this.post(
-      TASK_URL,
+      url,
       { params: { request: { activeTabKey: '1' } } },
       cookie,
     );
@@ -201,9 +228,9 @@ export class DeliveryExportService {
     return (data.list || data.records || data.data || []) as TaskRow[];
   }
 
-  private async taskUrl(taskId: number, cookie: string): Promise<string> {
+  private async taskUrl(taskId: number, cookie: string, endpoint = URL_URL): Promise<string> {
     const j = await this.post(
-      URL_URL,
+      endpoint,
       { params: { request: { taskId } } },
       cookie,
     );
@@ -235,8 +262,8 @@ export class DeliveryExportService {
   }
 }
 
-/** xlsx bytes → dict 列表（中文表头**双写**英文键）。 */
-function parseXlsxBytes(data: Buffer): Record<string, unknown>[] {
+/** xlsx bytes → dict 列表（中文表头**双写**英文键）。导出给配置化试运行复用，避免两套解析口径。 */
+export function parseXlsxBytes(data: Buffer): Record<string, unknown>[] {
   const wb = XLSX.read(data, { type: 'buffer', cellDates: true, raw: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, {

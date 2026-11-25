@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
 import { netError } from '../../../common/net-error';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 import { SchedAuthError } from './schedule-fetch.service';
 
 /**
@@ -143,7 +144,10 @@ function parseScheduleXlsx(buf: Buffer, fileUrl: string): PreScheduleResult {
 export class ScheduleExportFetchService {
   private readonly logger = new Logger(ScheduleExportFetchService.name);
 
-  constructor(private readonly cookies: AeolusCookieService) {}
+  constructor(
+    private readonly cookies: AeolusCookieService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
+  ) {}
 
   /**
    * 多站排班统计导出 → 各时段排班满足率行。
@@ -159,7 +163,7 @@ export class ScheduleExportFetchService {
     cookie?: string,
   ): Promise<PreScheduleResult> {
     const ck = cookie || (await this.cookies.ensure());
-    const body = JSON.stringify({
+    const defaultBody = {
       params: {
         request: {
           teamIds: teamIds.map((id) => parseInt(String(id), 10)),
@@ -167,23 +171,28 @@ export class ScheduleExportFetchService {
           endDate: asDateStr(endDate),
         },
       },
-    });
+    };
+    const { url: triggerUrl, body } = await this.sourceConfig.overrideDownload(
+      'schedule-export',
+      { teamIds, startDate: asDateStr(startDate), endDate: asDateStr(endDate) },
+      EXPORT_API, defaultBody,
+    );
 
-    const url = await this.trigger(body, ck);
+    const url = await this.trigger(JSON.stringify(body), ck, triggerUrl);
     const buf = await this.download(url);
     this.logger.log(`排班导出解析完成：${buf.length} bytes，${teamIds.length} 站`);
     return parseScheduleXlsx(buf, url);
   }
 
   /** 触发导出 → result.data.url。沿用排班接口的会话失效/限流判定。 */
-  private async trigger(body: string, cookie: string, retries = 3): Promise<string> {
+  private async trigger(body: string, cookie: string, endpoint = EXPORT_API, retries = 3): Promise<string> {
     let last = '';
     for (let attempt = 0; attempt < retries; attempt++) {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), TRIGGER_TIMEOUT_MS);
       let j: any;
       try {
-        const res = await fetch(EXPORT_API, {
+        const res = await fetch(endpoint, {
           method: 'POST',
           headers: { ...HEADERS_BASE, cookie },
           body,

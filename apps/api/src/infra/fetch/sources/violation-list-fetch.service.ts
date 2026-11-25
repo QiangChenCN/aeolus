@@ -12,6 +12,7 @@ import {
   RELOGIN_BACKOFF_BASE,
 } from '../runners/fetch-pace.service';
 import { normalizeViolationRow, violationId } from '@aeolus/shared';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 
 /**
  * 违规处罚明细列表取数（独立于 `violation-fetch.service.ts` 的 CSV 下载）。
@@ -51,6 +52,7 @@ export class ViolationListFetchService {
   constructor(
     private readonly cookies: AeolusCookieService,
     private readonly pace: FetchPaceService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
   ) {}
 
   /**
@@ -137,16 +139,25 @@ export class ViolationListFetchService {
     if (teamIds.length) request.teamIds = teamIds;
     if (filters?.rider?.trim()) request.knightInfo = filters.rider.trim();
 
-    const body = JSON.stringify({ params: { request } });
+    const defaultBody = { params: { request } };
+    const { url, body } = await this.sourceConfig.override(
+      'violation-list',
+      {
+        startMs, endMs, current: pageNo, pageSize,
+        teamIds: teamIds.length ? teamIds : undefined,
+        rider: filters?.rider?.trim() || undefined,
+      },
+      VIOLATION_LIST_URL, defaultBody, pageSize,
+    );
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 30000);
     let res: Response;
     let j: any;
     try {
-      res = await fetch(VIOLATION_LIST_URL, {
+      res = await fetch(url, {
         method: 'POST',
         headers: { accept: 'application/json, text/plain, */*', ...STATIC_HEADERS, cookie: ck },
-        body,
+        body: JSON.stringify(body),
         signal: ctrl.signal,
       });
       if (res.status === 401) {

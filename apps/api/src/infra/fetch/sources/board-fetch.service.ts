@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 
 /**
  * 站点任务提醒取数（移植自 get_data/board.py，单一来源）。
@@ -20,7 +21,10 @@ const HEADERS_BASE: Record<string, string> = {
 
 @Injectable()
 export class BoardFetchService {
-  constructor(private readonly cookies: AeolusCookieService) {}
+  constructor(
+    private readonly cookies: AeolusCookieService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
+  ) {}
 
   /**
    * 分页拉取站长任务（默认按 status='started' 服务端过滤，拿到「已开始」任务）。
@@ -41,18 +45,19 @@ export class BoardFetchService {
     let total = 0;
     let relogged = false; // 仅允许重登自愈一次，避免 401 死循环
     for (;;) {
-      const payload = JSON.stringify({
-        params: { queryVO: { pageSize, pageIndex: page, status } },
-      });
+      const defaultBody = { params: { queryVO: { pageSize, pageIndex: page, status } } };
+      const { url, body } = await this.sourceConfig.override(
+        'board', { status, page, pageSize, current: page }, BOARD_API, defaultBody, pageSize,
+      );
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 30000);
       let res: Response;
       let j: Record<string, any>;
       try {
-        res = await fetch(BOARD_API, {
+        res = await fetch(url, {
           method: 'POST',
           headers: { ...HEADERS_BASE, cookie: ck },
-          body: payload,
+          body: JSON.stringify(body),
           signal: ctrl.signal,
         });
         // 登录态失效（HTTP 401 / 未登录）：重登一次后重试当前页，避免静默返回空数组

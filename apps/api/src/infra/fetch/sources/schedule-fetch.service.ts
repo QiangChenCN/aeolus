@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 import { netError } from '../../../common/net-error';
 
 /**
@@ -43,7 +44,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export class ScheduleFetchService {
   private readonly logger = new Logger(ScheduleFetchService.name);
 
-  constructor(private readonly cookies: AeolusCookieService) {}
+  constructor(
+    private readonly cookies: AeolusCookieService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
+  ) {}
 
   /** `YYYY-MM-DD`（也接受 Date）。与 Python `_as_date_str` 同口径。 */
   private asDateStr(d: string | Date): string {
@@ -68,7 +72,7 @@ export class ScheduleFetchService {
     cookie?: string,
   ): Promise<any[]> {
     const ck = cookie || (await this.cookies.ensure());
-    const body = JSON.stringify({
+    const defaultBody = {
       params: {
         request: {
           teamId: parseInt(String(teamId), 10),
@@ -76,7 +80,12 @@ export class ScheduleFetchService {
           endDate: this.asDateStr(endDate),
         },
       },
-    });
+    };
+    const { url, body } = await this.sourceConfig.override(
+      'schedule',
+      { teamId, startDate: this.asDateStr(startDate), endDate: this.asDateStr(endDate) },
+      SCHEDULE_API, defaultBody,
+    );
 
     let last = '';
     for (let attempt = 0; attempt < retries; attempt++) {
@@ -84,10 +93,10 @@ export class ScheduleFetchService {
       const timer = setTimeout(() => ctrl.abort(), REQ_TIMEOUT_MS);
       let j: any;
       try {
-        const res = await fetch(SCHEDULE_API, {
+        const res = await fetch(url, {
           method: 'POST',
           headers: { ...HEADERS_BASE, cookie: ck },
-          body,
+          body: JSON.stringify(body),
           signal: ctrl.signal,
         });
         j = await res.json();

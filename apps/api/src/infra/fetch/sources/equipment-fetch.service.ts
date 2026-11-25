@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { QuarkCreds, QuarkCredsService } from '../creds/quark-creds.service';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 
 /**
  * 骑手装备点亮明细取数（移植自 get_data/rider_equipment.py 的取数/解析部分）。
@@ -63,7 +64,10 @@ export function defaultDates(): { start: string; end: string; asOf: string } {
 
 @Injectable()
 export class EquipmentFetchService {
-  constructor(private readonly creds: QuarkCredsService) {}
+  constructor(
+    private readonly creds: QuarkCredsService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
+  ) {}
 
   /** 构造与 curl 等价的 params（逐字段对照 Python build_payload）。 */
   buildPayload(
@@ -117,10 +121,11 @@ export class EquipmentFetchService {
   ): Promise<string> {
     const payload = this.buildPayload(reportToken, secure, start, end, asOf, metaTime);
     const body = new URLSearchParams({ params: JSON.stringify(payload) }).toString();
+    const url = await this.sourceConfig.overrideUrl('equipment', EQUIPMENT_URL);
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 30000);
     try {
-      const res = await fetch(EQUIPMENT_URL, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { ...HEADERS, cookie },
         body,

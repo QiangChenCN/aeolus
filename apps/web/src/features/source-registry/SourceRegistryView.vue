@@ -1,19 +1,15 @@
 <template>
   <div class="srcpage" v-loading="loading">
     <el-card class="page-card" shadow="never">
-    <h2 class="v-title">取数基座</h2>
-    <p class="muted">当前全部取数服务的只读盘点（由后端目录下发）。</p>
+    <div class="page-head">
+      <h2 class="v-title">取数基座</h2>
+      <el-button-group v-if="items.length">
+        <el-button :type="viewMode === 'card' ? 'primary' : ''" @click="viewMode = 'card'">卡片</el-button>
+        <el-button :type="viewMode === 'list' ? 'primary' : ''" @click="viewMode = 'list'">列表</el-button>
+      </el-button-group>
+    </div>
 
     <div v-if="items.length">
-      <div class="bar">
-        <el-button-group>
-          <el-button size="small" :type="viewMode === 'card' ? 'primary' : ''" @click="viewMode = 'card'">卡片</el-button>
-          <el-button size="small" :type="viewMode === 'list' ? 'primary' : ''" @click="viewMode = 'list'">列表</el-button>
-        </el-button-group>
-        <el-button size="small" :loading="loading" @click="load"><el-icon><Refresh /></el-icon> 刷新</el-button>
-        <span class="muted">共 {{ items.length }} 项，点击查看详情</span>
-      </div>
-
       <div v-if="viewMode === 'card'" class="grid">
         <div v-for="s in items" :key="s.id" class="src-card" @click="openDetail(s)">
           <div class="card-head">
@@ -21,7 +17,7 @@
               <span class="card-name">{{ s.name }}</span>
             </div>
             <div class="card-tags">
-              <el-tag v-for="t in (s.tags || [])" :key="t" size="small" type="primary" effect="plain">{{ t }}</el-tag>
+              <el-tag v-for="t in (s.tags || [])" :key="t" type="primary" effect="plain">{{ t }}</el-tag>
             </div>
           </div>
           <div class="card-desc">{{ s.desc }}</div>
@@ -49,7 +45,7 @@
         </el-table-column>
         <el-table-column label="标签" width="90">
           <template #default="{ row }">
-            <el-tag v-for="t in (row.tags || [])" :key="t" size="small" type="primary" effect="plain">{{ t }}</el-tag>
+            <el-tag v-for="t in (row.tags || [])" :key="t" type="primary" effect="plain">{{ t }}</el-tag>
             <span v-if="!(row.tags || []).length" class="muted">—</span>
           </template>
         </el-table-column>
@@ -59,8 +55,10 @@
     <el-empty v-else-if="!loading" description="暂无取数基座数据" />
     </el-card>
 
-    <el-drawer v-model="drawer" :title="current ? current.name + ' · 详情' : '取数基座详情'" size="min(560px, 92vw)">
+    <el-drawer v-model="drawer" :title="current ? current.name + ' · 详情' : '取数基座详情'" size="min(680px, 94vw)">
       <template v-if="current">
+        <el-tabs v-model="drawerTab">
+        <el-tab-pane label="概览" name="overview">
         <el-alert
           v-if="!canDetail"
           type="info"
@@ -69,9 +67,9 @@
           title="内部信息（服务文件、落盘路径、任务 ID）仅对具备「风神账号配置」权限的用户开放。"
           class="tip"
         />
-        <el-descriptions v-else-if="detail" :column="1" border size="small">
+        <el-descriptions v-else-if="detail" :column="1" border>
           <el-descriptions-item label="标签">
-            <el-tag v-for="t in (detail.tags || [])" :key="t" size="small" type="primary" effect="plain" class="detail-tag">{{ t }}</el-tag>
+            <el-tag v-for="t in (detail.tags || [])" :key="t" type="primary" effect="plain" class="detail-tag">{{ t }}</el-tag>
             <span v-if="!(detail.tags || []).length" class="muted">—</span>
           </el-descriptions-item>
           <el-descriptions-item label="服务类">{{ detail.service }}</el-descriptions-item>
@@ -103,11 +101,16 @@
         </el-descriptions>
         <div v-else class="muted">详情加载失败，请稍后重试。</div>
 
-        <el-descriptions v-if="!canDetail" :column="1" border size="small" class="basic">
+        <el-descriptions v-if="!canDetail" :column="1" border class="basic">
           <el-descriptions-item label="服务类">{{ current.service }}</el-descriptions-item>
           <el-descriptions-item label="触发方式">{{ current.trigger }}</el-descriptions-item>
           <el-descriptions-item label="说明">{{ current.desc }}</el-descriptions-item>
         </el-descriptions>
+        </el-tab-pane>
+        <el-tab-pane v-if="canEdit" label="运行参数" name="config">
+          <SourceConfigPanel :key="current.id" :source-id="current.id" />
+        </el-tab-pane>
+        </el-tabs>
       </template>
     </el-drawer>
   </div>
@@ -117,6 +120,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useAuthStore } from '@shared/stores/auth.js';
 import { fetchSources, fetchSourceDetail } from '@shared/api/sources.js';
+import SourceConfigPanel from './SourceConfigPanel.vue';
 
 const auth = useAuthStore();
 
@@ -126,8 +130,10 @@ const viewMode = ref('card');
 const drawer = ref(false);
 const current = ref(null);
 const detail = ref(null);
+const drawerTab = ref('overview');
 
 const canDetail = computed(() => auth.hasPerm('admin:aeolus'));
+const canEdit = computed(() => canDetail.value);
 
 function authLabel(dep) {
   return ({ aeolus: '风神 Cookie', quark: 'Quark DA', dingtalk: '钉钉应用', none: '无' })[dep] || '—';
@@ -148,6 +154,7 @@ async function load() {
 async function openDetail(s) {
   current.value = s;
   detail.value = null;
+  drawerTab.value = 'overview';
   drawer.value = true;
   if (!canDetail.value) return;
   try {
@@ -168,9 +175,9 @@ onMounted(load);
 }
 .page-card { display: flex; flex-direction: column; flex: 1; width: 100%; min-height: 0; }
 .page-card :deep(.el-card__body) { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-16); }
-.v-title { margin: 0 0 var(--sp-8); font-size: var(--el-font-size-extra-large); }
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); margin-bottom: var(--sp-12); }
+.v-title { margin: 0; font-size: var(--el-font-size-extra-large); }
 .muted { color: var(--el-text-color-secondary); font-size: var(--el-font-size-extra-small); }
-.bar { display: flex; align-items: center; gap: var(--sp-12); margin-bottom: var(--sp-12); flex-wrap: wrap; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--sp-12); }
 .src-card {
   display: flex; flex-direction: column; gap: var(--sp-8);

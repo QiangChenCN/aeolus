@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 
 /**
  * 橙色风暴（QC 抽检判定）取数（移植自 get_data/orange_storm.py，单一来源）。
@@ -14,7 +15,10 @@ const UA =
 
 @Injectable()
 export class OrangeStormFetchService {
-  constructor(private readonly cookies: AeolusCookieService) {}
+  constructor(
+    private readonly cookies: AeolusCookieService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
+  ) {}
 
   /** 单次 GET，失败重试（间隔 1.5*(i+1) 秒）。 */
   private async httpJson(
@@ -65,7 +69,12 @@ export class OrangeStormFetchService {
     let page = 1;
     let total: number | null = null;
     for (;;) {
-      const url = `${ORANGE_STORM_API}?hitTimeStart=${startMs}&hitTimeEnd=${endMs}&pageIndex=${page}&pageSize=${pageSize}`;
+      const { url } = await this.sourceConfig.overrideQuery(
+        'orange-storm',
+        { startMs, endMs, current: page, pageSize },
+        ORANGE_STORM_API,
+        { hitTimeStart: startMs, hitTimeEnd: endMs, pageIndex: page, pageSize },
+      );
       const j = await this.httpJson(url, ck);
       if (Number(j.code) !== 200) {
         throw new Error(`接口返回异常: ${JSON.stringify(j).slice(0, 300)}`);

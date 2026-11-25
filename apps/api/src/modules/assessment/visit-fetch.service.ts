@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AeolusCookieService } from '../../infra/fetch/creds/aeolus-cookie.service';
+import { SourceConfigRuntimeService } from '../../infra/fetch/source-config/source-config-runtime.service';
 import { AssessmentHistoryStoreService } from './assessment-history-store.service';
 
 /**
@@ -98,6 +99,7 @@ export class VisitFetchService {
     private readonly cookies: AeolusCookieService,
     private readonly config: ConfigService,
     private readonly history: AssessmentHistoryStoreService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
   ) {}
 
   /**
@@ -131,10 +133,13 @@ export class VisitFetchService {
       null;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const body = { params: { param: { mainTaskId: mid, pageNo: 1, pageSize: 20 } } };
+        const defaultBody = { params: { param: { mainTaskId: mid, pageNo: 1, pageSize: 20 } } };
+        const { url, body } = await this.sourceConfig.override(
+          'visit', { mainTaskId: mid, current: 1, pageSize: 20 }, VISIT_API_URL, defaultBody, 20,
+        );
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 30000);
-        const res = await fetch(VISIT_API_URL, {
+        const res = await fetch(url, {
           method: 'POST',
           headers: { ...VISIT_HEADERS, cookie },
           body: JSON.stringify(body),

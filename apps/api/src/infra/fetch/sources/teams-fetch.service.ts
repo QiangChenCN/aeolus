@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
 import { netError } from '../../../common/net-error';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 
 /**
  * 站点目录取数（原 Python `get_data/teams.py::fetch_teams` + `server.py::_fetch_all_teams`）。
@@ -78,7 +79,10 @@ export class TeamsFetchService {
   private readonly logger = new Logger(TeamsFetchService.name);
   private cache: { data: TeamsPayload | null; ts: number } = { data: null, ts: 0 };
 
-  constructor(private readonly aeolus: AeolusCookieService) {}
+  constructor(
+    private readonly aeolus: AeolusCookieService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
+  ) {}
 
   /**
    * 全部站点（5 分钟内存缓存）。
@@ -129,15 +133,16 @@ export class TeamsFetchService {
   private async fetchFromXtop(): Promise<TeamRef[]> {
     // 复用共享 cookie（缺失才触发 Python 重登）—— 与其它取数同一份登录态。
     const cookie = await this.aeolus.ensure();
+    const { url, body } = await this.sourceConfig.override('teams', {}, TEAMS_API, {});
 
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), REQ_TIMEOUT_MS);
     let j: any;
     try {
-      const res = await fetch(TEAMS_API, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { ...STATIC_HEADERS, cookie },
-        body: '{}',
+        body: JSON.stringify(body),
         signal: ctrl.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 
 /**
  * 实时考勤取数（移植自 get_data/attendance.py，单一来源）。
@@ -28,7 +29,10 @@ const STATIC_HEADERS: Record<string, string> = {
 
 @Injectable()
 export class AttendanceFetchService {
-  constructor(private readonly cookies: AeolusCookieService) {}
+  constructor(
+    private readonly cookies: AeolusCookieService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
+  ) {}
 
   /** 单站点实时考勤 → 接口原始 JSON（含 result.data 骑手列表）。 */
   async fetchTeam(
@@ -37,16 +41,19 @@ export class AttendanceFetchService {
     cookie?: string,
   ): Promise<Record<string, any>> {
     const ck = cookie || (await this.cookies.ensure());
-    const body = JSON.stringify({
+    const defaultBody = {
       params: { request: { teamId, timeCode: String(timeCode), shiftedOffline: 0 } },
-    });
+    };
+    const { url, body } = await this.sourceConfig.override(
+      'attendance', { teamId, timeCode: String(timeCode) }, ATTENDANCE_API, defaultBody,
+    );
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 30000);
     try {
-      const res = await fetch(ATTENDANCE_API, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { ...STATIC_HEADERS, cookie: ck },
-        body,
+        body: JSON.stringify(body),
         signal: ctrl.signal,
       });
       return (await res.json()) as Record<string, any>;

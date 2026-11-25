@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 
 /**
  * 骑士规则中心取数（移植自 get_data/ruledoc.py，单一来源）。
@@ -33,7 +34,10 @@ export class RuleQueryError extends Error {
 
 @Injectable()
 export class RuledocFetchService {
-  constructor(private readonly cookies: AeolusCookieService) {}
+  constructor(
+    private readonly cookies: AeolusCookieService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
+  ) {}
 
   async queryRule(
     ruleId: number | string,
@@ -41,15 +45,18 @@ export class RuledocFetchService {
     cookie?: string,
   ): Promise<Record<string, any>> {
     const ck = cookie || (await this.cookies.ensure());
-    const payload = { params: { request: { isHistory, id: ruleId } } };
+    const defaultBody = { params: { request: { isHistory, id: ruleId } } };
+    const { url, body } = await this.sourceConfig.override(
+      'ruledoc', { ruleId, isHistory }, RULEDOC_API, defaultBody,
+    );
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 30000);
     let resp: Record<string, any>;
     try {
-      const res = await fetch(RULEDOC_API, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Cookie: ck },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
         signal: ctrl.signal,
       });
       if (!res.ok) {

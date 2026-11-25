@@ -9,6 +9,7 @@ import {
   BACKOFF_BASE,
 } from '../runners/fetch-pace.service';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 
 /**
  * 骑手明细查询基座（实时点查，不落盘）。
@@ -121,6 +122,7 @@ export class KnightDetailQueryService {
   constructor(
     private readonly cookies: AeolusCookieService,
     private readonly pace: FetchPaceService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
   ) {}
 
   private async ensureCookie(): Promise<string> {
@@ -135,7 +137,20 @@ export class KnightDetailQueryService {
     pageSize: number;
     filters?: KnightFilters;
   }): Promise<KnightPage> {
-    const url = `${KNIGHT_LIST_URL}?${buildSearchParams(opts).toString()}`;
+    const params = buildSearchParams(opts);
+    const defaultQuery: Record<string, unknown> = {};
+    for (const [k, v] of params.entries()) defaultQuery[k] = v;
+    const { url: queryUrl } = await this.sourceConfig.overrideQuery(
+      'knight-detail-query',
+      {
+        current: opts.pageIndex, pageSize: opts.pageSize,
+        staffName: opts.filters?.staffName,
+        departmentId: opts.filters?.departmentId,
+        workStatus: opts.filters?.workStatus,
+      },
+      KNIGHT_LIST_URL, defaultQuery,
+    );
+    const url = queryUrl;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), REQ_TIMEOUT_MS);
     let res: Response;

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { QuarkCreds, QuarkCredsService } from '../creds/quark-creds.service';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 
 /**
  * 电联 & IM 回复看板取数（Quark/Aeolus FBI 报表，reportId=473269）。
@@ -117,7 +118,10 @@ const INDICATOR_GUIDS = FIELD_GUIDS.filter((g) => FIELD_TYPE_MAP[g] === 'indicat
 
 @Injectable()
 export class ContactImFetchService {
-  constructor(private readonly creds: QuarkCredsService) {}
+  constructor(
+    private readonly creds: QuarkCredsService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
+  ) {}
 
   /** 构造与浏览器抓包等价的 params（逐字段对照 curl）。 */
   buildPayload(
@@ -173,10 +177,11 @@ export class ContactImFetchService {
   ): Promise<string> {
     const payload = this.buildPayload(reportToken, secure, metaTime, start, end, region);
     const body = new URLSearchParams({ params: JSON.stringify(payload) }).toString();
+    const url = await this.sourceConfig.overrideUrl('contact-im', CONTACT_IM_URL);
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 30000);
     try {
-      const res = await fetch(CONTACT_IM_URL, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { ...HEADERS, cookie },
         body,

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AeolusCookieService } from '../creds/aeolus-cookie.service';
+import { SourceConfigRuntimeService } from '../source-config/source-config-runtime.service';
 
 /**
  * 风控处罚 CSV 取数（供考核看板、申诉提醒任务等内部调用）。
@@ -43,7 +44,10 @@ export function isViolationAuthError(e: ViolationApiError): boolean {
 
 @Injectable()
 export class ViolationFetchService {
-  constructor(private readonly cookies: AeolusCookieService) {}
+  constructor(
+    private readonly cookies: AeolusCookieService,
+    private readonly sourceConfig: SourceConfigRuntimeService,
+  ) {}
 
   /**
    * 拉取 [startMs, endMs] 区间的风控处罚 CSV，返回 { text, fileUrl }。
@@ -71,17 +75,20 @@ export class ViolationFetchService {
     startMs: number,
     endMs: number,
   ): Promise<{ text: string; fileUrl: string }> {
-    const body = JSON.stringify({
+    const defaultBody = {
       params: { request: { violationStartTime: startMs, violationEndTime: endMs } },
-    });
+    };
+    const { url, body } = await this.sourceConfig.overrideDownload(
+      'violation-csv', { startMs, endMs }, VIOLATION_API_URL, defaultBody,
+    );
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 30000);
     let j: any;
     try {
-      const res = await fetch(VIOLATION_API_URL, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { accept: 'application/json, text/plain, */*', ...STATIC_HEADERS, cookie: ck },
-        body,
+        body: JSON.stringify(body),
         signal: ctrl.signal,
       });
       j = await res.json();

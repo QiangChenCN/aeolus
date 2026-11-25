@@ -30,6 +30,11 @@ import { CookieStatusService } from './runners/cookie-status.service';
 import { ScheduleFetchService } from './sources/schedule-fetch.service';
 import { ScheduleExportFetchService } from './sources/schedule-export.service';
 import { RawCacheService } from './storage/raw-cache.service';
+import { SourceConfigController } from './source-config/source-config.controller';
+import { SourceConfigStoreService } from './source-config/source-config-store.service';
+import { SourceConfigService } from './source-config/source-config.service';
+import { ConfiguredSourceRunnerService } from './source-config/configured-source-runner.service';
+import { SourceConfigRuntimeService } from './source-config/source-config-runtime.service';
 
 /**
  * 取数模块（原属 Python：get_data.* + dashboard/standard/orders_fetch）。
@@ -55,7 +60,7 @@ import { RawCacheService } from './storage/raw-cache.service';
  */
 @Module({
   imports: [AuthModule, ComputeModule],
-  controllers: [FetchController, SourceRegistryController],
+  controllers: [FetchController, SourceRegistryController, SourceConfigController],
   providers: [
     FetchPaceService,
     DeliveryQueryService,
@@ -84,6 +89,10 @@ import { RawCacheService } from './storage/raw-cache.service';
     ViolationStoreService,
     RealtimeStoreService,
     ViolationSchedulerService,
+    SourceConfigStoreService,
+    SourceConfigService,
+    ConfiguredSourceRunnerService,
+    SourceConfigRuntimeService,
   ],
   exports: [
     FetchPaceService,
@@ -113,6 +122,9 @@ import { RawCacheService } from './storage/raw-cache.service';
     ViolationStoreService,
     RealtimeStoreService,
     ViolationSchedulerService,
+    SourceConfigService,
+    ConfiguredSourceRunnerService,
+    SourceConfigRuntimeService,
   ],
 })
 export class FetchModule {}
