@@ -156,11 +156,12 @@
           <el-input v-model="sso.corpId" placeholder="企业 CorpId（JSAPI 免登需要）" />
         </el-form-item>
         <el-form-item label="OAuth2 回跳地址">
-          <el-input
-            v-model="sso.oauthRedirectUri"
-            placeholder="https://你的域名/api/auth/dingtalk/oauth-callback"
-          />
-          <span class="cfg-hint">浏览器独立访问扫码登录用，须在钉钉后台「登录与分享 → 回调域名」登记该域名。</span>
+          <el-input v-model="sso.oauthRedirectUri" readonly>
+            <template #append>
+              <el-button @click="copyOauthRedirectUri">复制</el-button>
+            </template>
+          </el-input>
+          <span class="cfg-hint">由当前访问域名自动生成，复制到钉钉后台「登录与分享 → 回调域名」登记即可，无需手填。</span>
         </el-form-item>
         <el-form-item label="前端地址">
           <el-input v-model="sso.frontendUrl" placeholder="留空则自动取请求来源（同域部署可留空）" />
@@ -524,6 +525,15 @@ async function loadSso() {
     sso.frontendUrl = c.frontendUrl || '';
   } catch (e) { ElMessage.error(e.message || '加载钉钉 SSO 配置失败'); }
 }
+async function copyOauthRedirectUri() {
+  try {
+    await navigator.clipboard.writeText(sso.oauthRedirectUri);
+    ElMessage.success('已复制 OAuth2 回跳地址');
+  } catch {
+    ElMessage.error('复制失败，请手动选中复制');
+  }
+}
+
 async function saveSso() {
   ssoSaving.value = true;
   try {
@@ -532,7 +542,6 @@ async function saveSso() {
       appKey: sso.appKey,
       appSecret: sso.appSecret, // 留空 = 保持不变（已设置时）
       corpId: sso.corpId,
-      oauthRedirectUri: sso.oauthRedirectUri,
       frontendUrl: sso.frontendUrl,
     });
     if (r && r.ok) { ElMessage.success('已保存钉钉 SSO 配置'); await loadSso(); }

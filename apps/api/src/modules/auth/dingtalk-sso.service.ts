@@ -28,7 +28,6 @@ export interface DingtalkSsoConfig {
   appKey: string;
   appSecret: string;
   corpId: string;
-  oauthRedirectUri: string;
   frontendUrl: string;
 }
 
@@ -67,7 +66,6 @@ export class DingtalkSsoService {
       appKey,
       appSecret,
       corpId: (persisted.corpId ?? env('DT_CORP_ID')).trim(),
-      oauthRedirectUri: (persisted.oauthRedirectUri ?? env('DT_OAUTH_REDIRECT_URI')).trim(),
       frontendUrl: (persisted.frontendUrl ?? env('DT_FRONTEND_URL')).trim(),
     };
     return this.configCache;
@@ -84,14 +82,14 @@ export class DingtalkSsoService {
   }
 
   /** 给前端的公开配置：是否启用、corpId（JSAPI 免登需要）、OAuth 授权页地址。 */
-  getPublicConfig(state: string): Record<string, unknown> {
+  getPublicConfig(state: string, req?: Request): Record<string, unknown> {
     if (!this.isEnabled()) return { enabled: false, corpId: '', authorizeUrl: '' };
     const c = this.effectiveConfig();
-    return { enabled: true, corpId: c.corpId, authorizeUrl: this.buildAuthorizeUrl(state) };
+    return { enabled: true, corpId: c.corpId, authorizeUrl: this.buildAuthorizeUrl(state, req) };
   }
 
   /** 给设置页的脱敏配置（appSecret 不返回明文，仅用 appSecretSet 标记是否已设置）。 */
-  getSettingsConfig(): Record<string, unknown> {
+  getSettingsConfig(req?: Request): Record<string, unknown> {
     const c = this.effectiveConfig();
     return {
       // enabled = 开关本身的配置值（供设置页的 switch 回填）；active = 实际生效与否
@@ -102,7 +100,8 @@ export class DingtalkSsoService {
       appSecretSet: !!c.appSecret,
       appSecret: '',
       corpId: c.corpId,
-      oauthRedirectUri: c.oauthRedirectUri,
+      // 回跳地址由当前访问域名自动生成，供设置页展示/复制到钉钉后台
+      oauthRedirectUri: this.oauthRedirectUri(req),
       frontendUrl: c.frontendUrl,
     };
   }
@@ -118,14 +117,13 @@ export class DingtalkSsoService {
       // appSecret 为空 => 保留当前值（UI 约定：未重填即不改）；非空 => 覆盖
       appSecret: patch.appSecret && patch.appSecret.trim() ? patch.appSecret : cur.appSecret,
       corpId: patch.corpId !== undefined ? patch.corpId : cur.corpId,
-      oauthRedirectUri: patch.oauthRedirectUri !== undefined ? patch.oauthRedirectUri : cur.oauthRedirectUri,
       frontendUrl: patch.frontendUrl !== undefined ? patch.frontendUrl : cur.frontendUrl,
     };
     // enabled 总是写入（含 false），其余字段沿用「空字符串表示清空」的约定
     const persist: Partial<DingtalkSsoConfig> = { enabled: next.enabled };
-    // 只枚举字符串型字段（enabled 是布尔，上面已单独落盘）
+    // 只枚举字符串型字段（enabled 是布尔，上面已单独落盘）；回跳地址固定路径+请求域名生成，不落盘
     const keys: (keyof Omit<DingtalkSsoConfig, 'enabled'>)[] = [
-      'appKey', 'appSecret', 'corpId', 'oauthRedirectUri', 'frontendUrl',
+      'appKey', 'appSecret', 'corpId', 'frontendUrl',
     ];
     for (const k of keys) {
       const v = (next[k] || '').trim();
@@ -145,16 +143,26 @@ export class DingtalkSsoService {
    *  内部应用浏览器登录：先用 userAccessToken 这个「用户 AccessToken」去调 contact/users/me
    *  取 unionid，因此授权 scope 必须包含 Contact.User.Read（通讯录个人信息读权限）。
    *  同时带上 openid 作为兜底——若令牌响应直接带回 unionId 则可省一次调用。 */
-  private buildAuthorizeUrl(state: string): string {
+  private buildAuthorizeUrl(state: string, req?: Request): string {
     const c = this.effectiveConfig();
     return (
       'https://login.dingtalk.com/oauth2/auth?redirect_uri=' +
-      encodeURIComponent(c.oauthRedirectUri) +
+      encodeURIComponent(this.oauthRedirectUri(req)) +
       '&client_id=' + encodeURIComponent(c.appKey) +
       '&response_type=code&scope=' + encodeURIComponent('openid Contact.User.Read') +
       '&state=' + state +
       '&prompt=consent'
     );
+  }
+
+  /** OAuth2 回跳地址：路径固定，域名按当前请求来源自动生成（无外部配置）。 */
+  oauthRedirectUri(req?: Request): string {
+    if (req && req.get) {
+      const host = req.get('host');
+      const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
+      if (host) return `${proto}://${host}/api/auth/dingtalk/oauth-callback`;
+    }
+    return '';
   }
 
   /** OAuth 回调/前端跳转回前端首页的地址：优先持久化/环境变量 DT_FRONTEND_URL，否则用请求来源。 */

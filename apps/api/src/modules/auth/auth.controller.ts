@@ -94,14 +94,14 @@ export class AuthController {
     ];
     if (req.secure) viewParts.push('Secure');
     res.setHeader('Set-Cookie', [parts.join('; '), viewParts.join('; ')]);
-    return this.ding.getPublicConfig(state);
+    return this.ding.getPublicConfig(state, req);
   }
 
   /** 设置页读取钉钉 SSO 配置（脱敏；appSecret 不返回明文）。需 admin:bot。 */
   @RequirePerm('admin:bot')
   @Get('dingtalk/sso-config')
-  dingtalkSsoConfig() {
-    return { ok: true, config: this.ding.getSettingsConfig() };
+  dingtalkSsoConfig(@Req() req: Request) {
+    return { ok: true, config: this.ding.getSettingsConfig(req) };
   }
 
   /** 设置页保存钉钉 SSO 配置（持久化到 apps/api/runtime/.dingtalk_sso.json）。需 admin:bot。 */
@@ -115,7 +115,6 @@ export class AuthController {
         appKey: String(b?.appKey ?? ''),
         appSecret: String(b?.appSecret ?? ''),
         corpId: String(b?.corpId ?? ''),
-        oauthRedirectUri: String(b?.oauthRedirectUri ?? ''),
         frontendUrl: String(b?.frontendUrl ?? ''),
       });
       return { ok: true };
