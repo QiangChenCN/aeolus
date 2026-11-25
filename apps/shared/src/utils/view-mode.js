@@ -68,7 +68,10 @@ function mobilePageToDesktop(pathname, search, mobileBase) {
 
 function desktopPathToMobile(pathname, search, mobileBase) {
   const path = String(pathname || '/').split('?')[0].replace(/\/+$/, '') || '/';
-  const page = DESKTOP_TO_MOBILE[path] || 'pages/index/index';
+  // 排班出勤看板的 tab 子路由同属移动端「考勤」页，切端时不落回首页
+  const page = DESKTOP_TO_MOBILE[path]
+    || (path.startsWith('/attend-period/') ? DESKTOP_TO_MOBILE['/attend-period'] : null)
+    || 'pages/index/index';
   return `${mobileBase}${page}${search || ''}`;
 }
 

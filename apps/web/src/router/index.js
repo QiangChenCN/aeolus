@@ -67,7 +67,23 @@ const routes = [
           { path: 'weather', name: 'assess-weather', component: AssessWeatherView, meta: { title: '天气设置', kind: 'assessWeather', id: '' } },
         ] },
       { path: 'standard', name: 'standard', component: StandardView, meta: { title: '标准达成', kind: 'standard', id: '' } },
-      { path: 'attend-period', name: 'attend-period', component: AttendPeriodView, meta: { title: '时段出勤', kind: 'attendPeriod', id: '' } },
+      // 排班出勤看板：5 个 tab 各自持有子路由（深链/前进后退可用）。
+      // 子路由只提供路径与标题，不拆组件：五个看板共用同一份 dataset 与筛选态，
+      // 由 AttendPeriodView 按 route.path 回显 tab；viewKey 保证切 tab 时不重建页面、不重复取数。
+      {
+        path: 'attend-period',
+        name: 'attend-period',
+        component: AttendPeriodView,
+        redirect: { name: 'attend-tab-realtime' },
+        meta: { title: '排班出勤', kind: 'attendPeriod', id: '', viewKey: 'attend-period' },
+        children: [
+          { path: 'realtime', name: 'attend-tab-realtime', meta: { title: '实时看板', kind: 'attendPeriod', id: '', viewKey: 'attend-period' } },
+          { path: 'station', name: 'attend-tab-station', meta: { title: '站点看板', kind: 'attendPeriod', id: '', viewKey: 'attend-period' } },
+          { path: 'rider', name: 'attend-tab-rider', meta: { title: '骑手看板', kind: 'attendPeriod', id: '', viewKey: 'attend-period' } },
+          { path: 'period', name: 'attend-tab-period', meta: { title: '时段看板', kind: 'attendPeriod', id: '', viewKey: 'attend-period' } },
+          { path: 'pre-schedule', name: 'attend-tab-pre-schedule', meta: { title: '预排班', kind: 'attendPeriod', id: '', viewKey: 'attend-period' } },
+        ],
+      },
       { path: 'overview', name: 'overview', component: OverviewView, meta: { title: '总览' } },
       { path: 'assessment', name: 'assessment', component: AssessmentBoardView, meta: { title: '考核看板', kind: 'assessment', id: '' } },
       { path: 'delivery', name: 'delivery', component: DeliveryView, meta: { title: '运单明细', kind: 'delivery', id: '' } },

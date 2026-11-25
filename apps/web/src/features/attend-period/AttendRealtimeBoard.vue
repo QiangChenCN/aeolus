@@ -36,8 +36,8 @@
           </div>
         </div>
         <div v-if="onlineStats" class="rt-online-detail">
-          未在线构成：小休 {{ onlineStats.rest }} 人 · 下线 {{ onlineStats.offline }} 人
-          <span v-if="onlineStats.offlineDeliv" class="rt-online-tag">其中背单下线 {{ onlineStats.offlineDeliv }} 人</span>
+          未在线构成：小休 {{ onlineStats.rest }} 人 · 下班 {{ onlineStats.offline }} 人
+          <span v-if="onlineStats.offlineDeliv" class="rt-online-tag">其中背单下班 {{ onlineStats.offlineDeliv }} 人</span>
         </div>
 
         <div class="rt-station-list">
@@ -50,7 +50,7 @@
             </div>
             <div class="rt-station-bar"><i :class="s.tone" :style="{ width: barWidth(s.rate) }" /></div>
             <div class="rt-station-foot">
-              排班 {{ s.sched }} · 在线 {{ s.online }} · 未在线 {{ s.notOnline }}（小休 {{ s.rest }}人 · 下线 {{ s.offline }}<span v-if="s.restDeliv"> · 背单小休 {{ s.restDeliv }}</span><span v-if="s.offlineDeliv"> · 背单下线 {{ s.offlineDeliv }}</span>）
+              排班 {{ s.sched }} · 在线 {{ s.online }} · 未在线 {{ s.notOnline }}（小休 {{ s.rest }}人 · 下班 {{ s.offline }}<span v-if="s.restDeliv"> · 背单小休 {{ s.restDeliv }}</span><span v-if="s.offlineDeliv"> · 背单下班 {{ s.offlineDeliv }}</span>）
             </div>
           </div>
           <div v-if="!stationOnlineCards.length" class="rt-empty">暂无站点在线数据</div>
@@ -119,6 +119,11 @@
             <el-select v-model="wsFilter" multiple collapse-tags collapse-tags-tooltip :max-collapse-tags="1"
                        clearable placeholder="全部在线状态" class="rt-ws-sel">
               <el-option v-for="opt in wsOptions" :key="opt" :label="opt" :value="opt" />
+            </el-select>
+            <el-select v-model="delivFilter" multiple collapse-tags collapse-tags-tooltip :max-collapse-tags="1"
+                       clearable placeholder="全部配送中单量" class="rt-deliv-sel" @change="onDelivChange">
+              <el-option label="全选" :value="SELECT_ALL" />
+              <el-option v-for="v in delivOptions" :key="v" :label="String(v)" :value="v" />
             </el-select>
             <el-radio-group v-model="statusFilter">
               <el-radio-button value="all">全部</el-radio-button>
@@ -273,11 +278,11 @@ function gapText(r) {
   if (gap <= 0) return '';
   return `距时长达标还差 ${fmtH(gap)}`;
 }
-/* 在线状态：1 上班 / 2 小休 / 3 下线 / 4 申请小休 / 5 申请下班；其余未映射显示「-」 */
+/* 在线状态：1 上班 / 2 小休 / 3 下班 / 4 申请小休 / 5 申请下班；其余未映射显示「-」 */
 function workStatusInfo(row) {
   const ws = row.workStatus;
   if (ws === 2) return { text: '小休', cls: 'is-rest' };
-  if (ws === 3) return { text: '下线', cls: 'is-offline' };
+  if (ws === 3) return { text: '下班', cls: 'is-offline' };
   if (ws === 1) return { text: '上班', cls: 'is-online' };
   if (ws === 4) return { text: '申请小休', cls: 'is-leave' };
   if (ws === 5) return { text: '申请下班', cls: 'is-leave' };
@@ -435,8 +440,8 @@ const donutStyle = computed(() => {
   return { background: `conic-gradient(var(--c-brand) 0 ${v}%, var(--c-brand-soft) ${v}% 100%)` };
 });
 
-/* 进行中时段的实时在线概况：排班 / 在线 / 在线率 / 未在线（小休 · 下线，下线中再标背单）。
-   在线 = workStatus ∉ {2 小休, 3 下线}；背单下线 = workStatus=3 且 deliveryOrder>0。 */
+/* 进行中时段的实时在线概况：排班 / 在线 / 在线率 / 未在线（小休 · 下班，下班中再标背单）。
+   在线 = workStatus ∉ {2 小休, 3 下班}；背单下班 = workStatus=3 且 deliveryOrder>0。 */
 const onlineStats = computed(() => {
   const s = selected.value;
   if (!s || s.run !== 'running') return null;
@@ -467,7 +472,7 @@ const onlineDonutStyle = computed(() => {
 });
 
 /* 按站点汇总实时在线：口径与全局一致，只统计本时段排班骑手。
-   在线 = workStatus ∉ {2 小休, 3 下线}；背单下线 = workStatus=3 且 deliveryOrder>0。
+   在线 = workStatus ∉ {2 小休, 3 下班}；背单下班 = workStatus=3 且 deliveryOrder>0。
    按在线率升序（最低站排最前），低于 80% 橙色、低于 60% 正红。 */
 const stationOnlineCards = computed(() => {
   const s = selected.value;
@@ -513,7 +518,7 @@ const statusFilter = ref('all');
 const schedFilter = ref('');
 const wsFilter = ref([]);
 /* 筛选项取自当前骑手明细实际出现的在线状态，按固定优先级排序 */
-const WS_ORDER = ['上班', '小休', '申请小休', '下线', '申请下班', '未映射'];
+const WS_ORDER = ['上班', '小休', '申请小休', '下班', '申请下班', '未映射'];
 const wsOptions = computed(() => {
   const keys = new Set();
   for (const r of allRiderRows.value) {
@@ -575,10 +580,29 @@ const allRiderRows = computed(() => {
   });
 });
 
+/* 配送中单量筛选：选项去重自当前时段骑手明细的「配送中单量」列，数值升序。
+   「全选」是下拉里的普通选项：未全选时点它全选，已全选时点它清空（反选），占位值不参与过滤。 */
+const SELECT_ALL = '__ALL__';
+const delivFilter = ref([]);
+const delivOptions = computed(() =>
+  [...new Set((allRiderRows.value || []).map(r => r.deliveryOrder))].sort((a, b) => a - b)
+);
+function onDelivChange(sel) {
+  const arr = Array.isArray(sel) ? sel : [];
+  if (!arr.includes(SELECT_ALL)) {
+    delivFilter.value = arr.filter(v => v !== SELECT_ALL);
+    return;
+  }
+  const real = arr.filter(v => v !== SELECT_ALL);
+  const isAll = delivOptions.value.length > 0 && delivOptions.value.every(v => real.includes(v));
+  delivFilter.value = isAll ? [] : delivOptions.value.slice();
+}
+
 const filteredRiders = computed(() => {
   const kw = keyword.value.trim().toLowerCase();
   const toneOf = { achieved: 'done', projected: 'project', bad: 'bad' };
   const wsOptions = wsFilter.value || [];
+  const delivSel = delivFilter.value || [];
   return allRiderRows.value.filter(r => {
     if (statusFilter.value !== 'all' && r.status.tone !== toneOf[statusFilter.value]) {
       return false;
@@ -591,6 +615,7 @@ const filteredRiders = computed(() => {
       const key = info.text === '-' ? '未映射' : info.text;
       if (!wsOptions.includes(key)) return false;
     }
+    if (delivSel.length && !delivSel.includes(r.deliveryOrder)) return false;
     if (!kw) return true;
     return [r.rider_name, r.rider_id, r.team_name]
       .some(v => String(v || '').toLowerCase().includes(kw));
@@ -600,7 +625,7 @@ const pagedRiders = computed(() => {
   const start = (page.value - 1) * pageSize.value;
   return filteredRiders.value.slice(start, start + pageSize.value);
 });
-watch([keyword, statusFilter, schedFilter, wsFilter], () => { page.value = 1; });
+watch([keyword, statusFilter, schedFilter, wsFilter, delivFilter], () => { page.value = 1; });
 </script>
 
 <style scoped>
@@ -673,6 +698,7 @@ watch([keyword, statusFilter, schedFilter, wsFilter], () => { page.value = 1; })
 .rt-tools { display: flex; align-items: center; gap: var(--sp-8); flex-wrap: wrap; justify-content: flex-end; }
 .rt-search { width: 170px; }
 .rt-ws-sel { width: 160px; }
+.rt-deliv-sel { width: 160px; }
 .rt-sched-sel { width: 120px; }
 .rt-table { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 /* 表头统一主题色底 + 白字（与站点看板等一致） */

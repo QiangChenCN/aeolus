@@ -21,18 +21,19 @@
     </div>
 
     <!-- 以下提示仅针对 dataset 三个 tab；预排班独立取数，有自己的状态提示 -->
-    <el-alert v-if="activeTab !== 'preSchedule' && dataError" type="error" :closable="false" show-icon class="dv-hint">
+    <el-alert v-if="!isPreSchedule && dataError" type="error" :closable="false" show-icon class="dv-hint">
       {{ dataError }}
     </el-alert>
     <!-- 无缓存：提示点刷新（不自动取数，符合「仅刷新按钮才拉取」） -->
-    <el-alert v-else-if="activeTab !== 'preSchedule' && needRefresh" type="info" :closable="false" show-icon class="dv-hint">
+    <el-alert v-else-if="!isPreSchedule && needRefresh" type="info" :closable="false" show-icon class="dv-hint">
       当前日期（{{ date }}）暂无缓存数据，请点「刷新数据」拉取实时数据并生成看板。
     </el-alert>
-    <el-alert v-else-if="activeTab !== 'preSchedule' && dataNote" type="warning" :closable="false" show-icon class="dv-hint">{{ dataNote }}</el-alert>
+    <el-alert v-else-if="!isPreSchedule && dataNote" type="warning" :closable="false" show-icon class="dv-hint">{{ dataNote }}</el-alert>
 
-    <el-tabs v-model="activeTab" class="dv-tabs">
+    <!-- tab name 即子路由路径：切换由 v-model setter 推送路由，回显由 route.path 驱动 -->
+    <el-tabs v-model="activePath" class="dv-tabs">
       <!-- ============ 实时看板（时段达成 / 含预估，置于首位） ============ -->
-      <el-tab-pane label="实时看板" name="realtime">
+      <el-tab-pane label="实时看板" name="/attend-period/realtime">
         <div class="rt-wrap">
           <AttendRealtimeBoard
             :rider-rows="riderRowsFiltered"
@@ -45,7 +46,7 @@
       </el-tab-pane>
 
       <!-- ============ 站点看板（四张率值表） ============ -->
-      <el-tab-pane label="站点看板" name="station">
+      <el-tab-pane label="站点看板" name="/attend-period/station">
           <div v-for="(t, i) in stationRateTables" :key="i" class="dv-rate-block">
             <el-card class="dv-rate-card" shadow="never">
               <template #header>
@@ -92,7 +93,7 @@
       </el-tab-pane>
 
       <!-- ============ 骑手看板 ============ -->
-      <el-tab-pane label="骑手看板" name="rider">
+      <el-tab-pane label="骑手看板" name="/attend-period/rider">
         <div class="dv-rider-wrap">
           <div v-if="riderCards.length" class="dv-cards">
             <el-card v-for="c in riderCards" :key="c.label" class="dv-card" shadow="never">
@@ -160,7 +161,7 @@
             </el-tab-pane>
 
       <!-- ============ 时段看板（骑手 × 时段明细） ============ -->
-      <el-tab-pane label="时段看板" name="period">
+      <el-tab-pane label="时段看板" name="/attend-period/period">
         <div class="dv-period-wrap">
           <div class="dv-filter">
             <el-select v-model="tpFilterPeriod" multiple clearable collapse-tags collapse-tags-tooltip :max-collapse-tags="1" class="dv-filter-sel" placeholder="全部时段">
@@ -238,7 +239,7 @@
       </el-tab-pane>
 
       <!-- ============ 预排班（排班统计 xlsx → 各时段排班满足率） ============ -->
-      <el-tab-pane label="预排班" name="preSchedule">
+      <el-tab-pane label="预排班" name="/attend-period/pre-schedule">
         <div class="dv-pre-wrap">
           <div class="dv-pre-bar">
             <span class="dv-pre-note">数据来自风神「排班统计」导出；满足率 = 排班人数 / 应排人数。</span>
@@ -304,10 +305,21 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { fetchAttendTeams, saveAttendTeams, fetchAttendDataset, fetchPreSchedule } from '@shared/api/dashboards.js';
 import AttendRealtimeBoard from './AttendRealtimeBoard.vue';
 
+const route = useRoute();
+const router = useRouter();
+const TAB_PATHS = {
+  realtime: '/attend-period/realtime',
+  station: '/attend-period/station',
+  rider: '/attend-period/rider',
+  period: '/attend-period/period',
+  preSchedule: '/attend-period/pre-schedule',
+};
+const PRE_SCHEDULE_PATH = TAB_PATHS.preSchedule;
 
 const teamsAll = ref([]);   // 全部可选站点 [{id, name}]
 const teamsCfg = ref([]);   // 当前已配置展示的站点 id 列表
@@ -316,7 +328,20 @@ const date = ref(todayStr());
 const resp = ref(null);     // 后端返回的完整响应
 const loading = ref(false);
 const dataError = ref('');
-const activeTab = ref('realtime'); // realtime | station | rider | period | preSchedule
+// tab 由子路由驱动：点击 tab 推路径，深链/前进后退按路径回显。
+// 五个看板共用同一份 dataset 与筛选态，页面壳不随子路由重建。
+const activePath = computed({
+  get() {
+    const p = route.path;
+    if (p.startsWith(PRE_SCHEDULE_PATH)) return PRE_SCHEDULE_PATH;
+    if (p.startsWith(TAB_PATHS.station)) return TAB_PATHS.station;
+    if (p.startsWith(TAB_PATHS.rider)) return TAB_PATHS.rider;
+    if (p.startsWith(TAB_PATHS.period)) return TAB_PATHS.period;
+    return TAB_PATHS.realtime;
+  },
+  set(v) { router.push(String(v)); },
+});
+const isPreSchedule = computed(() => activePath.value === PRE_SCHEDULE_PATH);
 const rateFolded = ref({});        // 站点看板 4 张率值表的折叠状态，key 为表格序号
 
 /* 日期默认当天（北京时间） */
@@ -784,14 +809,14 @@ async function loadPreSchedule(force = false) {
   }
 }
 
-/* 切到预排班 tab 且尚未加载时自动拉取；本 tab 日期范围/站点变化后失效并按需重新拉取 */
-watch(activeTab, (v) => { if (v === 'preSchedule') loadPreSchedule(); });
+/* 切到预排班子路由且尚未加载时自动拉取；本 tab 日期范围/站点变化后失效并按需重新拉取 */
+watch(activePath, (v) => { if (v === PRE_SCHEDULE_PATH) loadPreSchedule(); });
 watch([preDates, teamSel], () => {
   const [s, e] = preDates.value || [];
   if (!s || !e) return;
   preLoaded.value = false;
   preRaw.value = { rows: [], periods: [] };
-  if (activeTab.value === 'preSchedule') loadPreSchedule(true);
+  if (activePath.value === PRE_SCHEDULE_PATH) loadPreSchedule(true);
 }, { deep: true });
 
 /* 读取缓存（进入页面 / 切换日期）：始终读取「全部站点」，选中具体站点在前端筛选，不重新取数。 */
@@ -870,6 +895,8 @@ onMounted(async () => {
     teamsCfg.value = (t && t.teams) || [];
   } catch (e) { /* ignore */ }
   await loadCached();   // 进入页面只读缓存（今天若已刷新则直接展示，否则提示点刷新）
+  // 深链直接落在预排班时，站点列表已就绪，这里补一次加载（watch 只在后续切换时触发）
+  if (isPreSchedule.value) await loadPreSchedule();
 });
 
 </script>
