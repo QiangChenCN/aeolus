@@ -8,6 +8,7 @@ import {
 import { BizError } from '../../common/biz.error';
 import { beijingNowStr, escapeLike, str } from '../../common/format.util';
 import { PgService } from '../pg/pg.service';
+import { readKnownTeams } from '../../infra/fetch/sources/teams-fetch.service';
 
 /**
  * rider_roster：保留表名，按骑手明细新数据重新设计的表结构。
@@ -99,6 +100,13 @@ function dbVal(col: string, v: unknown): string | null {
 function pickField(data: Record<string, unknown>, field: string): unknown {
   const alias = apiKey(field);
   return data[field] !== undefined ? data[field] : data[alias];
+}
+
+/** 站点名称兜底：忽略误当成名称的站点 ID，按风神站点目录落盘解析真实名称。 */
+function resolveDeptName(deptId: string, provided: unknown): string {
+  const name = str(provided);
+  if (name && name !== deptId) return name;
+  return readKnownTeams().find((t) => String(t.id) === deptId)?.name || name || deptId;
 }
 
 @Injectable()
@@ -250,7 +258,7 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
     values.knight_id = knightId;
     values.staff_name = staffName;
     values.department_id = departmentId;
-    values.department_name = str(data.departmentName ?? data.department_name) || departmentId;
+    values.department_name = resolveDeptName(departmentId, data.departmentName ?? data.department_name);
     values.work_status = '1';
     values[REFRESHED] = beijingNowStr();
     for (const f of LOCAL_FIELDS) values[f.col] = dbVal(f.col, data[f.key]);
@@ -295,8 +303,10 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
     fields.knight_id = knightId;
     fields.staff_name = staffName;
     fields.department_id = nextDept;
-    fields.department_name = str(data.departmentName ?? data.department_name)
-      || (deptProvided ? nextDept : str(existing.department_name));
+    fields.department_name = resolveDeptName(
+      nextDept,
+      deptProvided ? (data.departmentName ?? data.department_name) : str(existing.department_name),
+    );
 
     if (data.workStatus !== undefined || data.work_status !== undefined) {
       const ws = str(data.workStatus ?? data.work_status);

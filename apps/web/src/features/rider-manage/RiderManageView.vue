@@ -81,7 +81,7 @@
           <el-input v-model="form.mobile" placeholder="手机号" maxlength="20" />
         </el-form-item>
         <el-form-item label="站点">
-          <el-select v-model="form.departmentId" placeholder="选择站点" clearable filterable style="width: 100%">
+          <el-select v-model="form.departmentId" placeholder="选择站点" clearable filterable style="width: 100%" @change="onDepartmentChange">
             <el-option v-for="t in teamOptions" :key="t.id" :label="t.name" :value="String(t.id)" />
           </el-select>
           <div v-if="teamSel" class="form-tip">将按当前筛选站点预填，可修改</div>
@@ -267,6 +267,17 @@ const transferForm = reactive({
 
 const teamsAll = ref([]);
 const teamOptions = computed(() => teamsAll.value);
+
+/** 站点名称只认「风神站点目录」取数基座下发的 options，不拿 ID 兜底。 */
+function teamNameById(id) {
+  if (!id) return '';
+  return teamOptions.value.find((t) => String(t.id) === String(id))?.name || '';
+}
+
+function onDepartmentChange(id) {
+  form.departmentName = teamNameById(id);
+}
+
 const columns = computed(() => {
   const source = apiColumns.value.length ? apiColumns.value : FALLBACK_COLUMNS;
   return source
@@ -418,7 +429,7 @@ function openCreate() {
   emptyForm();
   if (teamSel.value) {
     form.departmentId = teamSel.value;
-    form.departmentName = teamOptions.value.find((t) => String(t.id) === teamSel.value)?.name || '';
+    form.departmentName = teamNameById(teamSel.value);
   }
   formVisible.value = true;
 }
@@ -427,6 +438,9 @@ function openEdit(row) {
   isEdit.value = true;
   emptyForm();
   for (const key of EDIT_FIELDS) form[key] = row[key] ?? '';
+  if (!form.departmentName || form.departmentName === form.departmentId) {
+    form.departmentName = teamNameById(form.departmentId);
+  }
   form.settlementPrice = row.settlementPrice ?? '';
   if (form.settlementMethod && !SETTLEMENT_METHODS.includes(form.settlementMethod)) {
     form.settlementOther = form.settlementMethod;
