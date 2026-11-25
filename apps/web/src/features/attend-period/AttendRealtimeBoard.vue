@@ -212,14 +212,15 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useAttendPeriodStore } from './store.js';
 
-const props = defineProps({
-  riderRows: { type: Array, default: () => [] },
-  stationRows: { type: Array, default: () => [] },
-  periods: { type: Array, default: () => [] },
-  date: { type: String, default: '' },
-  fetchedAt: { type: String, default: '' },
-});
+const store = useAttendPeriodStore();
+const {
+  riderRows, stationRows, riderPeriods: periods, date, fetchedAt,
+  keyword, statusFilter, schedFilter, wsFilter, delivFilter,
+  page, pageSize, orderSort,
+} = storeToRefs(store);
 
 /* 北京时间时钟：每 30 秒跳一次，让进行中时段的剩余时长持续更新 */
 const nowTick = ref(Date.now());
@@ -234,8 +235,8 @@ const bj = computed(() => {
     min: d.getUTCHours() * 60 + d.getUTCMinutes() + d.getUTCSeconds() / 60,
   };
 });
-const isToday = computed(() => String(props.date || '').slice(0, 10) === bj.value.day);
-const isFuture = computed(() => String(props.date || '').slice(0, 10) > bj.value.day);
+const isToday = computed(() => String(date.value || '').slice(0, 10) === bj.value.day);
+const isFuture = computed(() => String(date.value || '').slice(0, 10) > bj.value.day);
 
 function _hm(v) {
   if (v == null || v === '') return null;
@@ -337,7 +338,7 @@ function riderStatus(cell, p, info) {
 /* 目标人数：跨站点汇总该时段 metrics.target（无目标时回落排班人数） */
 function targetOf(tc) {
   let n = 0, has = false;
-  for (const sr of props.stationRows || []) {
+  for (const sr of stationRows.value || []) {
     const m = (sr.metrics || {})[tc] || {};
     if (m.target == null) continue;
     has = true; n += Number(m.target) || 0;
@@ -346,7 +347,7 @@ function targetOf(tc) {
 }
 function scheduledOf(tc) {
   let n = 0, has = false;
-  for (const sr of props.stationRows || []) {
+  for (const sr of stationRows.value || []) {
     const m = (sr.metrics || {})[tc] || {};
     if (m.scheduled == null) continue;
     has = true; n += Number(m.scheduled) || 0;
@@ -355,14 +356,14 @@ function scheduledOf(tc) {
 }
 
 const periodCards = computed(() => {
-  return (props.periods || [])
+  return (periods.value || [])
     .filter(p => !p.is_full_day && String(p.time_code) !== '9999')
     .map(p => {
       const info = timing(p);
       const tc = String(p.time_code);
       const target = targetOf(tc);
       let achievedN = 0, projectedN = 0, badN = 0;
-      for (const r of props.riderRows || []) {
+      for (const r of riderRows.value || []) {
         const st = riderStatus((r.cells || {})[tc], p, info);
         if (st.key === 'achieved') achievedN++;
         else if (st.key === 'projected') projectedN++;
@@ -387,8 +388,8 @@ const selected = computed(() =>
 
 /* 数据取数时间早于当前时段开始 → 提示刷新（实时看板的关键可信度信号） */
 const staleForPeriod = computed(() => {
-  if (!isToday.value || !props.fetchedAt || !selected.value) return false;
-  const m = String(props.fetchedAt).match(/T(\d{2}):(\d{2})/);
+  if (!isToday.value || !fetchedAt.value || !selected.value) return false;
+  const m = String(fetchedAt.value).match(/T(\d{2}):(\d{2})/);
   const s = _hm(selected.value.start_time);
   if (!m || s == null) return false;
   return Number(m[1]) * 60 + Number(m[2]) < s;
@@ -412,7 +413,7 @@ const stationCards = computed(() => {
   const info = timing(s);
   const tc = String(s.time_code);
   const byTeam = new Map();
-  for (const sr of props.stationRows || []) {
+  for (const sr of stationRows.value || []) {
     byTeam.set(String(sr.team_id), {
       team_id: String(sr.team_id), team_name: sr.team_name,
       target: (sr.metrics || {})[tc]?.target ?? null,
@@ -420,7 +421,7 @@ const stationCards = computed(() => {
       achievedN: 0, projectedN: 0, badN: 0,
     });
   }
-  for (const r of props.riderRows || []) {
+  for (const r of riderRows.value || []) {
     const g = byTeam.get(String(r.team_id));
     if (!g) continue;
     const st = riderStatus((r.cells || {})[tc], s, info);
@@ -447,7 +448,7 @@ const onlineStats = computed(() => {
   if (!s || s.run !== 'running') return null;
   const tc = String(s.time_code);
   let sched = 0, online = 0, rest = 0, offline = 0, offlineDeliv = 0;
-  for (const r of props.riderRows || []) {
+  for (const r of riderRows.value || []) {
     const cell = (r.cells || {})[tc];
     if (!cell || !cell.scheduled) continue;
     sched++;
@@ -479,13 +480,13 @@ const stationOnlineCards = computed(() => {
   if (!s) return [];
   const tc = String(s.time_code);
   const byTeam = new Map();
-  for (const sr of props.stationRows || []) {
+  for (const sr of stationRows.value || []) {
     byTeam.set(String(sr.team_id), {
       team_id: String(sr.team_id), team_name: sr.team_name,
       sched: 0, online: 0, rest: 0, offline: 0, restDeliv: 0, offlineDeliv: 0,
     });
   }
-  for (const r of props.riderRows || []) {
+  for (const r of riderRows.value || []) {
     const g = byTeam.get(String(r.team_id));
     if (!g) continue;
     const cell = (r.cells || {})[tc];
@@ -512,11 +513,8 @@ const stationOnlineCards = computed(() => {
   }).sort((a, b) => (a.rate ?? Infinity) - (b.rate ?? Infinity));
 });
 
-/* 骑手明细行：按选中时段展开，附时长进度（实线=已达成，虚线=剩余可争取） */
-const keyword = ref('');
-const statusFilter = ref('all');
-const schedFilter = ref('');
-const wsFilter = ref([]);
+/* 骑手明细行：按选中时段展开，附时长进度（实线=已达成，虚线=剩余可争取）。
+   筛选态放在 Pinia store，切 tab 后仍保留。 */
 /* 筛选项取自当前骑手明细实际出现的在线状态，按固定优先级排序 */
 const WS_ORDER = ['上班', '小休', '申请小休', '下班', '申请下班', '未映射'];
 const wsOptions = computed(() => {
@@ -527,10 +525,7 @@ const wsOptions = computed(() => {
   }
   return WS_ORDER.filter(k => keys.has(k)).concat([...keys].filter(k => !WS_ORDER.includes(k)).sort());
 });
-const page = ref(1);
-const pageSize = ref(25);
 /* 完成单量排序：'' 默认按达成状态 | 'asc' 升序 | 'desc' 降序（由 el-table sort-change 驱动，对全量数据排序） */
-const orderSort = ref('');
 function onOrderSortChange({ prop, order }) {
   orderSort.value = prop === 'orders' ? (order === 'ascending' ? 'asc' : order === 'descending' ? 'desc' : '') : '';
   page.value = 1;
@@ -543,7 +538,7 @@ const allRiderRows = computed(() => {
   const tc = String(s.time_code);
   const reqSec = Math.max(0, Number(s.online_req_h) || 0) * 3600;
   const remainSec = info.run === 'running' ? info.remain * 60 : 0;
-  return (props.riderRows || []).filter(r => {
+  return (riderRows.value || []).filter(r => {
     const cell = (r.cells || {})[tc] || {};
     // 骑手明细是跨时段累积的，只展示本时段排班或本时段有单量的骑手
     return cell.scheduled === true || (cell.orders != null && Number(cell.orders) > 0);
@@ -583,7 +578,6 @@ const allRiderRows = computed(() => {
 /* 配送中单量筛选：选项去重自当前时段骑手明细的「配送中单量」列，数值升序。
    「全选」是下拉里的普通选项：未全选时点它全选，已全选时点它清空（反选），占位值不参与过滤。 */
 const SELECT_ALL = '__ALL__';
-const delivFilter = ref([]);
 const delivOptions = computed(() =>
   [...new Set((allRiderRows.value || []).map(r => r.deliveryOrder))].sort((a, b) => a - b)
 );

@@ -23,10 +23,8 @@
         <el-main class="app-main">
           <div class="app-main-inner">
             <router-view v-slot="{ Component }">
-              <!-- 默认按 fullPath 重建，确保不同路由不共享残留状态；
-                   显式声明 meta.viewKey 的页面（如排班出勤看板）按 key 复用页面壳，
-                   切 tab 子路由时不重建、不重复取数。 -->
-              <component :is="Component" :key="route.meta.viewKey || route.fullPath" />
+              <!-- 组件身份 = 路径；query/hash 变化只更新同一实例，由页面自行 watch(route.query) 响应。 -->
+              <component :is="Component" :key="route.path" />
             </router-view>
           </div>
         </el-main>

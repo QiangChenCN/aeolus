@@ -10,10 +10,10 @@ describe('排班出勤看板 tab 子路由', () => {
     // 规范化后的路由记录把 component 收进 components.default
     expect(parent.components.default).toBeTruthy();
     expect(parent.redirect.name).toBe('attend-tab-realtime');
-    expect(parent.meta.viewKey).toBe('attend-period');
+    expect(parent.meta.viewKey).toBeUndefined();
   });
 
-  it('五个 tab 各有子路由，且保留侧栏高亮与页面复用 key', () => {
+  it('五个 tab 各有独立组件子路由，且保留侧栏高亮', () => {
     const tabs = [
       ['/attend-period/realtime', '实时看板', 'attend-tab-realtime'],
       ['/attend-period/station', '站点看板', 'attend-tab-station'],
@@ -27,9 +27,8 @@ describe('排班出勤看板 tab 子路由', () => {
       expect(r.name).toBe(name);
       expect(r.meta.title).toBe(title);
       expect(r.meta.kind).toBe('attendPeriod');
-      expect(r.meta.viewKey).toBe('attend-period');
-      // 子路由只提供 URL，不拆组件：五个 tab 共用同一份 dataset 与筛选态
-      expect(r.components).toBeFalsy();
+      // 每个 tab 是独立组件；共享数据/筛选态放在 Pinia store
+      expect(r.components.default).toBeTruthy();
     }
   });
 });

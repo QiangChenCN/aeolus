@@ -1,6 +1,6 @@
 // 配送超时看板的数据层：站点目录 / 展示站点配置 / 站点计算结果的并发拉取与刷新。
 // 只有本看板使用（2026-10-21 从 DeliveryTimeoutView.vue 剥离），改这里的请求编排不会波及别的看板。
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { fetchTeams } from '@shared/api/dashboards.js';
 import {
@@ -149,6 +149,14 @@ export function useDeliveryTimeout() {
     return load();
   }
 
+  /** 应用考核看板下钻携带的 query；组件按 path 复用时由 watch 再次触发。 */
+  function applyQuery() {
+    const q = route.query || {};
+    if (q.team) teamSel.value = String(q.team);
+    if (q.tt === 'gaobi') orderTypeFilter.value = 'gaobi';
+    if (q.tab === 'order') activeTab.value = 'order';
+  }
+
   /** 页面初始化：拉站点目录与展示站点配置，处理考核看板下钻携带的 query。 */
   async function init() {
     try {
@@ -163,13 +171,13 @@ export function useDeliveryTimeout() {
     } catch (e) {
       /* 忽略：取不到配置则回落全部站点 */
     }
-    const q = route.query || {};
-    if (q.team) teamSel.value = String(q.team);
-    if (q.tt === 'gaobi') orderTypeFilter.value = 'gaobi';
-    if (q.tab === 'order') activeTab.value = 'order';
+    applyQuery();
     // 首屏加载的失败提示由调用方（页面）统一 ElMessage，故此处不吞。
     await load();
   }
+
+  // 全局组件 key 已按 path 复用实例：同一路径仅 query 变化时不会重建，需显式重套下钻筛选。
+  watch(() => route.query, applyQuery);
 
   /** 挂载完成后的高度测量（需在 DOM 就绪后调用）。 */
   function initMeasure() {

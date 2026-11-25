@@ -14,6 +14,11 @@ import AssessPeriodView from '../features/assess-period/AssessPeriodView.vue';
 import AssessWeatherView from '../features/assess-weather/AssessWeatherView.vue';
 import AssessView from '../features/assess/AssessView.vue';
 import AttendPeriodView from '../features/attend-period/AttendPeriodView.vue';
+import AttendRealtimeBoard from '../features/attend-period/AttendRealtimeBoard.vue';
+import AttendStationBoard from '../features/attend-period/AttendStationBoard.vue';
+import AttendRiderBoard from '../features/attend-period/AttendRiderBoard.vue';
+import AttendPeriodBoard from '../features/attend-period/AttendPeriodBoard.vue';
+import AttendPreSchedule from '../features/attend-period/AttendPreSchedule.vue';
 import OverviewView from '../features/overview/OverviewView.vue';
 import AssessmentBoardView from '../features/assessment-board/AssessmentBoardView.vue';
 import DeliveryTimeoutView from '../features/delivery-timeout/DeliveryTimeoutView.vue';
@@ -67,21 +72,20 @@ const routes = [
           { path: 'weather', name: 'assess-weather', component: AssessWeatherView, meta: { title: '天气设置', kind: 'assessWeather', id: '' } },
         ] },
       { path: 'standard', name: 'standard', component: StandardView, meta: { title: '标准达成', kind: 'standard', id: '' } },
-      // 排班出勤看板：5 个 tab 各自持有子路由（深链/前进后退可用）。
-      // 子路由只提供路径与标题，不拆组件：五个看板共用同一份 dataset 与筛选态，
-      // 由 AttendPeriodView 按 route.path 回显 tab；viewKey 保证切 tab 时不重建页面、不重复取数。
+      // 排班出勤看板：5 个 tab 各自持有子路由与独立组件（深链/前进后退可用）。
+      // dataset 与跨 tab 筛选态放在 Pinia store，页面壳按 path 重建也不会重复取数或丢筛选。
       {
         path: 'attend-period',
         name: 'attend-period',
         component: AttendPeriodView,
         redirect: { name: 'attend-tab-realtime' },
-        meta: { title: '排班出勤', kind: 'attendPeriod', id: '', viewKey: 'attend-period' },
+        meta: { title: '排班出勤', kind: 'attendPeriod', id: '' },
         children: [
-          { path: 'realtime', name: 'attend-tab-realtime', meta: { title: '实时看板', kind: 'attendPeriod', id: '', viewKey: 'attend-period' } },
-          { path: 'station', name: 'attend-tab-station', meta: { title: '站点看板', kind: 'attendPeriod', id: '', viewKey: 'attend-period' } },
-          { path: 'rider', name: 'attend-tab-rider', meta: { title: '骑手看板', kind: 'attendPeriod', id: '', viewKey: 'attend-period' } },
-          { path: 'period', name: 'attend-tab-period', meta: { title: '时段看板', kind: 'attendPeriod', id: '', viewKey: 'attend-period' } },
-          { path: 'pre-schedule', name: 'attend-tab-pre-schedule', meta: { title: '预排班', kind: 'attendPeriod', id: '', viewKey: 'attend-period' } },
+          { path: 'realtime', name: 'attend-tab-realtime', component: AttendRealtimeBoard, meta: { title: '实时看板', kind: 'attendPeriod', id: '' } },
+          { path: 'station', name: 'attend-tab-station', component: AttendStationBoard, meta: { title: '站点看板', kind: 'attendPeriod', id: '' } },
+          { path: 'rider', name: 'attend-tab-rider', component: AttendRiderBoard, meta: { title: '骑手看板', kind: 'attendPeriod', id: '' } },
+          { path: 'period', name: 'attend-tab-period', component: AttendPeriodBoard, meta: { title: '时段看板', kind: 'attendPeriod', id: '' } },
+          { path: 'pre-schedule', name: 'attend-tab-pre-schedule', component: AttendPreSchedule, meta: { title: '预排班', kind: 'attendPeriod', id: '' } },
         ],
       },
       { path: 'overview', name: 'overview', component: OverviewView, meta: { title: '总览' } },

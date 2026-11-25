@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
+import { createPinia } from 'pinia';
 import AttendPeriodView from '../../src/features/attend-period/AttendPeriodView.vue';
+import { fetchAttendDataset } from '@shared/api/dashboards.js';
 
 vi.mock('@shared/api/dashboards.js', () => ({
   fetchAttendTeams: vi.fn(async () => ({ all: [{ id: 1, name: '站点A' }], teams: [1] })),
@@ -30,12 +32,14 @@ const makeRouter = () => createRouter({
 describe('排班出勤看板 tab 与子路由联动', () => {
   it('点击 tab 推送对应子路由，外部导航改路径后 tab 回显', async () => {
     const router = makeRouter();
+    const pinia = createPinia();
     await router.push('/attend-period/realtime');
     await router.isReady();
     const wrapper = mount(AttendPeriodView, {
-      global: { plugins: [router], directives: { perm: {} } },
+      global: { plugins: [router, pinia], directives: { perm: {} } },
     });
     await flushPromises();
+    expect(fetchAttendDataset).toHaveBeenCalledTimes(1);
 
     const tabs = wrapper.findAll('.el-tabs__item');
     expect(tabs.map((t) => t.text())).toEqual(['实时看板', '站点看板', '骑手看板', '时段看板', '预排班']);
@@ -49,6 +53,14 @@ describe('排班出勤看板 tab 与子路由联动', () => {
     await router.push('/attend-period/pre-schedule');
     await flushPromises();
     expect(wrapper.find('.el-tabs__item.is-active').text()).toBe('预排班');
+
+    // 页面壳因 path 变化重建时，store 仍复用数据集，不会重复取数
     wrapper.unmount();
+    const again = mount(AttendPeriodView, {
+      global: { plugins: [router, pinia], directives: { perm: {} } },
+    });
+    await flushPromises();
+    expect(fetchAttendDataset).toHaveBeenCalledTimes(1);
+    again.unmount();
   });
 });
