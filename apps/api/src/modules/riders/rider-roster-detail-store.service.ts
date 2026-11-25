@@ -409,7 +409,9 @@ export class RiderRosterDetailStoreService implements OnModuleInit {
       ? `entry_date DESC NULLS LAST,
          CASE WHEN knight_id ~ '^\\d+$' THEN knight_id::bigint END DESC NULLS LAST,
          knight_id DESC`
-      : 'department_name, staff_name';
+      : workStatus === '2'
+        ? 'leave_date DESC NULLS LAST, department_name, staff_name'
+        : 'department_name, staff_name';
     const page = Math.max(1, Number(opts.page) || 1);
     const pageSize = Math.min(500, Math.max(1, Number(opts.pageSize) || 50));
     params.push(pageSize, (page - 1) * pageSize);
