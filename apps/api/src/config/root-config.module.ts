@@ -10,7 +10,7 @@ import { envValidationSchema } from './configuration';
  * 背景：worker 曾因自己的模块图里没有 ConfigModule，导致 PgService 注入
  * ConfigService 失败（Nest DI "lookupComponentInParentModules" 错），进程起不来。
  *
- * 单一配置来源 = 仓库根 .env（如 /opt/aeolusdata/.env）。systemd 的 EnvironmentFile
+ * 单一配置来源 = 仓库根 .env（如 /opt/aeolus/.env）。systemd 的 EnvironmentFile
  * 注入同一份；这里显式读取它，不再读 apps/api/.env，避免两份漂移。数组第二项是
  * 本地开发的优雅回退（若根 .env 缺席、仍有 apps/api/.env 时可用）。
  *

@@ -20,7 +20,7 @@ export default defineConfig({
       '@shared': resolve(SHARED, 'src'),
     },
   },
-  // 让 Vite 从仓库根读取 .env，使 VITE_OTEL_* 与后端共用单一 /opt/aeolusdata/.env 配置来源。
+  // 让 Vite 从仓库根读取 .env，使 VITE_OTEL_* 与后端共用单一 /opt/aeolus/.env 配置来源。
   // 只有 VITE_ 前缀的变量才会暴露给前端 bundle，密钥不会泄漏。
   envDir: resolve(HERE, '..', '..'),
   build: {

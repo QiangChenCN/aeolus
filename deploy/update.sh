@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # 日后更新：在 ECS 上跑一次即可（需已配 GitHub 只读 deploy key）
-# 用法：bash /opt/aeolusdata/deploy/update.sh
+# 用法：bash /opt/aeolus/deploy/update.sh
 set -e
-cd /opt/aeolusdata
+cd /opt/aeolus
 
 echo "== 拉取最新代码 =="
 git pull --ff-only
@@ -21,11 +21,11 @@ echo "== 重建前端 =="
 cd apps/web && pnpm install --frozen-lockfile && pnpm --filter aeolus-workbench-web build && cd ..
 
 echo "== 生成环境文件（.env 被 gitignore，全新部署需从模板生成；含密钥项请运维补全）=="
-# 单一配置来源 = 仓库根 /opt/aeolusdata/.env（Nest 显式读它，Python 回读它兜底）；该文件缺失会导致
+# 单一配置来源 = 仓库根 /opt/aeolus/.env（Nest 显式读它，Python 回读它兜底）；该文件缺失会导致
 # systemd 直接拒绝启动（Failed to load environment files）。故缺失时必须从 apps/api/.env.example 生成。
-if [ ! -f /opt/aeolusdata/.env ]; then
-  cp apps/api/.env.example /opt/aeolusdata/.env
-  echo "已根据 apps/api/.env.example 生成 /opt/aeolusdata/.env（单一配置来源），请按需补全 AUTH_TOKEN / NEST_AUTH_TOKEN 后重启服务"
+if [ ! -f /opt/aeolus/.env ]; then
+  cp apps/api/.env.example /opt/aeolus/.env
+  echo "已根据 apps/api/.env.example 生成 /opt/aeolus/.env（单一配置来源），请按需补全 AUTH_TOKEN / NEST_AUTH_TOKEN 后重启服务"
 fi
 
 echo "== 同步 systemd 单元并重启服务 =="
@@ -33,21 +33,23 @@ echo "== 同步 systemd 单元并重启服务 =="
 # 只 git pull 不会生效 —— 必须重新拷贝 + daemon-reload。
 # 不这么做正是历史故障的根因：单元改了而 systemd 仍按旧定义管理，
 # 旧进程脱管成孤儿占着端口，新实例 bind 失败被 Restart=always 无限重试。
-cp deploy/aeolusdata-backend.service deploy/aeolusdata-compute.service deploy/aeolusdata-worker.service /etc/systemd/system/
+cp deploy/aeolus-backend.service deploy/aeolus-compute.service deploy/aeolus-worker.service /etc/systemd/system/
 
 echo "== 端口/孤儿预检：避免 squatting 导致新实例 EADDRINUSE =="
-# 历史故障根因：旧后端进程（手动 nohup 起、或改名前 aeolus-backend 单元起的）
+# 历史故障根因：旧后端进程（手动 nohup 起、或改名前 aeolusdata-backend 单元起的）
 # 脱管成孤儿仍占着 8787，systemd 重启新实例时 bind 失败、被 Restart=always 无限重试。
 # 这里在重启前主动清理同项目的游离进程 + 改名遗留的旧单元，并确认端口最终空闲。
 BACKEND_PORT=8787
-# 1) 清理改名遗留的旧单元 aeolus-backend（已被 aeolusdata-backend 取代）
-if systemctl list-unit-files 2>/dev/null | grep -q '^aeolus-backend.service'; then
-  echo "发现失效旧单元 aeolus-backend.service（已被 aeolusdata-backend 取代），停用并移除"
-  systemctl disable --now aeolus-backend.service 2>/dev/null || true
-  rm -f /etc/systemd/system/aeolus-backend.service
-fi
+# 1) 清理改名遗留的旧单元 aeolusdata-*（已由 aeolus-* 取代）
+for old_unit in aeolusdata-backend aeolusdata-compute aeolusdata-worker; do
+  if systemctl list-unit-files 2>/dev/null | grep -q "^${old_unit}.service"; then
+    echo "发现失效旧单元 ${old_unit}.service（已被 aeolus-* 取代），停用并移除"
+    systemctl disable --now "${old_unit}.service" 2>/dev/null || true
+    rm -f "/etc/systemd/system/${old_unit}.service"
+  fi
+done
 # 2) 清理 squatting 8787 的同项目孤儿进程（cmd 含 dist/src/main 但非 systemd 持有）
-SYSTEMD_PID=$(systemctl show -p MainPID --value aeolusdata-backend 2>/dev/null || true)
+SYSTEMD_PID=$(systemctl show -p MainPID --value aeolus-backend 2>/dev/null || true)
 for pid in $(ss -ltnp "sport = :$BACKEND_PORT" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | sort -u || true); do
   if [ -n "$SYSTEMD_PID" ] && [ "$pid" = "$SYSTEMD_PID" ]; then
     continue
@@ -71,11 +73,11 @@ else
 fi
 
 systemctl daemon-reload
-systemctl restart aeolusdata-backend
-systemctl restart aeolusdata-compute
-systemctl restart aeolusdata-worker
-systemctl status aeolusdata-backend --no-pager
-systemctl status aeolusdata-compute --no-pager
-systemctl status aeolusdata-worker --no-pager
+systemctl restart aeolus-backend
+systemctl restart aeolus-compute
+systemctl restart aeolus-worker
+systemctl status aeolus-backend --no-pager
+systemctl status aeolus-compute --no-pager
+systemctl status aeolus-worker --no-pager
 
 echo "== 更新完成 =="

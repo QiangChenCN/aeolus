@@ -12,11 +12,13 @@
  * 本包以 CommonJS 产物（dist/index.js + .d.ts）对外，NestJS（CJS）与 Vite（CJS 互操作）均可直接消费。
  */
 /** 仓库 / 产品统一名（跨端保持一致，避免各处硬编码）。 */
-export declare const AEOLUS_MONOREPO_NAME: "aeolusdata";
+export declare const AEOLUS_MONOREPO_NAME: "aeolus";
 /** Promise 化的 setTimeout，跨端通用的「等待」工具。 */
 export declare function sleep(ms: number): Promise<void>;
 /** 简单问候（示例导出，便于验证跨包引用）。 */
 export declare function greet(scope: string): string;
 /** 全项目唯一取数字段映射字典（运单 + 违规处罚），前后端共用。 */
 export * from './field-map.js';
+/** 证件照透视矫正公共算法（前端 Worker 与 NestJS 后端共用同一份实现）。 */
+export * from './photo-rectify/index.js';
 //# sourceMappingURL=index.d.ts.map

@@ -1,4 +1,4 @@
-"""AeolusData 计算 handler 库（原 server.py 的计算子集）。
+"""Aeolus 计算 handler 库（原 server.py 的计算子集）。
 
 背景：`server.py` 曾同时充当「工作台 HTTP 单体」与「计算 handler 库」两个角色。
 工作台职责（路由 / 鉴权 / RBAC / 任务队列 / 静态托管 / 产物 / SSE / 诊断）已全部迁到

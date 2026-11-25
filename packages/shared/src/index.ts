@@ -13,7 +13,7 @@
  */
 
 /** 仓库 / 产品统一名（跨端保持一致，避免各处硬编码）。 */
-export const AEOLUS_MONOREPO_NAME = 'aeolusdata' as const;
+export const AEOLUS_MONOREPO_NAME = 'aeolus' as const;
 
 /** Promise 化的 setTimeout，跨端通用的「等待」工具。 */
 export function sleep(ms: number): Promise<void> {

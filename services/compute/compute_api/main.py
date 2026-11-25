@@ -1,5 +1,5 @@
 r"""
-AeolusData 独立计算服务（§6「Python 生态独占端点」的 FastAPI 落地）。
+Aeolus 独立计算服务（§6「Python 生态独占端点」的 FastAPI 落地）。
 
 设计要点：
 - 本服务**不做鉴权**：NestJS 是唯一的鉴权网关（RBAC + 数据权限），它把已经算好的
@@ -38,7 +38,7 @@ from pathlib import Path
 # （历史坑：旧结构有根 get_data/ 与 dashboard/get_data/ 两个同名包，sys.path 顺序会让裸
 #   import 命中嵌套那个、拿到不完整的成员。2026-09-24 已把嵌套门面合并进 sources/ 并改名，
 #  同名包冲突不复存在 —— 请勿再把任何包目录单独塞进 sys.path 把它变回来。）
-ROOT = str(Path(__file__).resolve().parent.parent)  # e:/Code/aeolusdata
+ROOT = str(Path(__file__).resolve().parent.parent)  # e:/Code/aeolus
 for _d in [
     ROOT,
     os.path.join(PY_HOME, "workbench"),
@@ -66,7 +66,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.concurrency import run_in_threadpool
 
-app = FastAPI(title="AeolusData Compute Service", version="0.1.0")
+app = FastAPI(title="Aeolus Compute Service", version="0.1.0")
 
 # OTel：在路由定义后挂接（仍早于请求处理）；OTEL_ENABLED=false 时为 no-op。
 _otel.instrument_app(app)

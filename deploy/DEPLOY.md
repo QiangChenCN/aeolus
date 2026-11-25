@@ -13,22 +13,22 @@
      GitHub（origin/main）
         │ git pull（服务器 remote 为 SSH）
         ▼
-   ECS 服务器 /opt/aeolusdata
+   ECS 服务器 /opt/aeolus
         │ pnpm --filter aeolus-workbench-web build（重建前端）
         ▼
-   aeolusdata-backend.service（systemd）→ NestJS 后端（:8787，路由/鉴权/编排/静态托管）
-   aeolusdata-compute.service（systemd）→ Python 计算服务（:8900，仅 127.0.0.1 回访）
+   aeolus-backend.service（systemd）→ NestJS 后端（:8787，路由/鉴权/编排/静态托管）
+   aeolus-compute.service（systemd）→ Python 计算服务（:8900，仅 127.0.0.1 回访）
         │
         ▼
    nginx（certbot 每子域名一张证）
-   aeolusdata.qixinchen.top → 127.0.0.1:8787
+   aeolus.qixinchen.top → 127.0.0.1:8787
 ```
 
 要点：
 - **前端**是 Vite 工程（`apps/web/`），构建产物 `apps/web/dist` 被 `.gitignore` 忽略，**必须重新 `pnpm --filter aeolus-workbench-web build`** 才会生效；NestJS 托管的正是 `apps/web/dist/index.html`。
 - **后端** 分两层：NestJS（`apps/api/`）负责路由 / 鉴权 / 取数 / 加工 / 编排；Python 计算服务（`services/compute/compute_service/`）只做大数据计算。计算侧 handler 在同包 `services/compute/compute_service/handlers.py` —— 原根目录 `server.py` 的计算子集，已按 AST 依赖闭包精确迁入（路由 handler 源码逐字符一致）。`server.py` **已删除**：其 HTTP 外壳（单体 8917 入口）早已移除，其后仅作为 handler 库被 `import`，现已彻底退场。
 - **RBAC + 数据权限** 均由 NestJS 承担（`apps/api/src/modules/auth/`：用户库 `.users.json`、角色 `.roles.json`、策略 `.pwpolicy.json`、审计 `.audit.jsonl`、数据权限 `.data_perms.json`）。Nest 按 RBAC + 数据权限算好 `x-scope` 随请求下发给 Python 计算服务，**Python 侧不再持有任何权限规则**（原 `core/dataperm.py` 兜底查询已删除）。这些状态文件全部位于 `apps/api/runtime/`、gitignore，**不在仓库**，Nest 首次启动自动 bootstrap。
-- **PostgreSQL** 是现在的主存储：6 个 store（realtime / violation / im_contact / cron / unsat / visit 历史）全部 PG-only，连接串 `DATABASE_URL` 写在仓库根 `.env`（`/opt/aeolusdata/.env`）。建表全自动——各 store 在 `OnModuleInit` 时跑 `PG_DDL`（`CREATE TABLE IF NOT EXISTS`），只需建好「角色 + 库 + 填 `DATABASE_URL`」，无需手动建表。历史迁移脚本 `apps/api/scripts/migrate-sqlite-to-pg.mjs` 可从旧 SQLite 一次性搬数据（幂等）。详见第 9 节。
+- **PostgreSQL** 是现在的主存储：6 个 store（realtime / violation / im_contact / cron / unsat / visit 历史）全部 PG-only，连接串 `DATABASE_URL` 写在仓库根 `.env`（`/opt/aeolus/.env`）。建表全自动——各 store 在 `OnModuleInit` 时跑 `PG_DDL`（`CREATE TABLE IF NOT EXISTS`），只需建好「角色 + 库 + 填 `DATABASE_URL`」，无需手动建表。历史迁移脚本 `apps/api/scripts/migrate-sqlite-to-pg.mjs` 可从旧 SQLite 一次性搬数据（幂等）。详见第 9 节。
 
 ---
 
@@ -68,7 +68,7 @@ git commit -m "feat: ..."
 
 本地机器的 SSH key（`~/.ssh/id_ed25519`）**未加载进 ssh-agent**，用 SSH 推会 `Permission denied (publickey)`。因此：
 
-- 本地 `origin` 已改为 **HTTPS**：`git remote set-url origin https://github.com/QiangChenCN/aeolusdata.git`
+- 本地 `origin` 已改为 **HTTPS**：`git remote set-url origin https://github.com/QiangChenCN/aeolus.git`
 - 推送靠 **Git Credential Manager**（`credential.helper=manager`）鉴权，浏览器/PAT 登录一次后缓存。
 
 ```bash
@@ -84,7 +84,7 @@ git push origin main
 在 ECS 上执行：
 
 ```bash
-cd /opt/aeolusdata
+cd /opt/aeolus
 
 # 1) 拉代码（SSH remote，只要当初能 clone 就能 pull）
 git pull
@@ -94,10 +94,10 @@ cd apps/web && pnpm install --frozen-lockfile && pnpm --filter aeolus-workbench-
 
 # 3) 重建后端并重启三个服务（新的 NestJS 代码 / RBAC 才生效）
 cd apps/api && pnpm install --frozen-lockfile --prod && pnpm --filter aeolus-workbench-backend build && cd ..
-systemctl restart aeolusdata-backend aeolusdata-compute aeolusdata-worker
+systemctl restart aeolus-backend aeolus-compute aeolus-worker
 
 # 4) 确认启动正常 + 看到 bootstrap 提示
-journalctl -u aeolusdata-backend -n 30 --no-pager
+journalctl -u aeolus-backend -n 30 --no-pager
 
 # 5) 验证深链接回退（History 路由生效的关键）
 #    前端已去掉 URL 里的 #，页面路径（/tasks、/bot/instances …）会直接打到服务器。
@@ -113,7 +113,7 @@ curl -s -o /dev/null -w "%{http_code} %{content_type}\n" http://127.0.0.1:8787/h
 > ℹ️ **重启不再全体登出**：会话会持久化到 `apps/api/runtime/.sessions.json`（0600 权限、gitignore）。
 > 正常重启（`systemctl restart`）会走优雅停机落盘，即便是 `kill -9`/崩溃也能保住登录态——因为
 > 登录、登出时已即时落盘。想强制所有人重新登录，删掉该文件即可：
-> `rm /opt/aeolusdata/apps/api/runtime/.sessions.json && systemctl restart aeolusdata-backend`
+> `rm /opt/aeolus/apps/api/runtime/.sessions.json && systemctl restart aeolus-backend`
 
 ---
 
@@ -128,15 +128,15 @@ curl -s -o /dev/null -w "%{http_code} %{content_type}\n" http://127.0.0.1:8787/h
 > `./.data_perms.json` **先拷贝到 `apps/api/runtime/`**，否则 bootstrap 会用默认 `admin/admin123` 重建一份，
 > 导致既有账号丢失、且触发未改密告警。
 
-**登录**：浏览器开 `https://aeolusdata.qixinchen.top` → `admin` / `admin123` → 立刻在「系统设置 → 个人」改密码（公网勿留默认口令）。
+**登录**：浏览器开 `https://aeolus.qixinchen.top` → `admin` / `admin123` → 立刻在「系统设置 → 个人」改密码（公网勿留默认口令）。
 
-**想用强口令一步到位**：重启前在 `/etc/systemd/system/aeolusdata-backend.service` 的 `[Service]` 加
+**想用强口令一步到位**：重启前在 `/etc/systemd/system/aeolus-backend.service` 的 `[Service]` 加
 
 ```ini
 Environment=WB_ADMIN_PASSWORD=你的强口令
 ```
 
-然后 `systemctl daemon-reload && systemctl restart aeolusdata-backend`，bootstrap 即采用该口令，跳过 `admin123`。
+然后 `systemctl daemon-reload && systemctl restart aeolus-backend`，bootstrap 即采用该口令，跳过 `admin123`。
 
 **手动管理用户**（`.users.json` 位于 `apps/api/runtime/`、不在仓库，服务器上是独立的一份）：
 
@@ -180,7 +180,7 @@ curl -X POST -H "X-Token: $TOKEN" -H "Content-Type: application/json" \
 | 本地 `git push` 公钥拒绝 | SSH key 没进 agent | 用 HTTPS remote + GCM（见第 3 节） |
 | 提交里混入一堆 `*.json` | 缓存文件被跟踪且反复变 | 暂存时排除（见第 2 节），或 `git rm --cached` 后加进 `.gitignore` |
 | `send` 钉钉报群名匹配不明确 | 目标群名歧义或群不存在，NestJS 侧 `dingtalk` 模块按群名解析失败（匹配度不足/并列） | 在调用处传更准确的群名，或传 `openConversationId`（cid 开头）；群名解析逻辑全在 `apps/api/src/modules/dingtalk/dingtalk.service.ts` 的 `resolveGroup` |
-| 钉钉发送提示 `dws` 相关路径错误 | dws 由 **NestJS** 调用（Python 不再直调）；`DING_DWS_JS`/`DING_DWS_BIN` 在仓库根 `.env`（`/opt/aeolusdata/.env`）配置 | `pnpm add -g dingtalk-workspace-cli` 让 dws 进 PATH，或确认仓库根 `.env` 的 `DING_DWS_JS` 指向正确路径 |
+| 钉钉发送提示 `dws` 相关路径错误 | dws 由 **NestJS** 调用（Python 不再直调）；`DING_DWS_JS`/`DING_DWS_BIN` 在仓库根 `.env`（`/opt/aeolus/.env`）配置 | `pnpm add -g dingtalk-workspace-cli` 让 dws 进 PATH，或确认仓库根 `.env` 的 `DING_DWS_JS` 指向正确路径 |
 | Python job 钉钉调用 401 | job 经 `services/compute/common/nest_client` 回調 NestJS 需要机器令牌 `NEST_AUTH_TOKEN`（由 TaskRunner 自动从 `AUTH_TOKEN` 注入）；未配置则被 AccessGuard 拒绝 | 确认仓库根 `.env` 的 `AUTH_TOKEN` 与 `NEST_AUTH_TOKEN` 一致，且任务由 Nest 的 TaskRunner 拉起（而非手动裸跑 Python） |
 
 ---
@@ -216,7 +216,7 @@ curl -X POST -H "X-Token: $TOKEN" -H "Content-Type: application/json" \
 1. **全局配置页**（默认入口）：一屏看全整体运行状态与「凭据分组 ↔ 实例」的绑定关系。顶部「运行状态」含机器人总开关（开关即保存，关闭停掉全部 Stream 连接）、网关状态、实例数 / 凭据数 / 已连接分组数、立即重连（每 15s 自动刷新）；下方绑定表中用「绑定凭据分组」下拉完成组装。绑定下拉只列同渠道凭据，跨渠道会被后端拒绝并提示「渠道不匹配」。每个被启用实例引用的凭据组各自建立一条独立 Stream 长连接。
 2. **凭证管理页**：列出全部渠道的应用凭据（按渠道展示对应字段），可新增 / 编辑 / 删除（Secret 脱敏，编辑时留空表示不修改）。被实例引用的凭据**不可删除**（需先在实例中解绑）。实例只能绑定与自身渠道一致的凭据，否则会被拒绝并提示「渠道不匹配」。
 3. **实例管理页**：只管实例运行参数与连接状态（「状态」列是本模块唯一的连接状态视图，每 15s 自动刷新）。每行「实例启用」开关 = 在线启停（持久化到 `bot_manifest.json`；禁用即退出消息分发）。「凭据分组」列为只读展示；总开关、重连与绑定操作均不在本页。
-4. 改凭据 / 绑定 / 全局开关后，保存即**热重载** Stream 连接，**无需重启** `aeolusdata-backend` 服务；总开关与「立即重连」在全局配置页操作。
+4. 改凭据 / 绑定 / 全局开关后，保存即**热重载** Stream 连接，**无需重启** `aeolus-backend` 服务；总开关与「立即重连」在全局配置页操作。
 
 ### 7.3 部署 / 升级提醒
 
@@ -313,8 +313,8 @@ DB_PASSWORD=$(openssl rand -base64 18 | tr -dc 'a-zA-Z0-9' | head -c 24)
 echo "数据库密码(记好): $DB_PASSWORD"
 su - postgres -c "psql -v ON_ERROR_STOP=1 <<EOF
 CREATE ROLE aeolus WITH LOGIN PASSWORD '$DB_PASSWORD';
-CREATE DATABASE aeolusdata OWNER aeolus;
-GRANT ALL PRIVILEGES ON DATABASE aeolusdata TO aeolus;
+CREATE DATABASE aeolus OWNER aeolus;
+GRANT ALL PRIVILEGES ON DATABASE aeolus TO aeolus;
 EOF"
 ```
 
@@ -323,18 +323,18 @@ EOF"
 
 ### 9.3 写连接串（仓库根 .env）
 
-`DATABASE_URL` 写在 `/opt/aeolusdata/.env`（gitignore，带外手动传）。连接串格式：
-`postgresql://aeolus:<密码>@localhost:5432/aeolusdata`
+`DATABASE_URL` 写在 `/opt/aeolus/.env`（gitignore，带外手动传）。连接串格式：
+`postgresql://aeolus:<密码>@localhost:5432/aeolus`
 
 ```bash
-cat >> /opt/aeolusdata/.env <<EOF
-DATABASE_URL=postgresql://aeolus:${DB_PASSWORD}@localhost:5432/aeolusdata
+cat >> /opt/aeolus/.env <<EOF
+DATABASE_URL=postgresql://aeolus:${DB_PASSWORD}@localhost:5432/aeolus
 EOF
 ```
 
 ⚠️ **隐藏字符坑**：用可视编辑器或 Windows 复制粘贴 `.env` 时，`DATABASE_URL` 行尾容易混入**不可见字符**（如 U+200B 零宽空格 / 换行残留），导致后端 `pg` 连库报 `password authentication failed` 但肉眼看串是对的。验证方法：
 ```bash
-grep -n 'DATABASE_URL' /opt/aeolusdata/.env | cat -A   # 应只有行尾一个 $ ，无 ^M / <200b> 等异样
+grep -n 'DATABASE_URL' /opt/aeolus/.env | cat -A   # 应只有行尾一个 $ ，无 ^M / <200b> 等异样
 ```
 若发现异样，用 `printf` 纯写覆盖该行最稳妥。
 
@@ -343,12 +343,12 @@ grep -n 'DATABASE_URL' /opt/aeolusdata/.env | cat -A   # 应只有行尾一个 $
 建表**全自动**：各 store 在 `OnModuleInit` 时跑 `PG_DDL`（`CREATE TABLE IF NOT EXISTS`）。只需常规部署：
 
 ```bash
-cd /opt/aeolusdata
+cd /opt/aeolus
 git pull
 cd apps/web && pnpm install --frozen-lockfile && pnpm --filter aeolus-workbench-web build && cd ..
 cd apps/api && npm ci && npx nest build && cd ..
-systemctl restart aeolusdata-backend aeolusdata-compute aeolusdata-worker
-journalctl -u aeolusdata-backend -n 80 --no-pager | grep -iE "PG 连接池|PG 表已就绪|已就绪"
+systemctl restart aeolus-backend aeolus-compute aeolus-worker
+journalctl -u aeolus-backend -n 80 --no-pager | grep -iE "PG 连接池|PG 表已就绪|已就绪"
 ```
 
 看到 `PG 连接池已建立` + 各 store `XX 持久层 PG 表已就绪` 即成功。
@@ -367,13 +367,13 @@ psql "$DATABASE_URL" -c "SELECT 'delivery_realtime' AS tbl, count(*) FROM delive
 若服务器上还留着旧 SQLite（`apps/api/runtime/db/*.db`、`apps/api/runtime/cron.db`），用迁移脚本搬进 PG（幂等，可重复跑）：
 
 ```bash
-ls -la /opt/aeolusdata/apps/api/runtime/db/ /opt/aeolusdata/apps/api/runtime/cron.db 2>/dev/null
-cd /opt/aeolusdata/apps/api && node scripts/migrate-sqlite-to-pg.mjs
+ls -la /opt/aeolus/apps/api/runtime/db/ /opt/aeolus/apps/api/runtime/cron.db 2>/dev/null
+cd /opt/aeolus/apps/api && node scripts/migrate-sqlite-to-pg.mjs
 ```
 
 迁移完成后**删除旧 sqlite**（数据已在 PG，避免误读）：
 ```bash
-rm -f /opt/aeolusdata/apps/api/runtime/cron.db /opt/aeolusdata/apps/api/runtime/db/*.db
+rm -f /opt/aeolus/apps/api/runtime/cron.db /opt/aeolus/apps/api/runtime/db/*.db
 ```
 
 > 全新库 + 无旧 sqlite → 只有空表，后续取数会重新填充，无需迁移。
@@ -399,8 +399,8 @@ rm -f /opt/aeolusdata/apps/api/runtime/cron.db /opt/aeolusdata/apps/api/runtime/
 
 ```bash
 # 部署新版后重启后端即完成迁移，看迁移日志
-sudo systemctl restart aeolusdata-backend
-sudo journalctl -u aeolusdata-backend --since '5 minutes ago' --no-pager | grep -E 'RBAC|迁移'
+sudo systemctl restart aeolus-backend
+sudo journalctl -u aeolus-backend --since '5 minutes ago' --no-pager | grep -E 'RBAC|迁移'
 
 # 验证
 psql "$DATABASE_URL" -c "SELECT 'users' t, count(*) FROM rbac_users
@@ -413,7 +413,7 @@ psql "$DATABASE_URL" -c "SELECT 'users' t, count(*) FROM rbac_users
 注意：
 
 - **迁移前先留一份文件备份**（迁移不会删除原文件，但多一层保险）：
-  `sudo cp -a /opt/aeolusdata/apps/api/runtime/.users.json /root/users.json.pre-pg.bak`
+  `sudo cp -a /opt/aeolus/apps/api/runtime/.users.json /root/users.json.pre-pg.bak`
 - **未配置 `DATABASE_URL` 的环境会自动回落文件读写**，行为与迁移前完全一致 —— 不会因这次改造登不上系统。
 - 会话仍以内存为主（滑动续期只改内存），每 10 分钟快照回写 PG；非正常关机最多丢一个快照周期的续期时长。
 - 这五份数据现在随 `pg_dump` 一起备份即可，不再依赖 runtime 目录下的隐藏文件。

@@ -40,7 +40,7 @@ echo "=================================================================="
 echo "请把下面这段【公钥】作为「只读 Deploy Key」加到 GitHub 仓库："
 echo "  仓库页面 → Settings → Deploy keys → Add deploy key"
 echo "  （Allow write access 不要勾，只读即可）"
-echo "  地址：https://github.com/QiangChenCN/aeolusdata/settings/keys"
+echo "  地址：https://github.com/QiangChenCN/aeolus/settings/keys"
 echo "------------------------------------------------------------------"
 cat "$DEPLOY_KEY.pub"
 echo "=================================================================="
@@ -49,13 +49,13 @@ read -r -p "已在 GitHub 添加该 deploy key？按回车继续 clone，或 Ctr
 
 # 3) 拉代码（ECS 上已配好 GitHub 只读 deploy key，见上方 2.5）
 cd /opt
-rm -rf /opt/aeolusdata
-git clone git@github.com:QiangChenCN/aeolusdata.git
-cd /opt/aeolusdata
+rm -rf /opt/aeolus
+git clone git@github.com:QiangChenCN/aeolus.git
+cd /opt/aeolus
 
 # 4) Python 虚拟环境 + 依赖（由 uv 接管）
 #    单一来源 = services/compute/pyproject.toml；锁文件 = services/compute/uv.lock（已入库）。
-#    venv 落在 services/compute/.venv，与 deploy/aeolusdata-compute.service 的 ExecStart、
+#    venv 落在 services/compute/.venv，与 deploy/aeolus-compute.service 的 ExecStart、
 #    以及 scripts/manage.sh / watchdog.sh 三处路径保持一致，不再有两套布局。
 #    首次部署的机器通常没有 uv，这里自带安装（已装则跳过）。
 export PATH="$HOME/.local/bin:$PATH"
@@ -77,10 +77,10 @@ pnpm --filter aeolus-workbench-web build
 pnpm --filter aeolus-workbench-backend build
 
 # 7) 生成环境文件骨架（.env 被 gitignore，全新部署需从模板生成；密钥项稍后补全）
-#    单一配置来源 = 仓库根 .env（/opt/aeolusdata/.env）：systemd 的 EnvironmentFile 注入同一份，
+#    单一配置来源 = 仓库根 .env（/opt/aeolus/.env）：systemd 的 EnvironmentFile 注入同一份，
 #    Nest 显式读它，Python 回读它兜底。不再维护 apps/api/.env（避免两份漂移）。
-if [ ! -f /opt/aeolusdata/.env ]; then
-  cp apps/api/.env.example /opt/aeolusdata/.env
+if [ ! -f /opt/aeolus/.env ]; then
+  cp apps/api/.env.example /opt/aeolus/.env
 fi
 
 # 7.5) PostgreSQL 17：安装 + 建角色/库 + 把 DATABASE_URL 写进 .env（幂等，可重复跑）
@@ -106,14 +106,14 @@ if [ "$(su - postgres -c "psql -tAc \"SELECT 1 FROM pg_roles WHERE rolname='aeol
   DB_PASSWORD=$(openssl rand -hex 12)
   su - postgres -c "psql -v ON_ERROR_STOP=1 <<EOF
 CREATE ROLE aeolus WITH LOGIN PASSWORD '$DB_PASSWORD';
-CREATE DATABASE aeolusdata OWNER aeolus;
-GRANT ALL PRIVILEGES ON DATABASE aeolusdata TO aeolus;
+CREATE DATABASE aeolus OWNER aeolus;
+GRANT ALL PRIVILEGES ON DATABASE aeolus TO aeolus;
 EOF"
   # 用 printf 纯写追加，杜绝 .env 混入不可见字符导致连库失败的坑（DEPLOY.md §9.3）
-  if grep -q '^DATABASE_URL=' /opt/aeolusdata/.env; then
+  if grep -q '^DATABASE_URL=' /opt/aeolus/.env; then
     echo "警告：.env 已有 DATABASE_URL，未覆盖；请确认其密码与新库一致"
   else
-    printf 'DATABASE_URL=postgresql://aeolus:%s@localhost:5432/aeolusdata\n' "$DB_PASSWORD" >> /opt/aeolusdata/.env
+    printf 'DATABASE_URL=postgresql://aeolus:%s@localhost:5432/aeolus\n' "$DB_PASSWORD" >> /opt/aeolus/.env
   fi
   echo "=================================================================="
   echo "PG 角色 aeolus 密码（务必记好/存密码管理器）：$DB_PASSWORD"
@@ -125,13 +125,13 @@ fi
 echo "== setup 完成 =="
 echo "下一步（都是手动、一次性）："
 echo "  0) 从旧服务器迁移的：恢复 PG 数据（先 scp 旧服务器的 pg_dump 到 /tmp）"
-echo "       su - postgres -c \"pg_restore -d aeolusdata --no-owner --role=aeolus /tmp/aeolusdata.dump\""
+echo "       su - postgres -c \"pg_restore -d aeolus --no-owner --role=aeolus /tmp/aeolus.dump\""
 echo "  0.5) 旧服务器无 PG 备份/全新空库：跳过，各表由后端启动时自动建（CREATE TABLE IF NOT EXISTS），"
 echo "       业务历史数据靠重新取数回填，账号需在 UI 重建"
-echo "  1) 编辑 /opt/aeolusdata/.env，把 AUTH_TOKEN 与 NEST_AUTH_TOKEN 改成同一段强随机值"
+echo "  1) 编辑 /opt/aeolus/.env，把 AUTH_TOKEN 与 NEST_AUTH_TOKEN 改成同一段强随机值"
 echo "     （二者必须一致；这是唯一配置来源，Python 计算服务读取该文件兜底）"
 echo "       openssl rand -hex 24   # 生成一段随机值粘进去"
-echo "  2) 仓库根 /opt/aeolusdata/.env 是【唯一必须带外传输】的文件"
+echo "  2) 仓库根 /opt/aeolus/.env 是【唯一必须带外传输】的文件"
 echo "     （AUTH_TOKEN / NEST_AUTH_TOKEN 缺失时 systemd 因 EnvironmentFile 拒绝启动；"
 echo "       可直接从旧服务器整份拷贝，或至少补齐这两项为同一段强随机值）："
 echo "       openssl rand -hex 24   # 生成一段随机值，AUTH_TOKEN 与 NEST_AUTH_TOKEN 填同一份"
@@ -140,11 +140,11 @@ echo "     —— MinIO 图床：部署后到「系统设置 → MinIO 设置」
 echo "     —— cookie.txt 无需传输：后端用风神凭据自动 SSO 登录后自行生成，缺失会自动重登自愈"
 echo "     —— apps/api/runtime/jobs/delivery/db_config.json 按需（只影响对应取数模块，不影响启动）"
 echo "  3) 启用并启动三个服务："
-echo "       sudo cp deploy/aeolusdata-backend.service deploy/aeolusdata-compute.service deploy/aeolusdata-worker.service /etc/systemd/system/ \\"
+echo "       sudo cp deploy/aeolus-backend.service deploy/aeolus-compute.service deploy/aeolus-worker.service /etc/systemd/system/ \\"
 echo "       && sudo systemctl daemon-reload \\"
-echo "       && sudo systemctl enable --now aeolusdata-backend aeolusdata-compute aeolusdata-worker"
+echo "       && sudo systemctl enable --now aeolus-backend aeolus-compute aeolus-worker"
 echo "       （旧架构的单体 server.py（8917）已整体删除，只需启用上面两个服务）"
-echo "       sudo journalctl -u aeolusdata-backend -n 30 --no-pager   # 确认无报错、看到 bootstrap"
+echo "       sudo journalctl -u aeolus-backend -n 30 --no-pager   # 确认无报错、看到 bootstrap"
 echo "  4) 配置 nginx 反代（只暴露 443，证书放 /etc/nginx/ssl/aeolus/）："
 echo "       sudo cp deploy/nginx-aeolus.conf /etc/nginx/sites-available/aeolus \\"
 echo "       && sudo ln -s /etc/nginx/sites-available/aeolus /etc/nginx/sites-enabled/ \\"

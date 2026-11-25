@@ -1,11 +1,11 @@
-# AeolusData
+# Aeolus
 
 风神（骑手考核 / 运营）数据平台 —— 模块化单体后端 + Vue 前端 + Python 计算服务的 **pnpm monorepo**。
 
 ## 仓库结构
 
 ```
-aeolusdata/
+aeolus/
 ├── apps/
 │   ├── api/          # NestJS 后端（取数编排、RBAC、考核看板、SSE 推送）  [package: aeolus-workbench-backend]
 │   └── web/          # Vue 3 + Vite 前端（看板 / 任务中心 / 历史）        [package: aeolus-workbench-web]

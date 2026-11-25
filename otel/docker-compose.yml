@@ -1,4 +1,4 @@
-# AeolusData 可观测栈（OpenTelemetry Collector + Tempo + Grafana），纯旁路，不依赖现有业务服务。
+# Aeolus 可观测栈（OpenTelemetry Collector + Tempo + Grafana），纯旁路，不依赖现有业务服务。
 #
 # 启动（在仓库根，需先装 docker + docker compose）：
 #   docker compose -f otel/docker-compose.yml up -d

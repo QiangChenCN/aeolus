@@ -31,7 +31,7 @@ exports.AEOLUS_MONOREPO_NAME = void 0;
 exports.sleep = sleep;
 exports.greet = greet;
 /** 仓库 / 产品统一名（跨端保持一致，避免各处硬编码）。 */
-exports.AEOLUS_MONOREPO_NAME = 'aeolusdata';
+exports.AEOLUS_MONOREPO_NAME = 'aeolus';
 /** Promise 化的 setTimeout，跨端通用的「等待」工具。 */
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -42,4 +42,6 @@ function greet(scope) {
 }
 /** 全项目唯一取数字段映射字典（运单 + 违规处罚），前后端共用。 */
 __exportStar(require("./field-map.js"), exports);
+/** 证件照透视矫正公共算法（前端 Worker 与 NestJS 后端共用同一份实现）。 */
+__exportStar(require("./photo-rectify/index.js"), exports);
 //# sourceMappingURL=index.js.map

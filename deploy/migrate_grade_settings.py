@@ -3,7 +3,7 @@
 """服务器就地迁移：把旧代「月份×站点 5 档」配置迁移为新 schema_version=2 的
 standard_grade_settings.json。
 
-旧文件（服务器 /opt/aeolusdata/python/dashboard/standard/ 下）：
+旧文件（服务器 /opt/aeolus/python/dashboard/standard/ 下）：
   - grade_standards.json    大致结构 months[月][站点] = {order[5], duration_h[5], threshold_pct, cap_pct, enabled}
   - threshold_config.json   可能含全局默认门槛/封顶（结构未知，脚本会探测并打印）
 
@@ -12,7 +12,7 @@ standard_grade_settings.json。
                                   months:{月:{站点:{levels:[5],threshold_pct,cap_pct}}}}
 
 用法（在服务器上）：
-  cd /opt/aeolusdata
+  cd /opt/aeolus
   python3 deploy/migrate_grade_settings.py          # 预览（不写盘）
   python3 deploy/migrate_grade_settings.py --apply  # 真正迁移（先自动备份旧文件为 .bak）
 """
@@ -23,7 +23,7 @@ import shutil
 import argparse
 import datetime as _dt
 
-STD_DIR = "/opt/aeolusdata/python/dashboard/standard"
+STD_DIR = "/opt/aeolus/python/dashboard/standard"
 OLD_GRADE = os.path.join(STD_DIR, "grade_standards.json")
 OLD_THRESH = os.path.join(STD_DIR, "threshold_config.json")
 NEW_FILE = os.path.join(STD_DIR, "standard_grade_settings.json")

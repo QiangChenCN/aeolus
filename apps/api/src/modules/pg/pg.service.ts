@@ -13,7 +13,7 @@ import { Pool, PoolClient, QueryResultRow } from 'pg';
  * 这是「模块骨架」：只提供连接池 + 基础查询/事务原语，不含任何业务表逻辑。
  * 业务模块注入 PgService 后自行写 SQL，不引入 ORM 抽象。
  * 连接串统一从根 .env 的 DATABASE_URL 读取：
- *   DATABASE_URL=postgresql://aeolus:<密码>@localhost:5432/aeolusdata
+ *   DATABASE_URL=postgresql://aeolus:<密码>@localhost:5432/aeolus
  *
  * 设计要点：
  *   · DATABASE_URL 缺失时**不崩溃**（仅告警并跳过建池），保证未接 PG 的旧部署不受影响。

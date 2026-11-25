@@ -1,15 +1,15 @@
 name: Deploy (Backend + Web + Compute)
 
 # 主流部署方式：代码推到 main 后，由 GitHub Actions 负责全量部署
-#   · Backend (NestJS 8787)：pnpm install --frozen-lockfile + build → rsync dist/ + 仓库级 config/ → restart aeolusdata-backend
+#   · Backend (NestJS 8787)：pnpm install --frozen-lockfile + build → rsync dist/ + 仓库级 config/ → restart aeolus-backend
 #   · Web (前端静态)：pnpm install --frozen-lockfile + build → rsync apps/web/dist/（后端 main.ts 托管，无需重启）
-#   · Compute (Python 8900)：rsync 源码（保留服务器本地数据）→ pip 同步依赖 → restart aeolusdata-compute
+#   · Compute (Python 8900)：rsync 源码（保留服务器本地数据）→ pip 同步依赖 → restart aeolus-compute
 # 构建产物（dist/）与 .venv 不进 git 仓库，均在各自步骤现场产出 / 复用。
 # 依赖管理统一用 pnpm（见仓库根 pnpm-workspace.yaml / pnpm-lock.yaml；packageManager 锁定版本，靠 corepack 启用）。
 #
 # 需要在仓库 Settings → Secrets and variables → Actions 中配置：
 #   ECS_HOST      服务器 IP 或域名
-#   ECS_USER      SSH 登录用户（需有 /opt/aeolusdata 写权限与 systemctl 权限）
+#   ECS_USER      SSH 登录用户（需有 /opt/aeolus 写权限与 systemctl 权限）
 #   ECS_SSH_KEY   登录用的私钥（对应服务器 ~/.ssh/authorized_keys 里的公钥）
 
 on:
@@ -118,46 +118,46 @@ jobs:
           rsync -az \
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             config/ \
-            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/config/"
-          # deploy/ 配置需在服务器可读取（nginx 从 /opt/aeolusdata/deploy/ 拷贝生效配置）
+            "$ECS_USER@$ECS_HOST:/opt/aeolus/config/"
+          # deploy/ 配置需在服务器可读取（nginx 从 /opt/aeolus/deploy/ 拷贝生效配置）
           rsync -az \
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             deploy/ \
-            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/deploy/"
+            "$ECS_USER@$ECS_HOST:/opt/aeolus/deploy/"
           rsync -az --delete \
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             apps/api/dist/ \
-            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/apps/api/dist/"
+            "$ECS_USER@$ECS_HOST:/opt/aeolus/apps/api/dist/"
           # @aeolus/shared 是 workspace 包：后端 dist 里 import '@aeolus/shared' 走 node_modules
-          # 符号链接指向服务器 /opt/aeolusdata/packages/shared。它的 dist 在 CI 现场构建
+          # 符号链接指向服务器 /opt/aeolus/packages/shared。它的 dist 在 CI 现场构建
           # （上面 Build shared package），不进 git，必须显式同步 —— 否则服务器上的共享包
           # 停留在旧版、缺新增导出（如 violationId / VIOLATION_CODE_LABELS），后端启动即崩 → nginx 502。
           # （2026-11-23 字典迁入 shared 后实际踩过）。--delete 保证不残留旧产物。
           ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            "$ECS_USER@$ECS_HOST" 'mkdir -p /opt/aeolusdata/packages/shared'
+            "$ECS_USER@$ECS_HOST" 'mkdir -p /opt/aeolus/packages/shared'
           rsync -az --delete \
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             packages/shared/dist/ \
-            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/packages/shared/dist/"
+            "$ECS_USER@$ECS_HOST:/opt/aeolus/packages/shared/dist/"
           # /tokens.css 端点读取 apps/shared/tokens.css（令牌已迁出 web/），需显式同步。
           # rsync 不会自动创建多级目标目录，先 mkdir（目录已存在时无副作用）。
           ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            "$ECS_USER@$ECS_HOST" 'mkdir -p /opt/aeolusdata/apps/shared'
+            "$ECS_USER@$ECS_HOST" 'mkdir -p /opt/aeolus/apps/shared'
           rsync -az \
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             apps/shared/tokens.css \
-            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/apps/shared/tokens.css"
+            "$ECS_USER@$ECS_HOST:/opt/aeolus/apps/shared/tokens.css"
           # 任务注册表：TaskRegistryService 读 WORKBENCH_DIR/tasks.json（服务器默认即
-          # /opt/aeolusdata/apps/api/tasks.json），且按 mtime 热加载（改完刷新页面即生效）。
+          # /opt/aeolus/apps/api/tasks.json），且按 mtime 热加载（改完刷新页面即生效）。
           # tasks.json 不属于 dist 产物，不同步的话服务器任务中心永远停留在旧列表
           # （2026-11-16 实际踩过：orange_storm_appeal 上线后服务器不显示）。
           # 注意：tasks.json 以仓库为单一事实来源，此同步会覆盖服务器上的本地改动。
           rsync -az \
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             apps/api/tasks.json \
-            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/apps/api/tasks.json"
+            "$ECS_USER@$ECS_HOST:/opt/aeolus/apps/api/tasks.json"
           ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            "$ECS_USER@$ECS_HOST" 'systemctl restart aeolusdata-backend aeolusdata-worker'
+            "$ECS_USER@$ECS_HOST" 'systemctl restart aeolus-backend aeolus-worker'
 
       # ---------- Web（静态由后端托管，仅同步 dist，无需重启）----------
       - name: Build & Deploy Web
@@ -190,7 +190,7 @@ jobs:
           rsync -az --delete \
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             apps/web/dist/ \
-            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/apps/web/dist/"
+            "$ECS_USER@$ECS_HOST:/opt/aeolus/apps/web/dist/"
 
       # ---------- Mobile（uni-app H5，静态由 nginx /m/ 托管）----------
       - name: Build & Deploy Mobile
@@ -222,16 +222,16 @@ jobs:
           pnpm --filter aeolus-mobile-web build
           # 服务器上首次部署时 mobile/dist 目录不存在，先建目录再 rsync
           ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            "$ECS_USER@$ECS_HOST" 'mkdir -p /opt/aeolusdata/apps/mobile/dist'
+            "$ECS_USER@$ECS_HOST" 'mkdir -p /opt/aeolus/apps/mobile/dist'
           rsync -az --delete \
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             apps/mobile/dist/build/h5/ \
-            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/apps/mobile/dist/"
+            "$ECS_USER@$ECS_HOST:/opt/aeolus/apps/mobile/dist/"
 
       # ---------- Compute (Python) ----------
       # 注意：services/compute/ 内含服务器本地运行时数据（dashboard/standard/*.json、logs/ 等，均 gitignore），
       # 绝不可用 --delete，否则会删除服务器本地配置、搞坏其他看板。
-      # 仅同步源码 + 排除 .venv/缓存；依赖用 pip 在服务器 venv 内同步；最后 restart aeolusdata-compute。
+      # 仅同步源码 + 排除 .venv/缓存；依赖用 pip 在服务器 venv 内同步；最后 restart aeolus-compute。
       # 本次把 analytics/assessment/timeout.py 迁到 analytics/delivery_timeout/，显式删掉服务器上的旧文件。
       - name: Deploy Compute (Python)
         env:
@@ -264,14 +264,14 @@ jobs:
             --exclude='*.err' --exclude='*.log' --exclude='logs/' \
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             services/compute/ \
-            "$ECS_USER@$ECS_HOST:/opt/aeolusdata/services/compute/"
+            "$ECS_USER@$ECS_HOST:/opt/aeolus/services/compute/"
           ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             "$ECS_USER@$ECS_HOST" \
             'export PATH="$HOME/.local/bin:$PATH"
-             cd /opt/aeolusdata
-             rm -f /opt/aeolusdata/services/compute/analytics/assessment/timeout.py
+             cd /opt/aeolus
+             rm -f /opt/aeolus/services/compute/analytics/assessment/timeout.py
              # 按 uv.lock 精确复现依赖（含 OpenTelemetry）；--frozen 与 pyproject.toml 不一致会直接报错。
              (cd services/compute && uv sync --frozen --no-dev)
              # 重启前预检：otel 包在服务器 venv 内可正常导入，避免 OTEL_ENABLED=true 时服务起不来。
              (cd services/compute && OTEL_ENABLED=true uv run python -c "import compute_api.otel" && echo "compute otel import OK")
-             systemctl restart aeolusdata-compute'
+             systemctl restart aeolus-compute'

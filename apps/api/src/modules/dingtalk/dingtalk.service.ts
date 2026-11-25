@@ -832,7 +832,7 @@ export class DingtalkService {
         'https://api.github.com/repos/DingTalk-Real-AI/dingtalk-workspace-cli/releases/latest',
         {
           signal: AbortSignal.timeout(15000),
-          headers: { 'User-Agent': 'aeolusdata-dws-upgrade', Accept: 'application/vnd.github+json' },
+          headers: { 'User-Agent': 'aeolus-dws-upgrade', Accept: 'application/vnd.github+json' },
         },
       );
       if (!r.ok) return {};
