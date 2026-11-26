@@ -79,46 +79,13 @@
 
     <el-empty v-else description="没有匹配的任务" class="tc-empty" />
 
-    <!-- 最近运行 -->
-    <section class="panel">
-      <div class="panel-head">
-        <span class="panel-title">最近运行</span>
-        <span class="panel-count">{{ recentRuns.length }}</span>
-        <el-button text class="panel-more" @click="$router.push('/history')">全部记录<el-icon><ArrowRight /></el-icon></el-button>
-      </div>
-      <el-table :data="recentRuns" class="run-table" empty-text="暂无运行记录">
-        <el-table-column label="任务" prop="name" min-width="160" />
-        <el-table-column label="触发">
-          <template #default="{ row }">{{ row.trigger }}</template>
-        </el-table-column>
-        <el-table-column label="开始时间" prop="start" />
-        <el-table-column label="耗时">
-          <template #default="{ row }">{{ row.duration != null ? row.duration + 's' : '—' }}</template>
-        </el-table-column>
-        <el-table-column label="结果">
-          <template #default="{ row }">
-            <el-tag :type="row.etype" size="default" effect="light">
-              <span v-if="row.etype === 'success'" class="dot" />{{ row.result }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作">
-          <template #default="{ row }">
-            <el-button text size="default" @click="onOpenRun(row)">查看</el-button>
-            <el-button text size="default" type="danger" v-perm="'task:run'" @click="onDeleteRun(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </section>
-
     <TaskConfigDialog ref="cfgRef" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { ArrowRight } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 import TaskConfigDialog from '../../components/tasks/TaskConfigDialog.vue';
 import { useTasksStore } from '@shared/stores/tasks.js';
 import { useRunsStore } from '@shared/stores/runs.js';
@@ -187,47 +154,6 @@ const filtered = computed(() => {
   return list;
 });
 
-// 最近运行表格
-const recentRuns = computed(() =>
-  (runs.history || []).slice(0, 8).map((h) => {
-    const t = tasks.taskById(h.task_id);
-    const st = h.error_kind || h.status || '';
-    let result = '—', etype = 'info';
-    if (st === 'success') { result = '成功'; etype = 'success'; }
-    else if (st === 'failed') { result = '失败'; etype = 'danger'; }
-    else if (st === 'running') { result = '执行中'; etype = 'warning'; }
-    else if (st === 'stopped') { result = '已停止'; etype = 'info'; }
-    else if (st === 'queued') { result = '排队中'; etype = 'warning'; }
-    return {
-      run_id: h.run_id,
-      name: t ? t.name : (h.name || h.task_id),
-      trigger: h.trigger || '—',
-      start: h.start || '—',
-      duration: h.duration,
-      result,
-      etype,
-    };
-  }),
-);
-function onOpenRun(row) { if (row.run_id) runs.openLog(row.run_id); }
-
-async function onDeleteRun(row) {
-  if (!row.run_id) return;
-  try {
-    await ElMessageBox.confirm(`确定删除「${row.name}」这条运行记录吗？日志文件将一并删除。`, '删除运行记录', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-      type: 'warning',
-    });
-  } catch { return; }
-  try {
-    await runs.deleteRun(row.run_id);
-    ElMessage.success('已删除');
-  } catch (e) {
-    ElMessage.error(e.message || '删除失败');
-  }
-}
-
 function openConfig(id) { cfgRef.value?.open(id); }
 async function onRun(task) {
   try {
@@ -287,11 +213,6 @@ function onArtifacts(task) { artifact.open(task.id); }
   font-size: 15px; font-weight: 600; color: var(--el-text-color-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.dot {
-  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-  background: currentColor; margin-right: 5px; vertical-align: middle;
-}
-
 .desc {
   margin-top: 7px;
   color: var(--el-text-color-secondary); font-size: 12.5px; line-height: 1.6;
@@ -319,25 +240,8 @@ function onArtifacts(task) { artifact.open(task.id); }
 .tc-grid.is-list .desc { -webkit-line-clamp: 1; min-height: 0; margin-top: 5px; }
 .tc-grid.is-list .card-actions { margin-top: 0; padding-top: 0; border-top: 0; flex: none; }
 
-/* ── 空状态 / 最近运行 ─────────────────────────────── */
+/* ── 空状态 ────────────────────────────────────────── */
 .tc-empty { padding: 48px 0; }
-.panel {
-  margin-top: 24px;
-  background: var(--el-bg-color); border: 1px solid var(--el-border-color);
-  border-radius: 12px; overflow: hidden;
-}
-.panel-head {
-  display: flex; align-items: center; gap: 10px;
-  padding: 13px 18px; border-bottom: 1px solid var(--el-border-color-lighter);
-}
-.panel-title { font-size: 14px; font-weight: 600; }
-.panel-count {
-  font-size: 11.5px; color: var(--el-text-color-secondary);
-  background: var(--el-fill-color-light); padding: 2px 7px; border-radius: 5px;
-  font-variant-numeric: tabular-nums;
-}
-.panel-more { margin-left: auto; }
-.run-table { font-size: 13px; }
 
 /* ── 响应式 ───────────────────────────────────────── */
 @media (max-width: 768px) {
