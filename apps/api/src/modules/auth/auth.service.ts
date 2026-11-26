@@ -114,7 +114,7 @@ const DUMMY_HASH = DUMMY_SALT.toString('hex') + '$' + DUMMY_KEY.toString('hex');
 const ROLES_SEED: Record<string, RoleRecord> = {
   admin: { perms: [], parents: [], builtin: true, locked: true, all: true },
   operator: {
-    perms: ['view', 'file:read', 'task:run', 'data:refresh', 'cron:write', 'groups:write', 'config:write'],
+    perms: ['view', 'file:read', 'task:run', 'data:refresh', 'feedback:write', 'cron:write', 'groups:write', 'config:write'],
     parents: ['viewer'],
     builtin: true,
     locked: false,

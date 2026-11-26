@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ElMessage } from 'element-plus';
-import { fetchAttendDataset, fetchPreSchedule } from '@shared/api/dashboards.js';
+import { fetchAttendDataset, fetchAttendFeedback, fetchPreSchedule, saveAttendFeedback } from '@shared/api/dashboards.js';
 
 function todayStr() {
   const d = new Date(Date.now() + 8 * 3600 * 1000); // 北京时间
@@ -9,6 +9,11 @@ function todayStr() {
 function tomorrowStr() {
   const d = new Date(Date.now() + 8 * 3600 * 1000 + 24 * 3600 * 1000);
   return d.toISOString().slice(0, 10);
+}
+
+// 反馈表与时段看板的对齐键：日期 × 站点 × 骑手 × 时段（日期由一次请求固定，不需要入键）。
+export function feedbackKey(teamId, riderId, timeCode) {
+  return JSON.stringify([String(teamId ?? ''), String(riderId ?? ''), String(timeCode ?? '')]);
 }
 
 // 北京时间展示：fetched_at 带 +08:00 偏移，统一按 UTC+8 解析后格式化为 yyyy-mm-dd hh:mm:ss
@@ -45,6 +50,7 @@ export const useAttendPeriodStore = defineStore('attendPeriod', {
     resp: null,
     loading: false,
     dataError: '',
+    feedbackRows: [],
 
     // 站点看板 / 骑手看板 / 时段看板 / 实时看板的本地视图态
     rateFolded: {},
@@ -92,6 +98,13 @@ export const useAttendPeriodStore = defineStore('attendPeriod', {
     stationPeriods() { return this.station.periods || []; },
     riderRows() { return this.rider.rows || []; },
     riderPeriods() { return this.rider.periods || []; },
+    feedbackMap(state) {
+      const map = new Map();
+      for (const row of state.feedbackRows || []) {
+        map.set(feedbackKey(row.team_id, row.rider_id, row.time_code), row);
+      }
+      return map;
+    },
     stationRowsFiltered() {
       const ids = this.filterTeamIds;
       return ids === null ? this.stationRows : this.stationRows.filter((r) => ids.includes(String(r.team_id)));
@@ -121,6 +134,28 @@ export const useAttendPeriodStore = defineStore('attendPeriod', {
       this.teamSel = this.teamSel.filter((id) => ids.includes(String(id)));
     },
     markTeamTouched() { this.teamSelTouched = true; },
+    // 反馈表独立于考勤数据集，查询失败按「未反馈」展示，不阻断看板主数据。
+    async loadFeedback() {
+      try {
+        const res = await fetchAttendFeedback({ date: this.date });
+        this.feedbackRows = Array.isArray(res?.rows) ? res.rows : [];
+      } catch {
+        this.feedbackRows = [];
+      }
+    },
+    // 保存后只替换对应反馈行，不重拉考勤数据集（该接口首次可能要 30~40s）。
+    async saveFeedback(payload) {
+      const res = await saveAttendFeedback(payload);
+      if (!res?.ok) throw new Error(res?.error || '保存失败');
+      const row = res.row;
+      const key = feedbackKey(row.team_id, row.rider_id, row.time_code);
+      const idx = this.feedbackRows.findIndex(
+        (r) => feedbackKey(r.team_id, r.rider_id, r.time_code) === key,
+      );
+      if (idx >= 0) this.feedbackRows.splice(idx, 1, row);
+      else this.feedbackRows.push(row);
+      return row;
+    },
     async loadCached(force = false) {
       if (!force && this.datasetKey === this.date && this.resp !== null) return;
       this.loading = true;
@@ -135,6 +170,7 @@ export const useAttendPeriodStore = defineStore('attendPeriod', {
         }
         this.datasetKey = this.date;
         this.syncTeamSelection();
+        await this.loadFeedback();
       } catch (e) {
         this.dataError = e.message || '加载失败';
         this.resp = null;
@@ -151,6 +187,7 @@ export const useAttendPeriodStore = defineStore('attendPeriod', {
           this.resp = res;
           this.datasetKey = this.date;
           this.syncTeamSelection();
+          await this.loadFeedback();
           ElMessage.success('数据已刷新');
         } else {
           this.dataError = (res && res.error) || '刷新失败';

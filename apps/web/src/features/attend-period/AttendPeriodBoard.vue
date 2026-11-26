@@ -58,6 +58,22 @@
               <span :class="{ 'dv-miss': row.onlineOk === false }">{{ row.onlineDur }}</span><span class="dv-target">/{{ row.onlineTarget }}</span>
             </template>
           </el-table-column>
+          <el-table-column label="未达标原因反馈" min-width="230" align="center">
+            <template #default="{ row }">
+              <div v-if="!row.canFeedback" class="dv-feedback-none">无需反馈</div>
+              <div v-else class="dv-feedback-cell">
+                <div class="dv-feedback-main">
+                  <span class="dv-feedback-text" :class="{ 'dv-feedback-none': !row.hasFeedback }" :title="row.feedbackText">{{ row.feedbackText }}</span>
+                  <el-button
+                    v-perm="'feedback:write'"
+                    link type="primary" size="default" class="dv-feedback-btn"
+                    @click="openFeedback(row)"
+                  >{{ row.hasFeedback ? '编辑' : '反馈' }}</el-button>
+                </div>
+                <div v-if="row.feedbackMeta" class="dv-feedback-by" :title="row.feedbackMeta">{{ row.feedbackMeta }}</div>
+              </div>
+            </template>
+          </el-table-column>
         </el-table>
       </div>
       <div class="dv-pager">
@@ -69,20 +85,86 @@
         />
       </div>
     </el-card>
+
+    <el-dialog
+      v-model="feedbackDialogVisible"
+      :title="feedbackForm.row?.hasFeedback ? '编辑未达标原因反馈' : '填写未达标原因反馈'"
+      width="520px"
+      destroy-on-close
+    >
+      <div v-if="feedbackForm.row" class="dv-feedback-meta">
+        <div>{{ feedbackForm.row.team_name }} / {{ feedbackForm.row.rider_name }}（{{ feedbackForm.row.rider_id }}）</div>
+        <div>{{ feedbackForm.row.time_name }} · 达标状态：{{ feedbackForm.row.achievedText }}</div>
+        <div>完成单量 {{ feedbackForm.row.orders }}/{{ feedbackForm.row.orderTarget }}，有效在线 {{ feedbackForm.row.onlineDur }}/{{ feedbackForm.row.onlineTarget }}</div>
+      </div>
+      <el-form label-position="top">
+        <el-form-item label="反馈内容">
+          <el-input
+            v-model="feedbackForm.remark"
+            type="textarea" :rows="4" maxlength="500" show-word-limit
+            placeholder="请填写未达标原因及处理说明"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="feedbackDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="feedbackSaving" v-perm="'feedback:write'" @click="saveFeedback">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useAttendPeriodStore } from './store.js';
+import { ElMessage } from 'element-plus';
+import { feedbackKey, fmtBJ, useAttendPeriodStore } from './store.js';
 import { toNum, fmtDur, achClass } from './helpers.js';
 
 const store = useAttendPeriodStore();
 const {
-  tpRows, riderRowsFiltered: riderRows, riderPeriods, teamOptions, date, loading,
+  tpRows, riderRowsFiltered: riderRows, riderPeriods, teamOptions, date, loading, feedbackMap,
   tpFilterPeriod, tpFilterTeam, tpFilterAch, tpPage, tpPageSize,
 } = storeToRefs(store);
+
+const feedbackDialogVisible = ref(false);
+const feedbackSaving = ref(false);
+const feedbackForm = ref({ row: null, remark: '' });
+
+function openFeedback(row) {
+  feedbackForm.value = { row, remark: row.feedback || '' };
+  feedbackDialogVisible.value = true;
+}
+async function saveFeedback() {
+  const row = feedbackForm.value.row;
+  const remark = String(feedbackForm.value.remark || '').trim();
+  if (!row || !remark) { ElMessage.warning('请填写反馈内容'); return; }
+  const orderShort = row.orderOk === false;
+  const onlineShort = row.onlineOk === false;
+  const failType = orderShort && onlineShort ? 'BOTH_SHORT' : orderShort ? 'ORDER_SHORT' : 'ONLINE_SHORT';
+  feedbackSaving.value = true;
+  try {
+    await store.saveFeedback({
+      date: date.value,
+      teamId: row.team_id,
+      teamName: row.team_name,
+      riderId: row.rider_id,
+      riderName: row.rider_name,
+      timeCode: row.time_code,
+      timeName: row.time_name,
+      startTime: row.start_time,
+      endTime: row.end_time,
+      failType,
+      remark,
+    });
+    feedbackDialogVisible.value = false;
+    ElMessage.success('反馈已保存');
+  } catch (e) {
+    ElMessage.error(e.message || '保存失败');
+  } finally {
+    feedbackSaving.value = false;
+  }
+}
 
 const tpPeriodOptions = computed(() => tpRows.value.map(p => ({ code: String(p.time_code), name: p.time_name })));
 const tpAllPeriods = computed(() => tpPeriodOptions.value.map(p => p.code));
@@ -159,11 +241,24 @@ const tpRiderRows = computed(() => {
         achievedText = info.text; badgeClass = info.cls;
       } else { achievedText = cell.achieved === true ? '达标' : '不达标'; badgeClass = achClass(cell.achieved); }
       if (tpFilterAch.value.length && !tpFilterAch.value.includes(achievedText)) continue;
+      const feedback = feedbackMap.value.get(feedbackKey(r.team_id, r.rider_id, tc));
+      const remark = String(feedback?.remark ?? '').trim();
+      // 达标行无需反馈；其余行按反馈表内容展示，无记录则为未反馈。
+      const canFeedback = achievedText !== '达标';
+      const feedbackText = canFeedback ? (remark || '未反馈') : '无需反馈';
+      const feedbackUser = String(feedback?.feedback_user_name || feedback?.feedback_user || '').trim();
+      const feedbackTime = fmtBJ(feedback?.feedback_time);
+      const feedbackMeta = canFeedback && remark
+        ? `${feedbackUser || '—'} · ${feedbackTime === '—' ? '—' : feedbackTime}`
+        : '';
       rows.push({
-        time_name: p.time_name, rider_id: r.rider_id, rider_name: r.rider_name, team_name: r.team_name,
+        time_name: p.time_name, team_id: r.team_id, time_code: tc,
+        start_time: p.start_time, end_time: p.end_time,
+        rider_id: r.rider_id, rider_name: r.rider_name, team_name: r.team_name,
         achieved: cell.achieved, achievedText, badgeClass,
         orders: cell.orders ?? '—', orderTarget, orderOk: cell.order_ok,
         onlineDur: cell.online_sec == null ? '—' : fmtDur(cell.online_sec), onlineTarget, onlineOk: cell.online_ok,
+        feedback: remark, feedbackText, feedbackMeta, canFeedback, hasFeedback: !!remark,
       });
     }
   }

@@ -9,8 +9,9 @@
         />
       </div>
       <span class="sp" />
-      <el-button :loading="preLoading" @click="store.loadPre(true)">
-        <el-icon><Refresh /></el-icon> {{ preLoaded ? '重新加载' : '加载预排班' }}
+      <el-button :disabled="preLoading" @click="store.loadPre(true)">
+        <el-icon v-if="preLoading" class="is-loading"><Loading /></el-icon>
+        <el-icon v-else><Refresh /></el-icon> {{ preLoaded ? '重新加载' : '加载预排班' }}
       </el-button>
     </div>
     <el-alert v-if="preError" type="error" :closable="false" show-icon class="dv-hint">{{ preError }}</el-alert>

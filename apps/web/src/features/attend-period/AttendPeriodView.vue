@@ -21,8 +21,11 @@
         数据刷新时间：{{ fmtBJ(fetchedAt) }}
       </span>
       <span class="sp" />
-      <el-button type="primary" :loading="loading" @click="store.refresh()">
-        <el-icon><Refresh /></el-icon> {{ loading ? '刷新中…' : '刷新' }}
+      <el-button type="primary" :disabled="loading" @click="store.refresh()">
+        <el-icon v-if="loading" class="is-loading"><Loading /></el-icon>
+        <el-icon v-else><Refresh /></el-icon>
+        <span v-if="loading" class="dv-refresh-text">刷新中</span>
+        <span v-else class="dv-refresh-text">刷<span class="dv-refresh-gap"></span>新</span>
       </el-button>
     </div>
 

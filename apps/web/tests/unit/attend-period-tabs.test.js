@@ -13,6 +13,8 @@ vi.mock('@shared/api/dashboards.js', () => ({
       rider_detail: { rows: [], periods: [] },
     },
   })),
+  fetchAttendFeedback: vi.fn(async () => ({ ok: true, rows: [] })),
+  saveAttendFeedback: vi.fn(async () => ({ ok: true, row: {} })),
   fetchPreSchedule: vi.fn(async () => ({ ok: true, rows: [], periods: [] })),
 }));
 

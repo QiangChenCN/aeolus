@@ -17,6 +17,7 @@ export const PERM_CATALOG: PermItem[] = [
   { perm: 'file:read', label: '读取文件/下载', group: '数据' },
   { perm: 'task:run', label: '执行任务', group: '操作' },
   { perm: 'data:refresh', label: '刷新数据', group: '操作' },
+  { perm: 'feedback:write', label: '填写未达标原因反馈', group: '操作' },
   { perm: 'cron:write', label: '编辑定时任务', group: '操作' },
   { perm: 'groups:write', label: '管理分组', group: '操作' },
   { perm: 'config:write', label: '修改系统配置', group: '配置' },

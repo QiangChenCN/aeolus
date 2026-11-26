@@ -24,6 +24,8 @@
 .dv-rider-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .dv-rider-card :deep(.el-card__body) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .dv-bar { display: flex; align-items: center; gap: var(--sp-12); margin-bottom: var(--sp-16); flex-wrap: wrap; }
+.dv-refresh-text { display: inline-block; }
+.dv-refresh-gap { display: inline-block; width: 1em; }
 .v-title { margin: 0; font-size: var(--el-font-size-extra-large); }
 .dv-sel { width: 160px; }
 .dv-team-sel { width: 260px; }
@@ -41,6 +43,13 @@
 .dv-table .sort-h:hover { color: #fff; opacity: .85; }
 .dv-table .sort-ic { color: #fff; }
 .dv-target { color: var(--el-text-color-secondary); }
+.dv-feedback-none { color: var(--el-text-color-placeholder); }
+.dv-feedback-cell { display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 0; max-width: 100%; }
+.dv-feedback-main { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; }
+.dv-feedback-text { flex: 0 1 auto; min-width: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+.dv-feedback-btn { flex: none; margin-left: 0; padding: 0; }
+.dv-feedback-by { font-size: 11px; line-height: 1.2; color: var(--el-text-color-secondary); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dv-feedback-meta { display: flex; flex-direction: column; gap: var(--sp-4); margin-bottom: var(--sp-16); padding: var(--sp-12); border-radius: var(--el-border-radius-base); background: var(--el-fill-color-lighter); font-size: var(--el-font-size-extra-small); color: var(--el-text-color-regular); }
 .dv-miss { color: var(--danger, #d32f2f); }
 .dv-rate-block { margin-bottom: var(--sp-16); }
 .dv-rate-title { font-size: var(--el-font-size-medium); font-weight: var(--fw-semibold); color: var(--el-text-color-primary); }
