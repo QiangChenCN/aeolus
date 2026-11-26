@@ -93,10 +93,11 @@ const preDayTables = computed(() => {
 function preCell(row, period) { return row.cells?.[period] || { rate: null, scheduled: '—', required: '—' }; }
 function stationRowClass({ row }) { return row._isTotal ? 'dv-total-row' : ''; }
 
-/* 进入预排班且尚未加载时自动拉取；日期范围/站点变化后失效并按需重新拉取 */
+/* 进入预排班且尚未加载时自动拉取；日期范围/站点/考勤数据变化后失效并重新拉取 */
 onMounted(() => { store.loadPre(); });
 watch(preDates, () => { store.invalidatePre(); store.loadPre(true); }, { deep: true });
 watch(teamSel, () => { store.invalidatePre(); if (preLoaded.value) store.loadPre(true); });
+watch(() => store.resp, () => { store.invalidatePre(); store.loadPre(true); });
 </script>
 
 <style src="./attend-period.css" scoped></style>

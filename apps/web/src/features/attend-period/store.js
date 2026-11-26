@@ -2,6 +2,10 @@ import { defineStore } from 'pinia';
 import { ElMessage } from 'element-plus';
 import { fetchAttendDataset, fetchAttendFeedback, fetchPreSchedule, saveAttendFeedback } from '@shared/api/dashboards.js';
 
+// 页面壳与预排班子组件可能同时触发初始化；共享同一个 Promise，
+// 保证任何调用方 await 时数据集都已就绪（直接深链进入预排班时子组件先挂载）。
+let initPromise = null;
+
 function todayStr() {
   const d = new Date(Date.now() + 8 * 3600 * 1000); // 北京时间
   return d.toISOString().slice(0, 10);
@@ -120,11 +124,14 @@ export const useAttendPeriodStore = defineStore('attendPeriod', {
     hasData() { return this.tpRows.length > 0 || this.stationRows.length > 0 || this.riderRows.length > 0; },
   },
   actions: {
-    // 页面壳每次挂载都调用：只第一次取数据集，切 tab 重建壳不会重新请求。
-    async ensureInit() {
-      if (this.initialized) return;
-      this.initialized = true;
-      await this.loadCached();
+    // 页面壳与预排班子组件都会调用：共享同一个初始化 Promise，
+    // 避免直接深链进入预排班时 loadPre 抢在数据集加载之前执行。
+    ensureInit() {
+      if (!initPromise) {
+        this.initialized = true;
+        initPromise = this.loadCached();
+      }
+      return initPromise;
     },
     // 数据集变化后同步站点多选：未手动操作时保持空选（= 不过滤，展示全部有目标站点）；
     // 手动选过的只保留仍有效的站点。
@@ -205,16 +212,19 @@ export const useAttendPeriodStore = defineStore('attendPeriod', {
     async loadPre(force = false) {
       if (this.preLoading) return;
       if (this.preLoaded && !force) return;
-      const [start, end] = this.preDates || [];
-      if (!start || !end) {
-        this.preError = '请选择日期范围';
-        return;
-      }
       this.preLoading = true;
       this.preError = '';
       try {
+        // 深链进入预排班时子组件先于页面壳挂载，必须自己等数据集就绪。
+        await this.ensureInit();
+        const [start, end] = this.preDates || [];
+        if (!start || !end) throw new Error('请选择日期范围');
         const ids = this.filterTeamIds === null ? this.allTeamIds : this.filterTeamIds;
-        if (!ids.length) throw new Error('没有可导出的站点，请先在顶部选择站点');
+        if (!ids.length) {
+          if (this.resp?.need_refresh) throw new Error('请先点顶部「刷新」加载排班数据');
+          if (this.dataError) throw new Error(`排班数据加载失败：${this.dataError}`);
+          throw new Error('没有可导出的站点，请先在顶部选择站点');
+        }
         const res = await fetchPreSchedule({ teamIds: ids, start, end });
         if (res && res.ok) {
           this.preRaw = { rows: res.rows || [], periods: res.periods || [] };
