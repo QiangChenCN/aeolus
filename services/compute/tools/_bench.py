@@ -4,13 +4,13 @@ from analytics.core.paths import ROOT, PY_HOME, _ROOT  # noqa: E402,F401 <<<
 
 # 移除写死的 WorkBuddy 外机路径；ROOT 沿用上方 bootstrap 推导的仓库根
 os.chdir(ROOT)
-from analytics.domains.attend_period import attend_period_teams as APT
 from analytics.domains.standard import rider_period_detail as RPD
 from analytics.domains.attend_period import attend_period_all as APA
+from analytics.core.teams_config import TEAM_NAMES
 import urllib.request, urllib.error
 
 date = "2026-09-13"
-teams = APT.get_teams()
+teams = list(TEAM_NAMES.keys())
 out = []
 out.append("teams: %s" % teams)
 

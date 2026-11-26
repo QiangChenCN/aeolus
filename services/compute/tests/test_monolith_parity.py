@@ -122,8 +122,7 @@ POST_NEVER_SEND = {
 # 可写状态文件：POST 探测前后比对哈希，变了就说明该端点会真写入
 STATE_FILES = [
     "apps/api/runtime/.data_perms.json", "apps/api/runtime/.pwpolicy.json",
-    "apps/api/runtime/.roles.json", "apps/api/runtime/.users.json", "apps/api/runtime/org_tree.json",
-    "analytics/attend_period_teams.json",
+    "apps/api/runtime/.roles.json", "apps/api/runtime/.users.json",     "apps/api/runtime/org_tree.json",
     "python/dashboard/standard/standard_grade_settings.json",
     "apps/api/runtime/cron.db",
 ]

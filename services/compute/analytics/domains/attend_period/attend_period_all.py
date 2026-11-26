@@ -32,7 +32,6 @@ import datetime
 import concurrent.futures as _cf
 from analytics.domains.attend_period import attend_period as AP
 from analytics.domains.attend_period import rider_period_detail as RPD
-from analytics.domains.attend_period import attend_period_teams as APT
 
 BJ = datetime.timezone(datetime.timedelta(hours=8))
 ALL_TEAM_ID = "__all__"
@@ -88,6 +87,18 @@ def valid_all(teams, date):
                 sched_err[tid] = err
             else:
                 sched_map[tid] = ps
+
+    # 只保留有应排人数（predictNum>0）的站点，无目标站不再打考勤接口。
+    def _has_target(ps):
+        for p in ps or []:
+            try:
+                if float(p.get("predict_num") or 0) > 0:
+                    return True
+            except (TypeError, ValueError):
+                continue
+        return False
+
+    teams = [tid for tid in teams if tid in sched_err or _has_target(sched_map.get(tid))]
 
     # 实时考勤：每个站点只需请求一次（timeAttendanceVos 已含全时段明细），并发按站点提速。
     def _att(tid):
@@ -265,4 +276,4 @@ if __name__ == "__main__":
     _a = _ap.ArgumentParser()
     _a.add_argument("--date", default=datetime.datetime.now(BJ).strftime("%Y-%m-%d"))
     _ns = _a.parse_args()
-    print(_json.dumps(valid_all(APT.get_teams(), _ns.date), ensure_ascii=False, indent=2, default=str))
+    print(_json.dumps(valid_all(list(AP.TEAM_NAMES.keys()), _ns.date), ensure_ascii=False, indent=2, default=str))

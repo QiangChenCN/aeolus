@@ -63,4 +63,61 @@ describe('实时看板配送中单量筛选', () => {
     expect(wrapper.findAll('.rt-el-table .el-table__row')).toHaveLength(4);
     wrapper.unmount();
   });
+
+  it('站点候选只含有应排人数站点，顶部多选默认全展示且可手动筛选', () => {
+    const pinia = createPinia();
+    const store = useAttendPeriodStore(pinia);
+    store.resp = {
+      dataset: {
+        time_period: { rows: [], summary: {} },
+        station_data: {
+          rows: [
+            { team_id: 1, team_name: '站点A', metrics: { 1000: { target: 5 } } },
+            { team_id: 2, team_name: '站点B', metrics: { 1000: { target: 0 } } },
+            { team_id: 3, team_name: '站点C', metrics: { 1000: { target: 3 } } },
+          ],
+          periods: [],
+        },
+        rider_detail: {
+          rows: [
+            rider('r1', '骑手1', 0), rider('r2', '骑手2', 0), rider('r3', '骑手3', 0),
+          ],
+          periods: [],
+        },
+      },
+    };
+    store.syncTeamSelection();
+
+    expect(store.teamOptions).toEqual([
+      { id: '1', name: '站点A' }, { id: '3', name: '站点C' },
+    ]);
+    expect(store.teamSel).toEqual([]);
+    expect(store.isAllTeamSelected).toBe(false);
+    expect(store.stationRowsFiltered).toHaveLength(3);
+
+    store.markTeamTouched();
+    store.teamSel = store.allTeamIds;
+    expect(store.isAllTeamSelected).toBe(true);
+    expect(store.stationRowsFiltered).toHaveLength(2);
+
+    store.teamSel = ['3'];
+    expect(store.stationRowsFiltered).toHaveLength(1);
+    expect(store.stationRowsFiltered[0].team_id).toBe(3);
+    expect(store.isAllTeamSelected).toBe(false);
+
+    store.teamSel = [];
+    expect(store.riderRowsFiltered).toHaveLength(0);
+  });
+
+  it('无缓存数据在表格空态区域提示刷新', () => {
+    const pinia = createPinia();
+    const store = useAttendPeriodStore(pinia);
+    store.date = today();
+    store.resp = { need_refresh: true };
+
+    const wrapper = mount(AttendRealtimeBoard, { global: { plugins: [pinia] } });
+    expect(wrapper.find('.rt-empty-board').exists()).toBe(true);
+    expect(wrapper.text()).toContain('当前暂无缓存数据，请点「刷新」拉取实时数据');
+    wrapper.unmount();
+  });
 });

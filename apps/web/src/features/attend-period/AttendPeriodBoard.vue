@@ -80,7 +80,7 @@ import { toNum, fmtDur, achClass } from './helpers.js';
 
 const store = useAttendPeriodStore();
 const {
-  tpRows, riderRows, riderPeriods, teamOptions, date, loading,
+  tpRows, riderRowsFiltered: riderRows, riderPeriods, teamOptions, date, loading,
   tpFilterPeriod, tpFilterTeam, tpFilterAch, tpPage, tpPageSize,
 } = storeToRefs(store);
 

@@ -71,7 +71,8 @@ const preDayTables = computed(() => {
   const tables = [];
   for (const date of [...byDate.keys()].sort()) {
     let dataRows = [...byDate.get(date).values()];
-    if (!store.isAllTeam) dataRows = dataRows.filter(r => String(r.team_id) === store.selTeamId);
+    const ids = store.filterTeamIds;
+    if (ids !== null) dataRows = dataRows.filter(r => ids.includes(String(r.team_id)));
     if (!dataRows.length) continue;
     dataRows.sort((a, b) => String(a.team_name).localeCompare(String(b.team_name), 'zh-Hans-CN'));
     const total = { team_name: '合计', cells: {}, _isTotal: true };

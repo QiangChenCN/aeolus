@@ -205,7 +205,7 @@
     </div>
 
     <div v-else class="rt-empty-board">
-      <el-empty description="暂无可展示的时段达成数据" />
+      <el-empty :description="emptyDescription" />
     </div>
   </div>
 </template>
@@ -213,11 +213,11 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useAttendPeriodStore } from './store.js';
+import { useAttendPeriodStore, fmtBJ } from './store.js';
 
 const store = useAttendPeriodStore();
 const {
-  riderRows, stationRows, riderPeriods: periods, date, fetchedAt,
+  riderRowsFiltered: riderRows, stationRowsFiltered: stationRows, riderPeriods: periods, date, fetchedAt, needRefresh,
   keyword, statusFilter, schedFilter, wsFilter, delivFilter,
   page, pageSize, orderSort,
 } = storeToRefs(store);
@@ -237,6 +237,9 @@ const bj = computed(() => {
 });
 const isToday = computed(() => String(date.value || '').slice(0, 10) === bj.value.day);
 const isFuture = computed(() => String(date.value || '').slice(0, 10) > bj.value.day);
+const emptyDescription = computed(() => needRefresh.value
+  ? '当前暂无缓存数据，请点「刷新」拉取实时数据'
+  : '暂无可展示的时段达成数据');
 
 function _hm(v) {
   if (v == null || v === '') return null;
@@ -246,26 +249,6 @@ function _hm(v) {
   return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
 }
 function _pct(n, d) { return d > 0 ? Math.round((n / d) * 1000) / 10 : null; }
-/* 北京时间展示：fetched_at 带 +08:00 偏移，统一按 UTC+8 解析后格式化为 yyyy-mm-dd hh:mm:ss */
-function fmtBJ(v) {
-  if (!v) return '—';
-  const s = String(v);
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/);
-  if (!m) return s;
-  const [, y, mo, d, h, mi, sec] = m;
-  const offset = s.match(/([+-])(\d{2}):(\d{2})$/) || (/Z$/i.test(s) ? ['Z', '+', '00', '00'] : null);
-  if (offset) {
-    const sign = offset[1] === '-' ? -1 : 1;
-    const diffMin = sign * (Number(offset[2]) * 60 + Number(offset[3])) - 8 * 60;
-    if (diffMin !== 0) {
-      const t = Date.UTC(+y, +mo - 1, +d, +h, +mi, +sec) - diffMin * 60000;
-      const b = new Date(t);
-      const p = n => String(n).padStart(2, '0');
-      return `${b.getUTCFullYear()}-${p(b.getUTCMonth() + 1)}-${p(b.getUTCDate())} ${p(b.getUTCHours())}:${p(b.getUTCMinutes())}:${p(b.getUTCSeconds())}`;
-    }
-  }
-  return `${y}-${mo}-${d} ${h}:${mi}:${sec}`;
-}
 /* 秒 → 中文时长「X小时X分钟X秒」（精确到秒，不做四舍五入） */
 function fmtH(sec) {
   const s = Math.max(0, Math.floor(Number(sec) || 0));

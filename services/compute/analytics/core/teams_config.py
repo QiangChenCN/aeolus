@@ -6,9 +6,8 @@
 （GET /api/fetch/teams 成功即写盘）。本模块只做「读盘」，不再内置任何硬编码站点清单
 （原 TEAM_NAMES / DEFAULT_TEAMS 已移除）。所有需要站点名 / 站点列表的读取都走这份落盘文件。
 
-参与站点（标准达成「参与站点」/ 时段出勤「纳入站点」）的**用户配置**仍由各自 json 文件
-（teams_config.json / attend_period_teams.json）承载；仅在配置文件缺失时回落到落盘文件里的
-全部已知站点，不再硬编码默认三站。
+参与站点（标准达成「参与站点」）的**用户配置**仍由 teams_config.json 承载；
+时段出勤看板已取消站点配置，默认取全部已知站点中当天有应排人数的站点。
 """
 import os
 import time

@@ -142,6 +142,7 @@ def compute(team_id, date):
                 "period_count": 0, "configured_periods": 0,
             },
             "full_day_schedule": {"predict_num": None, "actual_num": None},
+            "has_target": False,
             "configured": False,
             "data_status": "not_configured",
             "data_note": note,
@@ -158,6 +159,25 @@ def compute(team_id, date):
     # 不二次取数。统一数据源 attend_period_source 复用此字段。
     fd_sched = next((r for r in sched_rows
                      if str(r.get("time_code")) == DAY_TIME_CODE), None)
+
+    # 时段出勤看板只展示「有应排人数」的站点（predict_num>0）。无应排人数时排班统计已足够判定，
+    # 直接短路，避免再打一次实时考勤接口。
+    if not any((_norm_int(p.get("predict_num")) or 0) > 0 for p in periods) \
+            and (_norm_int((fd_sched or {}).get("predict_num")) or 0) <= 0:
+        return {
+            "ok": True, "team": team_id,
+            "teamName": TEAM_NAMES.get(team_id, "team " + team_id),
+            "date": date, "periods": [], "rows": [],
+            "summary": {"rider_count": 0, "scheduled_total": 0, "achieved_total": 0,
+                        "period_count": 0, "configured_periods": 0},
+            "full_day_schedule": {
+                "predict_num": _norm_int((fd_sched or {}).get("predict_num")),
+                "actual_num": _norm_int((fd_sched or {}).get("actual_num")),
+            },
+            "has_target": False, "configured": True, "data_status": "ok", "data_note": "",
+            "fetched_at": datetime.datetime.now(BJ).isoformat(timespec="seconds"),
+            "source": "live",
+        }
 
     # 2) 时段配置（已在步骤 0 加载并校验）：按名称 / 起止时间 建索引；
     #    普通时段列顺序须与「时段设置」界面列顺序保持一致（支持手动拖拽排序，顺序以 cfg 数组为准）。
@@ -401,6 +421,7 @@ def compute(team_id, date):
             "predict_num": _norm_int(fd_sched.get("predict_num")) if fd_sched else None,
             "actual_num": _norm_int(fd_sched.get("actual_num")) if fd_sched else None,
         },
+        "has_target": True,
         "fetched_at": datetime.datetime.now(BJ).isoformat(timespec="seconds"),
         "source": "live",
     }

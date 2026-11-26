@@ -57,18 +57,24 @@ import datetime
 from sources import TEAM_NAMES
 from analytics.core import period_config as PC
 from analytics.domains.attend_period import rider_period_detail as RPD
-from analytics.domains.attend_period import attend_period_teams as APT
 
 BJ = datetime.timezone(datetime.timedelta(hours=8))
 DAY_TIME_CODE = "9999"     # 全天汇总行（排班目标接口）
 REST_STATES = {2}          # 小休（暂离）
 OFFLINE_STATES = {3}       # 下线（未在线装备）
 
-# 进程内缓存：键 (team, date) -> dataset dict。server 单进程串行处理请求，无需加锁。
+# 进程内缓存：键 (team, date, schema版本) -> dataset dict。server 单进程串行处理请求，无需加锁。
 _DS_CACHE = {}
+# 2026-11-26：取消站点配置、只保留有应排人数站点后旧快照口径失效，换目录强制重建。
+_DS_VERSION = "v2_target_only"
+
+
+def _ds_key(team, date):
+    return (str(team), date, _DS_VERSION)
+
 
 # 落盘目录（与原始层同根 apps/api/runtime/raw，子目录隔离避免污染 latest_cache_time_all）。
-_DS_DIR = dirs.runtime("raw/attend_ds")
+_DS_DIR = dirs.runtime("raw/attend_ds_v2")
 
 
 def _log(msg):
@@ -308,14 +314,14 @@ def _station_periods(periods, date=None):
 def build_dataset(team, date, teams=None):
     """构建统一数据集。team="__all__" 时逐站 compute 一次、合并 rider_rows 并逐站投影站点行。
 
-    teams: 显式站点 id 列表，覆盖 team=="__all__" 时的默认 attend_period_teams 配置，
-           用于数据权限裁剪（服务端已过滤出用户可见站点）。
+    teams: 显式站点 id 列表（服务端按用户数据权限裁剪）；不传时 team=="__all__"
+           取全部已知站点（站点目录落盘文件），不再依赖任何「展示站点」配置。
     """
     team = str(team)
     if teams is not None:
         teams = [str(t) for t in teams]
     else:
-        teams = APT.get_teams() if team == "__all__" else [team]
+        teams = list(TEAM_NAMES.keys()) if team == "__all__" else [team]
 
     rider_rows = []
     station_rows = []
@@ -331,15 +337,19 @@ def build_dataset(team, date, teams=None):
             config_note = res["data_note"]
         rows = res.get("rows") or []
         pers = res.get("periods") or []
-        rider_rows.extend(rows)
         fds = res.get("full_day_schedule") or {}
+        metrics = _project_team_metrics(rows, pers, fds)
+        # 只展示有应排人数（predict_num → metrics.target）的站点：无目标站不进入任何视图。
+        if not any((_norm_int(m.get("target")) or 0) > 0 for m in metrics.values()):
+            continue
+        rider_rows.extend(rows)
         if periods_tpl is None and pers:
             periods_tpl = pers
             fd_sched_tpl = fds
         station_rows.append({
             "team_id": str(tid),
             "team_name": TEAM_NAMES.get(str(tid), res.get("teamName", tid)),
-            "metrics": _project_team_metrics(rows, pers, fds),
+            "metrics": metrics,
         })
 
     if periods_tpl is None:
@@ -400,7 +410,7 @@ def get_dataset(team, date, refresh, teams=None):
 
     teams: 仅 refresh=True 且 team=="__all__" 时生效，用于数据权限裁剪。
     """
-    key = (str(team), date)
+    key = _ds_key(team, date)
     if not refresh:
         ds = _DS_CACHE.get(key)
         if ds is None:

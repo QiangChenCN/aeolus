@@ -2,30 +2,33 @@
   <div class="dv">
     <div class="dv-bar">
       <h2 class="v-title">排班出勤</h2>
-      <el-select v-model="teamSel" class="dv-sel" placeholder="站点">
-        <el-option label="全部站点" value="__all__" />
-        <el-option v-for="t in teamOptions" :key="t.id" :label="t.name" :value="t.id" />
+      <el-select v-model="teamSel" multiple clearable collapse-tags collapse-tags-tooltip :max-collapse-tags="2"
+                 class="dv-sel dv-team-sel" placeholder="全部站点" @change="store.markTeamTouched()">
+        <template #header>
+          <div class="dv-sel-all">
+            <div class="el-select-dropdown__item" @click.stop="toggleTeamAll">
+              {{ isAllTeamSelected ? '反选' : '全选' }}
+            </div>
+          </div>
+        </template>
+        <el-option v-for="t in teamOptions" :key="t.id" :label="t.name" :value="String(t.id)" />
       </el-select>
       <el-date-picker
         v-model="date" type="date" value-format="YYYY-MM-DD"
         placeholder="选择日期（默认当天）" class="dv-date" :clearable="false" @change="onDateChange"
       />
-      <span v-if="fetchedAt" class="dv-time" title="数据取数/落盘时间">
-        取数：{{ fetchedAt }} <em v-if="isCache" class="dv-cache">（缓存）</em>
+      <span v-if="fetchedAt" class="dv-time" title="数据刷新时间">
+        数据刷新时间：{{ fmtBJ(fetchedAt) }}
       </span>
       <span class="sp" />
-      <el-button @click="store.openCfg()"><el-icon><Setting /></el-icon> 站点配置</el-button>
       <el-button type="primary" :loading="loading" @click="store.refresh()">
-        <el-icon><Refresh /></el-icon> {{ loading ? '刷新中…' : '刷新数据' }}
+        <el-icon><Refresh /></el-icon> {{ loading ? '刷新中…' : '刷新' }}
       </el-button>
     </div>
 
     <!-- dataset 三个 tab 共用的状态提示；预排班独立取数，有自己的提示 -->
     <el-alert v-if="!isPreSchedule && dataError" type="error" :closable="false" show-icon class="dv-hint">
       {{ dataError }}
-    </el-alert>
-    <el-alert v-else-if="!isPreSchedule && needRefresh" type="info" :closable="false" show-icon class="dv-hint">
-      当前日期（{{ date }}）暂无缓存数据，请点「刷新数据」拉取实时数据并生成看板。
     </el-alert>
     <el-alert v-else-if="!isPreSchedule && dataNote" type="warning" :closable="false" show-icon class="dv-hint">{{ dataNote }}</el-alert>
 
@@ -39,16 +42,6 @@
       <el-tab-pane label="预排班" name="/attend-period/pre-schedule" />
     </el-tabs>
     <div class="dv-content"><router-view /></div>
-
-    <el-dialog v-model="cfgVisible" title="站点配置（选择需要在看板展示的站点）" width="440px">
-      <el-checkbox-group v-model="cfgSel" class="dv-cfg-group">
-        <el-checkbox v-for="t in teamsAll" :key="t.id" :value="t.id">{{ t.name }}</el-checkbox>
-      </el-checkbox-group>
-      <template #footer>
-        <el-button @click="cfgVisible = false">取消</el-button>
-        <el-button type="primary" :loading="cfgSaving" v-perm="'config:write'" @click="store.saveCfg()">保存</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -56,14 +49,14 @@
 import { computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { useAttendPeriodStore } from './store.js';
+import { useAttendPeriodStore, fmtBJ } from './store.js';
 
 const route = useRoute();
 const router = useRouter();
 const store = useAttendPeriodStore();
 const {
-  teamsAll, teamOptions, teamSel, date, fetchedAt, isCache, loading,
-  dataError, needRefresh, dataNote, cfgVisible, cfgSel, cfgSaving,
+  teamOptions, teamSel, isAllTeamSelected, date, fetchedAt, loading,
+  dataError, dataNote,
 } = storeToRefs(store);
 
 const TAB_PATHS = {
@@ -89,9 +82,15 @@ const activePath = computed({
 const isPreSchedule = computed(() => activePath.value === PRE_SCHEDULE_PATH);
 
 function onDateChange() { store.loadCached(); }
+function toggleTeamAll() {
+  const all = store.allTeamIds;
+  const sel = teamSel.value.map(String);
+  teamSel.value = isAllTeamSelected.value ? all.filter((id) => !sel.includes(id)) : [...all];
+  store.markTeamTouched();
+}
 
 // 切换站点会让预排班缓存失效；预排班组件挂载时再按需重新拉取
-watch(teamSel, () => store.invalidatePre());
+watch(teamSel, () => store.invalidatePre(), { deep: true });
 onMounted(() => store.ensureInit());
 </script>
 

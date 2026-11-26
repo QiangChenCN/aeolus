@@ -8,7 +8,7 @@ import { RawCacheService } from '../../infra/fetch/storage/raw-cache.service';
 
 /**
  * 配置层（原 Python `dashboard/standard/{teams_config,grade_standards,threshold_config,
- * period_config,attend_period_teams}.py` + `dashboard/realtime/config.py`）的 NestJS 原生实现。
+ * period_config}.py` + `dashboard/realtime/config.py`）的 NestJS 原生实现。
  *
  * 迁移目标（见 server.py→NestJS 映射 / ADR「Python 只做大计算」）：这些端点是**纯配置读写 +
  * 少量校验/塑形**，不是大数据计算，故由 Nest 接管为唯一写入方；Python 计算侧仍按原路径**读**
@@ -541,41 +541,10 @@ export class ConfigService {
     }
   }
 
-  // ============================================================ attend_period_teams
-  private aptGetTeams(): string[] {
-    const obj = this.readJson(this.stdPath('attend_period_teams.json'));
-    const ids = obj && Array.isArray(obj.teams) ? obj.teams : null;
-    if (!ids) return readKnownTeams().map((t) => t.id);
-    const out = ids.map((x: unknown) => String(x).trim()).filter((x: string) => x);
-    return out.length ? out : readKnownTeams().map((t) => t.id);
-  }
-  private aptSetTeams(ids: unknown): { ok: boolean; teams: string[]; error: string | null } {
-    if (!Array.isArray(ids) || !ids.length) {
-      return { ok: false, teams: this.aptGetTeams(), error: '站点不能为空' };
-    }
-    const clean: string[] = [];
-    const seen = new Set<string>();
-    for (const x of ids) {
-      const s = String(x).trim();
-      if (!s || seen.has(s)) continue;
-      seen.add(s);
-      clean.push(s);
-    }
-    if (!clean.length) {
-      return { ok: false, teams: this.aptGetTeams(), error: '站点不能为空' };
-    }
-    try {
-      this.atomicWrite(this.stdPath('attend_period_teams.json'), { teams: clean });
-      return { ok: true, teams: clean, error: null };
-    } catch (e) {
-      return { ok: false, teams: this.aptGetTeams(), error: `写入失败：${(e as Error).message}` };
-    }
-  }
-
   // ============================================================ assessment 展示站点
-  // 考核看板「展示站点」配置：与 attend_period_teams 同构（独立文件，避免与时段出勤/配送超时混用）。
+  // 考核看板「展示站点」配置（独立文件，避免与配送超时混用）。
   // 仅控制前端**展示**哪些站点；考核计算逻辑（Python 按 team 实时算）不受影响、仍全量可用。
-  // 落盘于 services/compute/dashboard/standard/assessment_teams.json（与 attend-period 同目录约定）。
+  // 落盘于 services/compute/dashboard/standard/assessment_teams.json。
   private asGetTeams(): string[] {
     const obj = this.readJson(this.stdPath('assessment_teams.json'));
     const ids = obj && Array.isArray(obj.teams) ? obj.teams : null;
@@ -634,7 +603,6 @@ export class ConfigService {
       '/api/service-quality/weather',
       '/api/attend-period/config',
       '/api/attend-period/months',
-      '/api/attend-period/teams',
       '/api/delivery-timeout/teams',
       '/api/assessment/teams',
       '/api/im-contact/teams',
@@ -664,8 +632,6 @@ export class ConfigService {
         return method === 'GET' ? this.periodConfigGet(q('month')) : this.periodConfigPost(body, user);
       case '/api/attend-period/months':
         return method === 'GET' ? this.periodMonthsGet() : { ok: false, error: '不支持的方法' };
-      case '/api/attend-period/teams':
-        return method === 'GET' ? this.apTeamsGet(allowed) : this.apTeamsPost(body);
       case '/api/assessment/teams':
         return method === 'GET' ? this.asTeamsGet(allowed) : this.asTeamsPost(body);
       case '/api/service-quality/targets':
@@ -704,26 +670,6 @@ export class ConfigService {
     const cur = currentMonth();
     if (!months.includes(cur)) months.push(cur);
     return { ok: true, months: [...new Set(months)].sort().reverse(), current: cur };
-  }
-
-  async apTeamsGet(allowed: Allowed): Promise<unknown> {
-    const payload = await this.teams.fetchAll();
-    const list = (payload.teams && payload.teams.length ? payload.teams : payload.fallback) || [];
-    const allRefs = list
-      .filter((t) => allowed === null || allowed.has(String(t.id)))
-      .map((t) => ({ id: String(t.id), name: String(t.name) }));
-    const teams = filterIds(this.aptGetTeams(), allowed);
-    return {
-      ok: payload.ok === false ? false : true,
-      teams,
-      all: allRefs,
-      source: payload.source,
-      error: payload.error || null,
-    };
-  }
-  apTeamsPost(body: any): unknown {
-    const r = this.aptSetTeams(body && body.teams);
-    return { ok: r.ok, teams: r.teams, error: r.error };
   }
 
   // ============================================================ 服务质量考核设置

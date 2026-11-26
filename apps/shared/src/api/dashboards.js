@@ -134,13 +134,6 @@ export function fetchPeriodMonths() {
 }
 
 /* ============ 时段出勤 ============ */
-/* 站点配置：GET 返回 {teams: 已配置展示站点id, all: 全部可选站点{id,name}}；POST 保存配置 */
-export function fetchAttendTeams() {
-  return request('/attend-period/teams');
-}
-export function saveAttendTeams(teams) {
-  return request('/attend-period/teams', j({ teams }));
-}
 export function fetchAttendValid({ team, date, refresh } = {}) {
   const p = [];
   if (team) p.push('team=' + enc(team));

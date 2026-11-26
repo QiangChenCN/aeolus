@@ -223,8 +223,8 @@ def _fetch_all_teams():
     """全部站点 [{id, name}]：取数已迁 NestJS —— 这里只转发 `GET /api/fetch/teams`。
 
     为什么不再自己打 xtop：站点目录属于「取数」，按分工归 Nest；且前端 `/api/teams`
-    （`apps/api/src/modules/teams/`）与本函数的两个消费者（`_teams_with_names` /
-    `_get_ap_teams`）必须共用**同一份**缓存，否则两侧各存 5 分钟 TTL、各打一次风神。
+    （`apps/api/src/modules/teams/`）与本函数的消费者（`_teams_with_names`）必须共用
+    **同一份**缓存，否则两侧各存 5 分钟 TTL、各打一次风神。
 
     保留一层本地 5 分钟缓存（TTL 与 Nest 侧一致）：Nest 短暂不可用时不必每次都打空。
     Nest 整体不可达时退回本地末位兜底清单，绝不让选择器空白。
@@ -257,6 +257,19 @@ def _fetch_all_teams():
     _TEAMS_CACHE["data"] = out
     _TEAMS_CACHE["ts"] = now
     return out
+
+
+def _attend_period_visible_teams(mode, val):
+    """排班出勤看板的候选站点：全部可见站点（站点目录落盘文件），不再读展示站点配置。"""
+    ids = [str(tid) for tid, _ in _teams_with_names()]
+    if mode == "all":
+        return ids
+    if mode == "scoped":
+        visible = {str(t) for t in (val or [])}
+        return [tid for tid in ids if tid in visible]
+    if mode == "one":
+        return [str(val)]
+    return []
 
 
 # 注：原 `check_cookie_status` / `_check_aeolus_cookie` / `_check_quark_cookie` 三个登录态
@@ -566,9 +579,7 @@ def _get_ap_valid(self, qs):
     try:
         if team == "__all__":
             from analytics.domains.attend_period import attend_period_all as APA
-            from analytics.domains.attend_period import attend_period_teams as APT
-            _ids = APT.get_teams() if mode == "all" else \
-                [t for t in APT.get_teams() if t in val]
+            _ids = _attend_period_visible_teams(mode, val)
             data = APA.valid_all(_ids, date)
         else:
             from analytics.domains.attend_period import attend_period as AP
@@ -600,9 +611,7 @@ def _get_ap_rider_detail(self, qs):
     try:
         from analytics.domains.attend_period import attend_period_source as APSRC
         if team == "__all__":
-            from analytics.domains.attend_period import attend_period_teams as APT
-            _ids = APT.get_teams() if mode == "all" else \
-                [t for t in APT.get_teams() if t in val]
+            _ids = _attend_period_visible_teams(mode, val)
             ds = APSRC.get_dataset("__all__", date, refresh=True, teams=_ids)
         else:
             ds = APSRC.get_dataset(team, date, refresh=True)
@@ -633,9 +642,7 @@ def _get_ap_station_data(self, qs):
     try:
         from analytics.domains.attend_period import attend_period_source as APSRC
         if team == "__all__":
-            from analytics.domains.attend_period import attend_period_teams as APT
-            _ids = APT.get_teams() if mode == "all" else \
-                [t for t in APT.get_teams() if t in val]
+            _ids = _attend_period_visible_teams(mode, val)
             ds = APSRC.get_dataset("__all__", date, refresh=True, teams=_ids)
         else:
             ds = APSRC.get_dataset(team, date, refresh=True)
@@ -675,9 +682,7 @@ def _get_ap_dataset(self, qs):
             _rate_limited_json(self, "attend_period", _wait, window=ATTEND_PERIOD_RATE_LIMIT_SEC)
             return
         if team == "__all__":
-            from analytics.domains.attend_period import attend_period_teams as APT
-            _ids = APT.get_teams() if mode == "all" else \
-                [t for t in APT.get_teams() if t in val]
+            _ids = _attend_period_visible_teams(mode, val)
             ds = APSRC.get_dataset("__all__", date, refresh=True, teams=_ids)
         else:
             ds = APSRC.get_dataset(team, date, refresh=True)
@@ -715,26 +720,6 @@ def _get_ap_months(self, qs):
         self._json({"ok": False, "error": "%s: %s" % (type(e).__name__, e)})
 
 
-def _get_ap_teams(self, qs):
-    try:
-        from analytics.domains.attend_period import attend_period_teams as APT
-        res = _fetch_all_teams()
-        raw = res.get("teams") or res.get("fallback") or []
-        # 可见站点集合直接取本次请求的 x-scope（由 compute 的 _GatewayHandler 提供）。
-        # 原先靠 session.role + dataperm.allowed_team_ids 兜底查询，现统一收敛到 x-scope。
-        _ids = self._visible_ids()
-        all_list = [{"id": str(t.get("id")), "name": t.get("name")} for t in raw
-                    if _ids is None or str(t.get("id")) in _ids]
-        _cfg = APT.get_teams()
-        if _ids is not None:
-            _cfg = [t for t in _cfg if str(t) in _ids]
-        self._json({"ok": res.get("ok", True), "teams": _cfg,
-                    "all": all_list, "source": res.get("source"),
-                    "error": res.get("error")})
-    except Exception as e:
-        self._json({"ok": False, "error": "%s: %s" % (type(e).__name__, e)})
-
-
 def _post_ap_config(self, data):
     try:
         from analytics.core import period_config as _PC
@@ -744,15 +729,6 @@ def _post_ap_config(self, data):
         self._json({"ok": True, **saved})
     except ValueError as e:
         self._json({"ok": False, "error": str(e)}, 400)
-    except Exception as e:
-        self._json({"ok": False, "error": "%s: %s" % (type(e).__name__, e)}, 400)
-
-
-def _post_ap_teams(self, data):
-    try:
-        from analytics.domains.attend_period import attend_period_teams as APT
-        ok, teams, msg = APT.set_teams(data.get("teams"))
-        self._json({"ok": ok, "teams": teams, "error": (msg or None)})
     except Exception as e:
         self._json({"ok": False, "error": "%s: %s" % (type(e).__name__, e)}, 400)
 
@@ -924,7 +900,6 @@ GET_ROUTES = {
     "/api/attend-period/dataset": _get_ap_dataset,
     "/api/attend-period/config": _get_ap_config,
     "/api/attend-period/months": _get_ap_months,
-    "/api/attend-period/teams": _get_ap_teams,
     "/api/overview/site-orders": _get_ov_site_orders,
     "/api/overview/standard": _get_ov_standard,
     "/api/overview/assessment": _get_ov_assessment,
@@ -935,5 +910,4 @@ GET_ROUTES = {
 
 POST_ROUTES = {
     "/api/attend-period/config": _post_ap_config,
-    "/api/attend-period/teams": _post_ap_teams,
 }

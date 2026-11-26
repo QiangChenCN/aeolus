@@ -6,8 +6,6 @@ import AttendPeriodView from '../../src/features/attend-period/AttendPeriodView.
 import { fetchAttendDataset } from '@shared/api/dashboards.js';
 
 vi.mock('@shared/api/dashboards.js', () => ({
-  fetchAttendTeams: vi.fn(async () => ({ all: [{ id: 1, name: '站点A' }], teams: [1] })),
-  saveAttendTeams: vi.fn(async () => ({ ok: true, teams: [1] })),
   fetchAttendDataset: vi.fn(async () => ({
     dataset: {
       time_period: { rows: [], summary: {} },

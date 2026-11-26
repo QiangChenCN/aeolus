@@ -26,6 +26,7 @@
 .dv-bar { display: flex; align-items: center; gap: var(--sp-12); margin-bottom: var(--sp-16); flex-wrap: wrap; }
 .v-title { margin: 0; font-size: var(--el-font-size-extra-large); }
 .dv-sel { width: 160px; }
+.dv-team-sel { width: 260px; }
 .dv-date { width: 180px; }
 .dv-time { font-size: var(--el-font-size-extra-small); color: var(--el-text-color-secondary); }
 .dv-cache { font-style: normal; color: var(--el-color-primary); font-size: 11px; }

@@ -62,7 +62,7 @@ export class ProxyController {
 
   /**
    * 看板配置端点（grade-global / service-quality/targets / attend-period/config /
-   * attend-period/teams）已迁 Nest 原生
+   * attend-period/months）已迁 Nest 原生
    * （config.service.ts），不再转发 Python。这里在通配前拦截并改派，避免依赖注册顺序。
    */
   private configSession(
