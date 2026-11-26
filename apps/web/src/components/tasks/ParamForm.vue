@@ -1,14 +1,20 @@
 <template>
   <div class="param-form">
     <el-form :label-position="labelPosition" :label-width="labelWidth" v-if="params.length">
-      <el-form-item v-for="p in params" :key="p.flag">
+      <el-form-item v-for="p in orderedParams" :key="p.flag" :class="{ 'pf-switch-row': p.type === 'switch' }">
         <template #label>
-          <span class="pf-label">
+          <span v-if="p.type !== 'switch'" class="pf-label">
             <el-icon class="pf-ic"><component :is="paramIcon(p)" /></el-icon>
             {{ p.label + (p.required ? ' *' : '') }}
           </span>
         </template>
-        <el-switch v-if="p.type === 'switch'" v-model="form[p.flag]" />
+        <span v-if="p.type === 'switch'" class="pf-switch-field">
+          <el-switch v-model="form[p.flag]" />
+          <span class="pf-label">
+            <el-icon class="pf-ic"><component :is="paramIcon(p)" /></el-icon>
+            {{ p.label + (p.required ? ' *' : '') }}
+          </span>
+        </span>
         <el-select
           v-else-if="p.type === 'select'"
           v-model="form[p.flag]" :placeholder="p.placeholder || '请选择'" style="width: 100%"
@@ -56,6 +62,17 @@ const props = defineProps({
 
 const tasks = useTasksStore();
 
+const PARAM_TYPE_ORDER = {
+  date: 0, daterange: 0,
+  select: 1, 'multi-team': 1,
+  group: 2, text: 2, textarea: 2, number: 2,
+  switch: 3,
+};
+const orderedParams = computed(() => props.params
+  .map((p, index) => ({ p, index, rank: PARAM_TYPE_ORDER[p.type] ?? 2 }))
+  .sort((a, b) => a.rank - b.rank || a.index - b.index)
+  .map(({ p }) => p));
+
 function optionsOf(p) {
   if (p.options_source === 'nodes' && props.task && Array.isArray(props.task.nodes)) {
     return props.task.nodes.map((n) => ({ value: n.id, label: n.name }));
@@ -80,6 +97,10 @@ const teamsList = computed(() =>
 .param-form { padding: var(--sp-4) 0; }
 .pf-label { display: inline-flex; align-items: center; gap: var(--sp-6); color: var(--el-text-color-regular); font-weight: var(--fw-medium); }
 .pf-ic { color: var(--el-text-color-regular); font-size: 15px; }
+.pf-switch-field { display: inline-flex; align-items: center; gap: var(--sp-8); }
+.pf-switch-row :deep(.el-form-item__label-wrap) { display: none; }
+.pf-switch-row :deep(.el-form-item__label) { display: none; }
+.pf-switch-row :deep(.el-form-item__content) { margin-left: 0 !important; }
 
 .pf-empty {
   display: flex; flex-direction: column; align-items: center; gap: var(--sp-8);

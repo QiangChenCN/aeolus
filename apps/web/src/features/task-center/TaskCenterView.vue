@@ -28,7 +28,7 @@
           <el-option label="排序：名称" value="name" />
           <el-option label="排序：状态优先" value="status" />
         </el-select>
-        <el-radio-group v-model="viewMode" size="small" class="tc-view">
+        <el-radio-group v-model="viewMode" size="default" class="tc-view">
           <el-radio-button value="grid"><el-icon><Grid /></el-icon></el-radio-button>
           <el-radio-button value="list"><el-icon><List /></el-icon></el-radio-button>
         </el-radio-group>
@@ -50,9 +50,6 @@
           <div class="card-text">
             <div class="title-row">
               <span class="t-title" :title="t.name">{{ t.name }}</span>
-              <el-tag size="small" :type="state(t).type" effect="light" class="t-chip">
-                <span v-if="state(t).dot" class="dot" />{{ state(t).txt }}
-              </el-tag>
             </div>
             <div class="desc">{{ t.desc || '—' }}</div>
             <div class="meta">
@@ -100,15 +97,15 @@
         </el-table-column>
         <el-table-column label="结果">
           <template #default="{ row }">
-            <el-tag :type="row.etype" size="small" effect="light">
+            <el-tag :type="row.etype" size="default" effect="light">
               <span v-if="row.etype === 'success'" class="dot" />{{ row.result }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作">
           <template #default="{ row }">
-            <el-button text size="small" @click="onOpenRun(row)">查看</el-button>
-            <el-button text size="small" type="danger" v-perm="'task:run'" @click="onDeleteRun(row)">删除</el-button>
+            <el-button text size="default" @click="onOpenRun(row)">查看</el-button>
+            <el-button text size="default" type="danger" v-perm="'task:run'" @click="onDeleteRun(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -126,7 +123,7 @@ import TaskConfigDialog from '../../components/tasks/TaskConfigDialog.vue';
 import { useTasksStore } from '@shared/stores/tasks.js';
 import { useRunsStore } from '@shared/stores/runs.js';
 import { useArtifactStore } from '@shared/stores/artifact.js';
-import { STATUS_TXT, GROUP_ICONS } from '@shared/utils/tokens.js';
+import { GROUP_ICONS } from '@shared/utils/tokens.js';
 
 const tasks = useTasksStore();
 const runs = useRunsStore();
@@ -155,18 +152,8 @@ function lastStatus(t) {
   const h = lastRecord(t);
   return h ? (h.error_kind || h.status || '') : 'none';
 }
-// 卡片右上角状态
-function state(t) {
-  if (isRunning(t)) return { txt: '执行中', type: 'warning', dot: true };
-  const s = lastStatus(t);
-  if (s === 'success') return { txt: '已启用', type: 'success', dot: true };
-  if (s === 'failed') return { txt: '上次失败', type: 'danger' };
-  if (s === 'stopped') return { txt: '已暂停', type: 'info' };
-  if (s === 'none') return { txt: '未运行', type: 'info' };
-  return { txt: STATUS_TXT[s] || s, type: 'info' };
-}
-// 运行按钮：已启用 / 执行中 → 实心 primary；其余 → 浅色 plain
-function runBtnPrimary(t) { return isRunning(t) || state(t).type === 'success'; }
+// 运行按钮：上次成功 / 执行中 → 实心 primary；其余 → 浅色 plain
+function runBtnPrimary(t) { return isRunning(t) || lastStatus(t) === 'success'; }
 
 function groupOf(t) { return tasks.groupById(t.group) || {}; }
 function groupName(t) { return groupOf(t).name || t.group || ''; }
@@ -300,7 +287,6 @@ function onArtifacts(task) { artifact.open(task.id); }
   font-size: 15px; font-weight: 600; color: var(--el-text-color-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.t-chip { flex: none; }
 .dot {
   display: inline-block; width: 6px; height: 6px; border-radius: 50%;
   background: currentColor; margin-right: 5px; vertical-align: middle;
