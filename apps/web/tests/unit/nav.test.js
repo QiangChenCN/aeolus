@@ -14,7 +14,7 @@ describe('navTo', () => {
     ['timeout', '/timeout'],
     ['imContact', '/im-contact'],
     ['unsatisfied', '/unsatisfied'],
-    ['cron', '/cron'],
+    ['cron', '/schedules'],
     ['assessService', '/assess/service'],
     ['assessStandard', '/assess/standard'],
     ['rbac-users', '/settings/rbac/users'],

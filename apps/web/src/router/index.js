@@ -62,7 +62,7 @@ const routes = [
       { path: 'tasks', name: 'tasks-all', component: TaskCenterView, meta: { title: '全部任务', kind: 'tasks', id: 'all' } },
       { path: 'history', name: 'history', component: HistoryView, meta: { title: '运行记录', kind: 'history', id: '' } },
       { path: 'preset', name: 'preset', component: PresetView, meta: { title: '预设' } },
-      { path: 'cron', name: 'cron', component: CronView, meta: { title: '定时任务', kind: 'cron' } },
+      { path: 'schedules', name: 'schedules', component: CronView, meta: { title: '定时任务', kind: 'cron' } },
       { path: 'cron-runs', name: 'cron-runs', component: AutoRunsView, meta: { title: '自动任务', kind: 'cron-runs' } },
       { path: 'assess', name: 'assess', component: AssessView, redirect: { name: 'assess-service' }, meta: { title: '考核设置', kind: 'assess', perm: 'config:write' },
         children: [
@@ -138,6 +138,7 @@ const routes = [
       // 取数基座目录：只读盘点页，所有登录用户可看（详情内部信息由后端按权限收敛）
       { path: 'settings/sources', name: 'sources', component: SourceRegistryView, meta: { title: '取数基座', kind: 'sys-sources', perm: 'view' } },
       // 旧路径深链兼容：机器人相关地址统一指向新一级模块
+      { path: 'cron', redirect: { name: 'schedules' } },
       { path: 'settings/aeolus', redirect: { name: 'credentials-aeolus' } },
       { path: 'settings/minio', redirect: { name: 'credentials-minio' } },
       // 旧钉钉路径保留重定向：收藏夹/历史链接仍可用，统一落到新的三方集成地址。
