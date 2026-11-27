@@ -46,7 +46,7 @@
 }
 
 /* 分段式标签页（全局默认，含今后新建的所有 el-tabs）：
-   浅灰圆角容器 + 按项数等分 + 选中态主色浅底 / 主色文字。
+   浅灰圆角容器宽度由各项内容撑开（不贯穿整行），选中态主色浅底 / 主色文字。
    同时覆盖 card 型与 line 型：card 的边框/尖脚、line 的下划线/指示条一律去掉。
    tab 高度沿用 EP 原生 40px（变量定义在 .el-tabs 上才生效）。 */
 .el-tabs {
@@ -63,8 +63,8 @@
   display: none;
 }
 .el-tabs > .el-tabs__header .el-tabs__nav {
-  display: flex;
-  width: 100%;
+  display: inline-flex;
+  width: auto;
   padding: 3px;
   box-sizing: border-box;
   border: none;
@@ -73,15 +73,22 @@
   overflow: hidden;
 }
 .el-tabs > .el-tabs__header .el-tabs__item {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 0 12px;
+  flex: 0 0 auto;
+  padding: 0 16px;
   text-align: center;
   border: none;
   background-color: transparent;
   color: var(--el-text-color-regular);
   font-weight: 500;
   transition: background-color var(--dur-base), color var(--dur-base);
+}
+/* EP 原生给 line 型 tabs 的首项 padding-left / 末项 padding-right 强制设 0，
+   card 型又拉回 20px；两者优先级都高于上面的通用规则，导致首尾文字贴边。
+   这里用更高优先级统一拉回 16px（nav 首个子元素是 active-bar，故首项对应 nth-child(2)）。 */
+.el-tabs.el-tabs--top > .el-tabs__header :is(.el-tabs__item:nth-child(2), .el-tabs__item:last-child),
+.el-tabs.el-tabs--bottom > .el-tabs__header :is(.el-tabs__item:nth-child(2), .el-tabs__item:last-child) {
+  padding-left: 16px;
+  padding-right: 16px;
 }
 .el-tabs > .el-tabs__header .el-tabs__item::before,
 .el-tabs > .el-tabs__header .el-tabs__item::after,

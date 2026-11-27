@@ -72,9 +72,10 @@ input, textarea { font-size: 16px; }
 }
 
 /* 分段式 tabs（全局公共样式，新增 tabs 一律用 .seg-tabs + .seg-tab）：
-   浅灰圆角容器 + 等分选项 + 选中态主色浅底/主色文字，与 web 端 el-tabs 同款。 */
+   浅灰圆角容器宽度由各项内容撑开（不贯穿整行）+ 选中态主色浅底/主色文字，
+   与 web 端 el-tabs 同款。 */
 .seg-tabs {
-  display: flex;
+  display: inline-flex;
   gap: 0;
   padding: 3px;
   box-sizing: border-box;
@@ -82,9 +83,8 @@ input, textarea { font-size: 16px; }
   background: var(--c-fill-soft);
 }
 .seg-tab {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 8px 10px;
+  flex: 0 0 auto;
+  padding: 8px 16px;
   border-radius: 6px;
   font-size: 14.5px;
   font-weight: 600;
