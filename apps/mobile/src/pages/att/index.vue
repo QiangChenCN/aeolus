@@ -3,8 +3,8 @@
     <AuthGate>
     <scroll-view class="m-scroll" scroll-y :scroll-top="scrollTop" @scroll="onScroll">
       <view class="page-head"><h1>考勤</h1></view>
-      <view class="filter">
-        <view v-for="(f, i) in filters" :key="f" class="filter-btn" :class="{ active: i === active }" @click="setFilter(i)">{{ f }}</view>
+      <view class="seg-tabs">
+        <view v-for="(f, i) in filters" :key="f" class="seg-tab" :class="{ active: i === active }" @click="setFilter(i)">{{ f }}</view>
       </view>
       <view v-if="visibleItems.length" class="list">
         <view v-for="item in visibleItems" :key="item.id" class="row" @click="toast(item.title + '（演示）')">

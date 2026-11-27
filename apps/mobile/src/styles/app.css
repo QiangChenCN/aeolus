@@ -71,20 +71,31 @@ input, textarea { font-size: 16px; }
   color: var(--ink-300); letter-spacing: 0.14em;
 }
 
-/* 筛选 tab */
-.filter { display: flex; gap: 18px; padding: 0 24px 12px; }
-.filter-btn {
-  background: none; border: none; font: inherit;
-  font-size: 14.5px; font-weight: 600; color: var(--ink-500);
-  padding: 5px 2px; position: relative;
+/* 分段式 tabs（全局公共样式，新增 tabs 一律用 .seg-tabs + .seg-tab）：
+   浅灰圆角容器 + 等分选项 + 选中态主色浅底/主色文字，与 web 端 el-tabs 同款。 */
+.seg-tabs {
+  display: flex;
+  gap: 0;
+  padding: 3px;
+  box-sizing: border-box;
+  border-radius: var(--el-border-radius-base, 8px);
+  background: var(--c-fill-soft);
 }
-.filter-btn.active { color: var(--brand-600); }
-.filter-btn.active::after {
-  content: ''; position: absolute; left: 50%; bottom: 0;
-  width: 20px; height: 3px; border-radius: 2px;
-  background: var(--brand-500);
-  transform: translateX(-50%) scaleX(1);
-  transition: transform 220ms var(--ease-out-quart);
+.seg-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 14.5px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--ink-500);
+  background: transparent;
+  transition: background-color 150ms var(--ease-out-quart), color 150ms var(--ease-out-quart);
+}
+.seg-tab.active {
+  background: var(--c-brand-soft);
+  color: var(--c-brand);
 }
 
 /* 通用列表行 */
@@ -120,7 +131,7 @@ input, textarea { font-size: 16px; }
 
 /* 触摸反馈：可点击元素按下时即时响应，避免原生 App 的「点了没反应」感 */
 .row:active,
-.filter-btn:active,
+.seg-tab:active,
 .tab-btn:active,
 .cell:active,
 .oauth-btn:active,

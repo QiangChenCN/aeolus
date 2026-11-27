@@ -17,7 +17,7 @@
     </el-alert>
     <el-alert v-else-if="dataNote" type="warning" :closable="false" show-icon class="dv-hint">{{ dataNote }}</el-alert>
 
-    <!-- 卡片式标签页（与标准达成看板同款 Edge 风格）：只用其头部做切换，
+    <!-- 分段式标签页（全局统一样式）：只用其头部做切换，
          内容区仍由 .dv-body + v-show 承载，保持 bodyRef 高度测量链不变 -->
     <el-tabs v-model="activeTab" type="card" class="dv-tabs">
       <el-tab-pane label="站点数据" name="station" />

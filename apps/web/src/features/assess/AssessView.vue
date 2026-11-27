@@ -39,7 +39,7 @@ const activePath = computed({
 <style scoped>
 .assess { display: flex; flex-direction: column; min-height: 100%; }
 .assess-bar { padding: var(--sp-12) var(--sp-20) 0; background: var(--el-bg-color); }
-/* card 型 tab：每个 tab 是卡片样式，头部下边框与内容区衔接 */
+/* 分段式 tab：全局统一样式，此处只隐藏内容区 */
 .assess-tabs { box-shadow: none; }
 .assess-tabs :deep(.el-tabs__content) { display: none; }
 .assess-tabs :deep(.el-tabs__item) { height: 40px; line-height: 40px; }

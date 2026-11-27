@@ -2,8 +2,8 @@
   <div class="dv">
     <div class="dv-topbar">
       <span class="dv-title">违规处罚</span>
-      <!-- 卡片式标签页：与标准达成看板同款 Edge 风格（type="card" 自动套用全局样式）。
-           只用头部做切换，内容区仍由 .dv-pane + v-show 承载。 -->
+      <!-- 分段式标签页（全局统一样式）：只用头部做切换，
+           内容区仍由 .dv-pane + v-show 承载。 -->
       <el-tabs v-model="tab" type="card" class="dv-tabs">
         <el-tab-pane label="实时" name="realtime" />
         <el-tab-pane label="月累计" name="monthly" />
@@ -903,8 +903,7 @@ onMounted(() => {
   font-weight: 600;
   white-space: nowrap;
 }
-/* 卡片式标签页：只取头部（内容区在 tabs 外），
-   由 Edge 标签 header 自身的 1px 底边承担分隔 */
+/* 分段式标签页：只取头部（内容区在 tabs 外） */
 .dv-tabs {
   width: 100%;
   flex: none;

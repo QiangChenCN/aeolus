@@ -1,9 +1,9 @@
 <template>
   <div class="tabshell">
     <div class="tabshell-bar">
-      <el-menu :default-active="activePath" mode="horizontal" router class="tabshell-menu">
-        <el-menu-item v-for="t in tabs" :key="t.to" :index="t.to">{{ t.label }}</el-menu-item>
-      </el-menu>
+      <el-tabs v-model="activePath" class="tabshell-tabs" @tab-change="(p) => $router.push(String(p))">
+        <el-tab-pane v-for="t in tabs" :key="t.to" :label="t.label" :name="t.to" />
+      </el-tabs>
     </div>
     <router-view v-slot="{ Component }">
       <component :is="Component" />
@@ -21,15 +21,17 @@ const tabs = computed(() => {
   const parent = route.matched.find((r) => r.meta && Array.isArray(r.meta.tabs));
   return (parent && parent.meta.tabs) || [];
 });
-const activePath = computed(() => {
-  const hit = tabs.value.find((t) => route.path.startsWith(t.to));
-  return (hit && hit.to) || (tabs.value[0] && tabs.value[0].to) || '';
+const activePath = computed({
+  get() {
+    const hit = tabs.value.find((t) => route.path.startsWith(t.to));
+    return (hit && hit.to) || (tabs.value[0] && tabs.value[0].to) || '';
+  },
+  set() { /* 选中由 @tab-change 路由跳转驱动，v-model 仅承接回显 */ },
 });
 </script>
 
 <style scoped>
 .tabshell { display: flex; flex-direction: column; min-height: 100%; }
 .tabshell-bar { padding: var(--sp-12) var(--sp-20) 0; background: var(--el-bg-color); }
-.tabshell-menu { border-bottom: 1px solid var(--el-border-color); }
-.tabshell-menu :deep(.el-menu-item) { height: 44px; line-height: 44px; }
+.tabshell-tabs :deep(.el-tabs__content) { display: none; }
 </style>

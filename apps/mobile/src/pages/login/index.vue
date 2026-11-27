@@ -15,9 +15,9 @@
     <!-- 表单面板 -->
     <main class="panel">
       <!-- 登录方式 Tab -->
-      <view class="tabs">
-        <view class="tab" :class="{ active: mode === 'pwd' }" @click="mode = 'pwd'">密码登录</view>
-        <view class="tab" :class="{ active: mode === 'sms' }" @click="mode = 'sms'">验证码登录</view>
+      <view class="seg-tabs">
+        <view class="seg-tab" :class="{ active: mode === 'pwd' }" @click="mode = 'pwd'">密码登录</view>
+        <view class="seg-tab" :class="{ active: mode === 'sms' }" @click="mode = 'sms'">验证码登录</view>
       </view>
 
       <!-- 验证码登录 -->
@@ -320,26 +320,7 @@ function toDesktop() {
   flex-direction: column;
 }
 
-.tabs { display: flex; gap: 26px; margin-bottom: 26px; }
-.tab {
-  position: relative;
-  padding: 6px 2px;
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--ink-500);
-}
-.tab.active { color: var(--ink-900); }
-.tab.active::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -2px;
-  width: 22px;
-  height: 3.5px;
-  border-radius: 2px;
-  background: var(--brand-500);
-  transform: translateX(-50%);
-}
+.seg-tabs { margin-bottom: 26px; }
 
 .field {
   display: flex;
