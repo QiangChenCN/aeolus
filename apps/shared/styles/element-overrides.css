@@ -46,7 +46,7 @@
 }
 
 /* 分段式标签页（全局默认，含今后新建的所有 el-tabs）：
-   浅灰圆角容器宽度由各项内容撑开（不贯穿整行），选中态主色浅底 / 主色文字。
+   白底 + 1px 灰色描边的圆角容器宽度由各项内容撑开（不贯穿整行），选中态主色浅底 / 主色文字。
    同时覆盖 card 型与 line 型：card 的边框/尖脚、line 的下划线/指示条一律去掉。
    tab 高度沿用 EP 原生 40px（变量定义在 .el-tabs 上才生效）。 */
 .el-tabs {
@@ -67,9 +67,9 @@
   width: auto;
   padding: 3px;
   box-sizing: border-box;
-  border: none;
+  border: 1px solid var(--el-border-color, var(--c-scrollbar));
   border-radius: var(--el-border-radius-base);
-  background-color: var(--c-fill-soft);
+  background-color: var(--el-bg-color);
   overflow: hidden;
 }
 .el-tabs > .el-tabs__header .el-tabs__item {
