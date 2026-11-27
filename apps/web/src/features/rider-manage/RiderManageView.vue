@@ -303,12 +303,12 @@ import { useAuthStore } from '@shared/stores/auth.js';
 const auth = useAuthStore();
 const canWrite = computed(() => auth.hasPerm('config:write'));
 
-/** 统一列表列顺序：状态与三类日期集中展示，离职信息不再按页签隐藏。 */
+/** 统一列表列顺序：入职信息紧随入职日期，离职信息集中展示。 */
 const VISIBLE_KEYS = [
   'staffName', 'knightId', 'workStatus', 'mobile', 'departmentName',
-  'entryDate', 'applyDate', 'preLeaveDate', 'leaveDate', 'leaveReason',
-  'riderAttribute', 'entrySource', 'sourceDetail', 'settlementMethod',
-  'settlementPrice', 'remark', 'idNumber', 'refreshedAt',
+  'entryDate', 'riderAttribute', 'entrySource', 'sourceDetail', 'settlementMethod',
+  'settlementPrice', 'applyDate', 'preLeaveDate', 'leaveDate', 'leaveReason',
+  'remark', 'idNumber', 'refreshedAt',
 ];
 const FALLBACK_COLUMNS = [
   ...KNIGHT_COLUMNS,
@@ -546,6 +546,14 @@ function selectRow(row) {
   loadHistory(row.knightId);
 }
 
+function onDocumentClick(event) {
+  if (!detailVisible.value) return;
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (target.closest('.rm-profile-drawer, .el-dialog, .el-table__row')) return;
+  detailVisible.value = false;
+}
+
 async function loadHistory(knightId) {
   if (!knightId) { historyRows.value = []; return; }
   historyLoading.value = true;
@@ -608,7 +616,10 @@ function onKeywordInput() {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => reload(), 300);
 }
-onUnmounted(() => clearTimeout(searchTimer));
+onUnmounted(() => {
+  clearTimeout(searchTimer);
+  document.removeEventListener('click', onDocumentClick);
+});
 
 function onRiderAttributeChange() {
   if (form.riderAttribute !== '兼职') {
@@ -809,6 +820,7 @@ async function onTransferSave() {
 onMounted(() => {
   loadTeams();
   load();
+  document.addEventListener('click', onDocumentClick);
 });
 </script>
 
