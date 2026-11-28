@@ -1,5 +1,11 @@
 <template>
-  <template v-if="node.type === 'leaf'">
+  <template v-if="node.type === 'leaf' && node.external">
+    <a :href="node.external" class="nv" :style="indent" @click.stop>
+      <el-icon class="ic"><component :is="node.icon" /></el-icon>
+      <span class="nm">{{ node.name }}</span>
+    </a>
+  </template>
+  <template v-else-if="node.type === 'leaf'">
     <RouterLink :to="navTo(node)" class="nv" :class="{ on: navIsActive(node, route) }" :style="indent" @click.stop>
       <el-icon class="ic"><component :is="node.icon" /></el-icon>
       <span class="nm">{{ node.name }}</span>

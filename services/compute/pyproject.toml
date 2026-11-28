@@ -23,6 +23,9 @@ dependencies = [
   "opentelemetry-exporter-otlp-proto-grpc",
   "opentelemetry-instrumentation-fastapi",
   "opentelemetry-instrumentation-requests",
+  # AI 助手：DeepSeek Harness Python SDK（自带 dsh 运行时 wheel，不依赖系统 Node）。
+  # 懒加载：未安装时 compute 仍可启动，仅 AI 端点返回不可用。
+  "deepseek-harness-sdk==0.2.2rc2",
 ]
 
 [dependency-groups]

@@ -41,6 +41,13 @@ export default defineConfig({
       // 开发联调：把 /api 代理到 NestJS 后端（默认 8787），由它做鉴权/会话 + 注入 x-scope 后
       // 再委托 FastAPI 计算服务（8900）。注意 /api 必须走 Nest，不能直连单体 8917
       // （否则绕过 Nest 会话与 x-scope 数据权限链路）。
+      // 官方 DSH WebUI：同域代理到 NestJS（iframe 的 src）。
+      // /ai 是 Vue iframe 页，不走代理；只代理 /ai-official。
+      '/ai-official': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+        ws: true,
+      },
       '/api': {
         target: 'http://localhost:8787',
         // 保留浏览器原始 Host，避免钉钉 OAuth 回跳地址被生成为 localhost:8787

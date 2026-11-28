@@ -24,6 +24,13 @@
         </div>
         <el-icon class="card-arw"><ArrowRight /></el-icon>
       </RouterLink>
+      <RouterLink to="/settings/ai" class="card">
+        <div>
+          <div class="card-t">AI 设置</div>
+          <div class="card-d">DeepSeek Harness 的 API Key / Base URL / 模型与超时配置，保存后热生效</div>
+        </div>
+        <el-icon class="card-arw"><ArrowRight /></el-icon>
+      </RouterLink>
       <RouterLink to="/settings/rbac" class="card">
         <div>
           <div class="card-t">权限管理</div>

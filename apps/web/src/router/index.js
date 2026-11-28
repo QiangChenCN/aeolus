@@ -41,6 +41,10 @@ import BotInstancesView from '../features/bot-instances/BotInstancesView.vue';
 import BotAssemblyView from '../features/bot-assembly/BotAssemblyView.vue';
 import ProfileInfoView from '../features/profile-info/ProfileInfoView.vue';
 import PhotoRectifyView from '../features/photo-rectify/PhotoRectifyView.vue';
+import AiAssistantView from '../features/ai-assistant/AiAssistantView.vue';
+import AiOfficialFrameView from '../features/ai-assistant/AiOfficialFrameView.vue';
+import AiFeatureMapView from '../features/ai-assistant/AiFeatureMapView.vue';
+import AiSettingsView from '../features/ai-assistant/AiSettingsView.vue';
 import RiderManageView from '../features/rider-manage/RiderManageView.vue';
 import StaffManageView from '../features/staff-manage/StaffManageView.vue';
 import StationConfigView from '../features/hr-org/StationConfigView.vue';
@@ -97,6 +101,12 @@ const routes = [
       { path: 'operation-log', name: 'operation-log', component: OperationLogView, meta: { title: '操作日志', kind: 'operationLog', id: '', perm: 'admin:roles' } },
       // 常用工具：照片矫正（纯前端处理，原图不离开设备）
       { path: 'common-tools/photo-rectify', name: 'photo-rectify', component: PhotoRectifyView, meta: { title: '照片矫正', kind: 'photoRectify', id: '' } },
+      // AI 助手：Vue 页内嵌 iframe 加载官方 DSH WebUI（/ai-official/ 反向代理），
+      // 保留 Aeolus 顶栏/侧栏，官方界面与功能 100% 原生。
+      { path: 'ai', name: 'ai-assistant', component: AiOfficialFrameView, meta: { title: 'AI 助手', kind: 'aiAssistant', id: '' } },
+      { path: 'ai-legacy', name: 'ai-legacy', component: AiAssistantView, meta: { title: 'AI 助手（轻量版）', kind: 'aiLegacy', id: '' } },
+      { path: 'settings/ai-features', name: 'ai-features', component: AiFeatureMapView, meta: { title: 'AI 功能地图', kind: 'aiFeatures', id: '' } },
+      { path: 'settings/ai', name: 'ai-settings', component: AiSettingsView, meta: { title: 'AI 设置', kind: 'aiSettings', id: '', perm: 'view' } },
       { path: 'groups', name: 'groups', component: GroupsView, meta: { title: '群组' } },
       { path: 'settings', name: 'system-settings', component: SystemSettingsView, meta: { title: '系统设置', kind: 'syscfg' } },
       // 三方集成：留在系统设置，承载钉钉授权 / SSO / DWS（平台侧配置，与机器人实例配置解耦）。

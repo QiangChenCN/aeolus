@@ -36,6 +36,8 @@ import { PersonnelModule } from './modules/personnel/personnel.module';
 import { PhotoRectifyModule } from './modules/photo-rectify/photo-rectify.module';
 import { AttendPeriodModule } from './modules/attend-period/attend-period.module';
 import { OperationLogMiddleware } from './modules/operation-log/operation-log.middleware';
+import { AiModule } from './modules/ai/ai.module';
+import { AiWebProxyModule } from './modules/ai-web/ai-web-proxy.module';
 
 @Module({
   imports: [
@@ -75,6 +77,8 @@ import { OperationLogMiddleware } from './modules/operation-log/operation-log.mi
     PersonnelModule,
     PhotoRectifyModule,
     AttendPeriodModule,
+    AiModule,
+    AiWebProxyModule,
   ],
   // 统一访问闸门：机器令牌闸门 + RBAC 会话鉴权（见 AccessGuard）
   providers: [{ provide: APP_GUARD, useClass: AccessGuard }],

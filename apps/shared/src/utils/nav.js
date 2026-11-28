@@ -39,6 +39,10 @@ export function navTo(it) {
     case 'hr-org-positions': return '/hr/positions';
     case 'operationLog': return '/operation-log';
     case 'photoRectify': return '/common-tools/photo-rectify';
+    case 'aiAssistant': return '/ai';
+    case 'aiOfficial': return '/ai-official/';
+    case 'aiFeatures': return '/settings/ai-features';
+    case 'aiSettings': return '/settings/ai';
     case 'botcfg': return '/bot/' + (it.id || 'instances');
     default: return '/';
   }

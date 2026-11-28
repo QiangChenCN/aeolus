@@ -2,6 +2,7 @@ import './instrumentation'; // 必须最先执行：在 NestFactory 之前注册
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
+import * as http from 'http';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import compression from 'compression';
@@ -12,6 +13,10 @@ import { loadAppConfig } from './config/configuration';
 import { injectMachineToken, resolveIndexHtml } from './common/serve-html.util';
 import { dirs } from './config/paths';
 import { AEOLUS_MONOREPO_NAME } from '@aeolus/shared';
+import { AuthService } from './modules/auth/auth.service';
+import { AiWebProxyService } from './modules/ai-web/ai-web-proxy.service';
+import { createAiWebProxyMiddleware } from './modules/ai-web/ai-web-proxy.middleware';
+import { handleAiWebUpgrade } from './modules/ai-web/ai-web-upgrade';
 
 // 跨应用共享包（workspace 依赖）冒烟：确认 @aeolus/shared 在 api 侧可被解析与打包
 console.log(`[shared] monorepo name = ${AEOLUS_MONOREPO_NAME}`);
@@ -138,6 +143,14 @@ async function bootstrap(): Promise<void> {
     return res.redirect(302, '/m/');
   });
 
+  // 官方 DSH WebUI 同域代理：必须在 bodyParser 与静态资源/SPA 回退之前接管 /ai/*。
+  // 会话闸门由中间件自己完成（复用 AuthService.getSession + hasPerm），不走全局 AccessGuard。
+  {
+    const auth = app.get(AuthService);
+    const aiWeb = app.get(AiWebProxyService);
+    app.use(createAiWebProxyMiddleware(auth, aiWeb));
+  }
+
   // 静态资源托管（替代 @nestjs/serve-static 挂在 `/` 的整站拦截）：
   // serve-static 默认 fallthrough:false，会把 `/api` 的 POST（找不到同名文件）误判成 404，
   // 导致「标准达成刷新」等所有写接口在网关层即 404，永远不出结果。
@@ -222,6 +235,14 @@ async function bootstrap(): Promise<void> {
   app.enableCors({ origin: true, credentials: true });
 
   await app.listen(config.port);
+
+  // WebSocket upgrade：Express 中间件看不到 upgrade，必须单独挂在 http.Server 上。
+  const httpServer = app.getHttpServer() as http.Server;
+  const auth = app.get(AuthService);
+  const aiWeb = app.get(AiWebProxyService);
+  httpServer.on('upgrade', (req, socket, head) => {
+    handleAiWebUpgrade(req, socket, head, auth, aiWeb);
+  });
 }
 
 void bootstrap();

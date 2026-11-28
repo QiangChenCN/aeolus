@@ -251,6 +251,58 @@ async def _json_body(req):
         return {}
 
 
+# ---------------------------------------------------------------------------
+# AI 助手：DeepSeek Harness SDK 执行端点（NestJS 前置鉴权后调用；本服务只算不鉴权）
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/ai/status")
+def ai_status():
+    """返回 DSH SDK 是否可用（供 NestJS 配置页显示真实状态）。"""
+    try:
+        import dsh_runner as _dsh
+        return _dsh.status()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "available": False, "error": f"dsh_runner 导入失败：{e}"}
+
+
+@app.post("/api/ai/run")
+async def ai_run(req: Request):
+    """跑一次 DSH agent 任务。密钥由 NestJS 经请求头下发，compute 侧不落盘、不记录。"""
+    try:
+        import dsh_runner as _dsh
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": f"dsh_runner 导入失败：{e}"}, 500)
+
+    data = await _json_body(req)
+    prompt = str(data.get("prompt") or "")
+    if not prompt.strip():
+        return JSONResponse({"ok": False, "error": "缺少 prompt"}, 400)
+    api_key = req.headers.get("x-dsh-api-key") or data.get("apiKey")
+    base_url = req.headers.get("x-dsh-base-url") or data.get("baseUrl")
+    model = str(data.get("model") or "deepseek-v4-flash")
+    try:
+        timeout_seconds = min(900, max(30, int(data.get("timeoutSeconds") or 300)))
+    except (TypeError, ValueError):
+        timeout_seconds = 300
+
+    try:
+        result = await run_in_threadpool(
+            _dsh.run_agent,
+            prompt,
+            data.get("sessionId"),
+            api_key,
+            base_url,
+            model,
+            timeout_seconds,
+        )
+        return {"ok": True, **result}
+    except ValueError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, 400)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": str(e)}, 500)
+
+
 def _refresh_failed(res):
     """结果 dict 是否算失败（compute 内部异常会返回 source=error 的空结构）。
 

@@ -52,6 +52,8 @@ export const envValidationSchema = Joi.object({
   DATABASE_URL: Joi.string().uri().optional(),
   // PG 连接池最大连接数（默认 10）
   PG_POOL_MAX: Joi.number().optional(),
+  // DeepSeek API Key（AI 助手；也可在系统设置 → AI 设置中 UI 保存，UI 优先）
+  DEEPSEEK_API_KEY: Joi.string().optional(),
 }).unknown(true);
 
 export interface AppConfig {

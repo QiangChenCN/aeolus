@@ -84,6 +84,15 @@ const navItems = computed(() => {
   ];
   items.push({ type: 'parent', key: 'common-tools', name: '常用工具', icon: 'Tools', children: toolSubs });
 
+  // AI 助手：对话 + 功能地图（DSH 集成状态盘点）。运行端点需 task:run，无权限则不展示入口。
+  if (auth.hasPerm('task:run')) {
+    const aiSubs = [
+      { type: 'leaf', kind: 'aiAssistant', id: '', name: 'AI 助手', icon: 'ChatDotRound' },
+      { type: 'leaf', kind: 'aiFeatures', id: '', name: '功能地图', icon: 'Grid' },
+    ];
+    items.push({ type: 'parent', key: 'ai', name: 'AI 能力', icon: 'MagicStick', children: aiSubs });
+  }
+
   // 系统设置：个人中心对所有登录用户可见（账号信息 + 个人改密），置于分组首位便于快速找到。
   // 管理类子项不再一刀切 isAdmin，而是按后端下发的权限点逐项收敛（perms 数组为「任一满足」）：
   // 例如 operator 有 config:write 可见站点负责人设置（已提升为一级），但看不到风神/MinIO/权限等管理员项。
@@ -94,6 +103,7 @@ const navItems = computed(() => {
     { type: 'leaf', kind: 'sys-integrations', id: '', name: '三方集成', icon: 'ChatDotRound', perm: 'admin:bot' },
     { type: 'leaf', kind: 'sys-credentials', id: '', name: '外部凭证', icon: 'Key', perms: ['admin:aeolus', 'admin:minio'] },
     { type: 'leaf', kind: 'sys-sources', id: '', name: '取数基座', icon: 'Connection', perm: 'view' },
+    { type: 'leaf', kind: 'aiSettings', id: '', name: 'AI 设置', icon: 'Cpu', perm: 'config:write' },
     { type: 'leaf', kind: 'rbac', id: '', name: '权限管理', icon: 'Tools', perm: 'admin:users' },
     { type: 'leaf', kind: 'operationLog', id: '', key: 'operationLog', name: '操作日志', icon: 'Document', perm: 'admin:roles' },
   ];

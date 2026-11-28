@@ -308,6 +308,16 @@ export function saveMinioConfig(payload = {}) { return request('/media/minio', j
 // 连通性验证：真实连一次 MinIO，确认 bucket 可访问并应用 public-read 策略
 export function testMinioConfig() { return request('/media/minio/test', j({})); }
 
+/* ============ AI 助手（DeepSeek Harness） ============ */
+export function fetchAiSettings() { return request('/ai/settings'); }
+// apiKey 留空 = 沿用原值；保存后热生效
+export function saveAiSettings(payload = {}) { return request('/ai/settings', j(payload)); }
+export function fetchAiStatus() { return request('/ai/status'); }
+// 单次任务最长 15 分钟：显式放宽 request 层默认 15 秒超时（run 是阻塞式 agent 调用）
+export function runAi(payload = {}) {
+  return request('/ai/run', { ...j(payload), timeout: 15 * 60 * 1000 });
+}
+
 /* ============ 站点负责人设置（任务播报按站点 @） ============ */
 export function fetchStationManagers() { return request('/notify/station-managers'); }
 // 整体覆盖保存：{ stations: [{ station_id, station_name, name, address, managers }] }
