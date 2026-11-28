@@ -40,6 +40,8 @@ preview/
 
 # Python 虚拟环境（每位开发者本地重建，不提交）
 .venv/
+# 部署时 runner 预下载的大 wheel 中转目录（服务器本地、不进 git）
+.wheelhouse/
 
 # Python 缓存
 __pycache__/

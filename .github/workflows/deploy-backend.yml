@@ -265,13 +265,49 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             services/compute/ \
             "$ECS_USER@$ECS_HOST:/opt/aeolus/services/compute/"
+          # ---- 预置 DSH 大 wheel（92.9MiB）----
+          # 服务器直连 PyPI 下载大文件曾中断（2026-11-28 uv sync SSH exit 255）。
+          # 改由 Actions runner（海外网络）下载后 rsync 到服务器，uv 用 --find-links 本地安装。
+          WHEEL_NAME="deepseek_harness_runtime_bin-0.2.2rc2-py3-none-manylinux_2_28_x86_64.whl"
+          WHEEL_REL="/opt/aeolus/services/compute/.wheelhouse/$WHEEL_NAME"
+          if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+               "$ECS_USER@$ECS_HOST" "test -f '$WHEEL_REL'"; then
+            echo "DSH wheel 已在服务器，跳过下载"
+          else
+            WHEEL_URL=$(python3 - <<'PY'
+          import tomllib
+          with open('services/compute/uv.lock', 'rb') as f:
+              lock = tomllib.load(f)
+          for pkg in lock['package']:
+              if pkg['name'] == 'deepseek-harness-runtime-bin':
+                  for w in pkg['wheels']:
+                      if 'manylinux_2_28_x86_64' in w['url']:
+                          print(w['url'])
+                          break
+                  break
+          PY
+          )
+            mkdir -p /tmp/dsh-wheelhouse
+            curl -fsSL --retry 5 --retry-delay 3 "$WHEEL_URL" -o "/tmp/dsh-wheelhouse/$WHEEL_NAME"
+            echo "DSH wheel 已在 runner 下载完成，开始 rsync"
+            ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              "$ECS_USER@$ECS_HOST" 'mkdir -p /opt/aeolus/services/compute/.wheelhouse'
+            rsync -az \
+              -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+              /tmp/dsh-wheelhouse/ \
+              "$ECS_USER@$ECS_HOST:/opt/aeolus/services/compute/.wheelhouse/"
+          fi
           ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             "$ECS_USER@$ECS_HOST" \
             'export PATH="$HOME/.local/bin:$PATH"
              cd /opt/aeolus
              rm -f /opt/aeolus/services/compute/analytics/assessment/timeout.py
+             # 先把 DSH 大 wheel 装进 venv：uv sync 检测到已满足就不会再从 PyPI 下载，
+             # 彻底绕开服务器慢速下载中断（--find-links 作双保险）。
+             (cd services/compute && test -f .wheelhouse/deepseek_harness_runtime_bin-0.2.2rc2-py3-none-manylinux_2_28_x86_64.whl \
+               && uv pip install --python .venv/bin/python .wheelhouse/deepseek_harness_runtime_bin-0.2.2rc2-py3-none-manylinux_2_28_x86_64.whl)
              # 按 uv.lock 精确复现依赖（含 OpenTelemetry）；--frozen 与 pyproject.toml 不一致会直接报错。
-             (cd services/compute && uv sync --frozen --no-dev)
+             (cd services/compute && uv sync --frozen --no-dev --find-links .wheelhouse)
              # 重启前预检：otel 包在服务器 venv 内可正常导入，避免 OTEL_ENABLED=true 时服务起不来。
              (cd services/compute && OTEL_ENABLED=true uv run python -c "import compute_api.otel" && echo "compute otel import OK")
              systemctl restart aeolus-compute'
