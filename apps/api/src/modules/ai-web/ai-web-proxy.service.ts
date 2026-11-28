@@ -66,8 +66,11 @@ export class AiWebProxyService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`DSH 可执行文件不存在：${this.dshBin}（请先 uv sync）`);
       return;
     }
+    const venvBin = path.dirname(this.dshBin);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
+      // 插件管理器会 spawn `dsh` 子进程；venv/bin 不在 PATH 时会报 spawn dsh ENOENT。
+      PATH: `${venvBin}${path.delimiter}${process.env.PATH || ''}`,
       DSH_HOME: this.home,
       // WebUI 内可再配模型；这里预填 API Key 让页面开箱可用（密钥只进子进程环境）。
       DEEPSEEK_API_KEY:
